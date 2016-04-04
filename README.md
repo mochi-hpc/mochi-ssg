@@ -7,7 +7,7 @@ far, we have the following:
 - config-file bootstrap (where each process is assumed to exist in the
   membership list - CCI can't currently be used with this method)
 
-Serializers for the ssg data structure are also provided.
+Serializers for the ssg data structure are also provided (untested so far).
 
 # Building
 
@@ -15,10 +15,15 @@ Serializers for the ssg data structure are also provided.
 ./prepare.sh
 
 ./configure [standard options] PKG\_CONFIG\_PATH=/path/to/mercury/pkgconfig
+
 make
+
 make install
 
-MPI support is by default optionally included. If you wish to compile with MPI support, set CC=mpicc (or equivalent) in configure. If you wish to disable MPI entirely, use --disable-mpi (you can also force MPI inclusion through --enable-mpi).
+MPI support is by default optionally included. If you wish to compile with MPI
+support, set CC=mpicc (or equivalent) in configure. If you wish to disable MPI
+entirely, use --disable-mpi (you can also force MPI inclusion through
+--enable-mpi).
 
 # Documentation
 
@@ -30,6 +35,7 @@ communication.
 # Running examples
 
 cd to your build directory and run:
+
 $top\_level\_dir/examples/run-example-\*.sh
 
-See the script contents for how these are run.
+See the script contents for how these translate to example execution.
