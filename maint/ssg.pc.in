@@ -1,0 +1,12 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: margo
+Description: Simple Stupid Group (SSG) interface for Mercury
+Version: 0.1
+URL: https://xgitlab.cels.anl.gov/sds/margo
+Requires: mercury
+Libs: -L${libdir} -lssg
+Cflags: -I${includedir}
