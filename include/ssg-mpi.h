@@ -19,8 +19,12 @@ extern "C" {
 
 // mpi based (no config file) - all participants (defined by the input
 // communicator) do a global address exchange
-// in this case, the caller has already initialized NA with its address
-ssg_t ssg_init_mpi(na_class_t *nacl, MPI_Comm comm);
+// in this case, the caller has already initialized HG with its address
+ssg_t ssg_init_mpi(hg_class_t *hgcl, MPI_Comm comm);
+
+#ifdef __cplusplus
+}
+#endif
 
 /**
  * vim: ft=c sw=4 ts=4 sts=4 tw=80 expandtab
