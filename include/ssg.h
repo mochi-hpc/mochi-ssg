@@ -16,9 +16,8 @@ extern "C" {
 #endif
 
 #include <mercury.h>
-#include <na.h>
 
-// using pointer so that we can use proc
+// using pointer so that we can use proc (proc has to allocate in this case)
 typedef struct ssg *ssg_t;
 
 // some defines
@@ -36,12 +35,9 @@ typedef struct ssg *ssg_t;
 // containing a set of hostnames
 ssg_t ssg_init_config(const char * fname);
 
-// once the ssg has been initialized, wireup (a collection of NA_Addr_lookups)
+// once the ssg has been initialized, wireup (a collection of HG_Addr_lookups)
 // note that this is a simple blocking implementation - no margo/etc here
-na_return_t ssg_lookup(
-        na_class_t *nacl,
-        na_context_t *nactx,
-        ssg_t s);
+hg_return_t ssg_lookup(hg_context_t *hgctx, ssg_t s);
 
 /// finalization
 
@@ -57,7 +53,7 @@ int ssg_get_rank(const ssg_t s);
 int ssg_get_count(const ssg_t s);
 
 // get the address for the group member at the given rank
-na_addr_t ssg_get_addr(const ssg_t s, int rank);
+hg_addr_t ssg_get_addr(const ssg_t s, int rank);
 
 // get the string hostname for the group member at the given rank
 const char * ssg_get_addr_str(const ssg_t s, int rank);

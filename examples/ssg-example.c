@@ -9,7 +9,6 @@
 #include <string.h>
 
 #include <mercury.h>
-#include <na.h>
 #include <mercury_util/mercury_request.h>
 #include <ssg.h>
 #include <ssg-config.h>
@@ -61,8 +60,6 @@ static int trigger(unsigned int timeout, unsigned int *flag, void *arg)
 int main(int argc, char *argv[])
 {
     // mercury
-    na_class_t *nacl;
-    na_context_t *nactx;
     hg_class_t *hgcl;
     hg_context_t *hgctx;
     hg_request_class_t *reqcl;
@@ -81,12 +78,11 @@ int main(int argc, char *argv[])
 
     // comm vars
     int peer_rank;
-    na_addr_t peer_addr;
+    hg_addr_t peer_addr;
     ping_t ping_in;
     unsigned int req_complete_flag = 0;
 
     // return codes
-    na_return_t nret;
     hg_return_t hret;
     int ret;
 
@@ -108,12 +104,8 @@ int main(int argc, char *argv[])
     addr_str = argv[0];
     argc--; argv++;
 
-    // init NA, HG
-    nacl = NA_Initialize(addr_str, NA_TRUE);
-    DIE_IF(nacl == NULL, "NA_Initialize");
-    nactx = NA_Context_create(nacl);
-    DIE_IF(nactx == NULL, "NA_Context_create");
-    hgcl = HG_Init_na(nacl, nactx);
+    // init HG
+    hgcl = HG_Init(addr_str, HG_TRUE);
     DIE_IF(hgcl == NULL, "HG_Init");
     hgctx = HG_Context_create(hgcl);
     DIE_IF(hgctx == NULL, "HG_Context_create");
@@ -134,7 +126,7 @@ int main(int argc, char *argv[])
     argc--; argv++;
     if (strcmp(mode, "mpi") == 0) {
 #ifdef HAVE_MPI
-        c.s = ssg_init_mpi(nacl, MPI_COMM_WORLD);
+        c.s = ssg_init_mpi(hgcl, MPI_COMM_WORLD);
         sleep_time = 0; // ignore sleeping
 #else
         fprintf(stderr, "Error: MPI support not built in\n");
@@ -158,8 +150,8 @@ int main(int argc, char *argv[])
     if (sleep_time >= 0) sleep(sleep_time);
 
     // resolve group addresses
-    nret = ssg_lookup(nacl, nactx, c.s);
-    DIE_IF(nret != NA_SUCCESS, "ssg_lookup");
+    hret = ssg_lookup(hgctx, c.s);
+    DIE_IF(hret != HG_SUCCESS, "ssg_lookup");
 
     // get my (non-mpi) rank
     rank = ssg_get_rank(c.s);
@@ -179,7 +171,7 @@ int main(int argc, char *argv[])
     // all ready to go - ping my neighbor rank
     peer_rank = (rank+1) % ssg_get_count(c.s);
     peer_addr = ssg_get_addr(c.s, peer_rank);
-    DIE_IF(peer_addr == NA_ADDR_NULL, "ssg_get_addr(%d)", peer_rank);
+    DIE_IF(peer_addr == HG_ADDR_NULL, "ssg_get_addr(%d)", peer_rank);
 
     printf("%d: pinging %d\n", rank, peer_rank);
     hret = HG_Create(hgctx, peer_addr, ping_id, &ping_handle);
@@ -234,8 +226,6 @@ cleanup:
     hg_request_finalize(reqcl);
     HG_Context_destroy(hgctx);
     HG_Finalize(hgcl);
-    NA_Context_destroy(nacl, nactx);
-    NA_Finalize(nacl);
 
 #ifdef HAVE_MPI
     MPI_Finalize();
