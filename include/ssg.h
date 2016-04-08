@@ -66,6 +66,13 @@ const char * ssg_get_addr_str(const ssg_t s, int rank);
 // group serialization mechanism
 hg_return_t hg_proc_ssg_t(hg_proc_t proc, ssg_t *s);
 
+/// utility functions
+
+// dump address list to the given file
+// returns -1 on error, corresponding to the return code of open/write/close,
+// and sets errno
+int ssg_dump(const ssg_t s, const char *fname);
+
 #ifdef __cplusplus
 }
 #endif

@@ -2,6 +2,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -395,6 +396,47 @@ end:
         }
     }
     return hret;
+}
+
+int ssg_dump(const ssg_t s, const char *fname)
+{
+    // file to write to
+    int fd = -1;
+    ssize_t written;
+
+    // string to xform and dump
+    char * addrs_dup = NULL;
+    char * tok = NULL;
+    char * addrs_dup_end = NULL;
+
+    // return code
+    int ret = 0;
+
+    // copy the backing buffer, replacing the intermediate null chars with
+    // newlines (can't use strdup)
+    addrs_dup = malloc(s->buf_size);
+    if (addrs_dup == NULL) { errno = ENOMEM; ret = -1; goto end; }
+    memcpy(addrs_dup, s->backing_buf, s->buf_size);
+    tok = addrs_dup;
+    addrs_dup_end = addrs_dup + s->buf_size;
+    for (int i = 0; i < s->num_addrs-1; i++) {
+        tok = memchr(tok, '\0', addrs_dup_end - tok);
+        if (tok == NULL) { errno = EINVAL; ret = -1; goto end; }
+        *tok = '\n';
+    }
+
+    // open the file and dump in a single call
+    fd = open(fname, O_WRONLY | O_CREAT | O_EXCL);
+    if (fd == -1) { ret = -1; goto end; }
+    // don't include the null char at the end
+    written = write(fd, addrs_dup, s->buf_size-1);
+    if (written != s->buf_size-1) ret = -1;
+
+end:
+    free(addrs_dup);
+    if (fd != -1) close(fd);
+
+    return ret;
 }
 
 typedef struct serv_addr_out
