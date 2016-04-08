@@ -31,9 +31,12 @@ typedef struct ssg *ssg_t;
 
 /// participant initialization
 
-// config file based - all participants load up the given config file
+// config file based - load up the given config file
 // containing a set of hostnames
-ssg_t ssg_init_config(const char * fname);
+// is_member - nonzero if caller is expected to be in the group, zero otherwise
+//           - ssg_lookup fails if caller is unable to identify with one of the
+//             config entries
+ssg_t ssg_init_config(const char * fname, int is_member);
 
 // once the ssg has been initialized, wireup (a collection of HG_Addr_lookups)
 // note that this is a simple blocking implementation - no margo/etc here

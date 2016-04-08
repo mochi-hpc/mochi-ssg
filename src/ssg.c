@@ -25,7 +25,7 @@ static hg_return_t find_rank(hg_class_t *hgcl, ssg_t s);
 
 static char** setup_addr_str_list(int num_addrs, char * buf);
 
-ssg_t ssg_init_config(const char * fname)
+ssg_t ssg_init_config(const char * fname, int is_member)
 {
     // file to read
     int fd = -1;
@@ -112,7 +112,7 @@ ssg_t ssg_init_config(const char * fname)
     s->backing_buf = buf; buf = NULL;
     s->num_addrs = num_addrs;
     s->buf_size = addr_len;
-    s->rank = SSG_RANK_UNKNOWN;
+    s->rank = is_member ? SSG_RANK_UNKNOWN : SSG_EXTERNAL_RANK;
 
 fini:
     if (fd != -1) close(fd);
