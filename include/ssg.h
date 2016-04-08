@@ -40,7 +40,7 @@ ssg_t ssg_init_config(const char * fname, int is_member);
 
 // once the ssg has been initialized, wireup (a collection of HG_Addr_lookups)
 // note that this is a simple blocking implementation - no margo/etc here
-hg_return_t ssg_lookup(hg_context_t *hgctx, ssg_t s);
+hg_return_t ssg_lookup(ssg_t s, hg_context_t *hgctx);
 
 /// finalization
 

@@ -215,7 +215,7 @@ fini:
 }
 #endif
 
-hg_return_t ssg_lookup(hg_context_t *hgctx, ssg_t s)
+hg_return_t ssg_lookup(ssg_t s, hg_context_t *hgctx)
 {
     // "effective" rank for the lookup loop
     int eff_rank = 0;

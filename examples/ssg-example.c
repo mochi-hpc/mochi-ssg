@@ -150,7 +150,7 @@ int main(int argc, char *argv[])
     if (sleep_time >= 0) sleep(sleep_time);
 
     // resolve group addresses
-    hret = ssg_lookup(hgctx, c.s);
+    hret = ssg_lookup(c.s, hgctx);
     DIE_IF(hret != HG_SUCCESS, "ssg_lookup");
 
     // get my (non-mpi) rank
