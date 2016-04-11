@@ -428,7 +428,7 @@ int ssg_dump(const ssg_t s, const char *fname)
     }
 
     // open the file and dump in a single call
-    fd = open(fname, O_WRONLY | O_CREAT | O_EXCL);
+    fd = open(fname, O_WRONLY | O_CREAT | O_EXCL, 0644);
     if (fd == -1) { ret = -1; goto end; }
     // don't include the null char at the end
     written = write(fd, addrs_dup, s->buf_size-1);
