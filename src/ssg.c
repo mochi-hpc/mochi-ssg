@@ -258,6 +258,8 @@ hg_return_t ssg_lookup(ssg_t s, hg_context_t *hgctx)
 
 void ssg_finalize(ssg_t s)
 {
+    if (s == SSG_NULL) return;
+
     for (int i = 0; i < s->num_addrs; i++) {
         if (s->addrs[i] != HG_ADDR_NULL) HG_Addr_free(s->hgcl, s->addrs[i]);
     }
