@@ -414,14 +414,14 @@ int ssg_dump(const ssg_t s, const char *fname)
     // return code
     int ret = 0;
 
-    // copy the backing buffer, replacing the intermediate null chars with
-    // newlines (can't use strdup)
+    // copy the backing buffer, replacing all null chars with
+    // newlines
     addrs_dup = malloc(s->buf_size);
     if (addrs_dup == NULL) { errno = ENOMEM; ret = -1; goto end; }
     memcpy(addrs_dup, s->backing_buf, s->buf_size);
     tok = addrs_dup;
     addrs_dup_end = addrs_dup + s->buf_size;
-    for (int i = 0; i < s->num_addrs-1; i++) {
+    for (int i = 0; i < s->num_addrs; i++) {
         tok = memchr(tok, '\0', addrs_dup_end - tok);
         if (tok == NULL) { errno = EINVAL; ret = -1; goto end; }
         *tok = '\n';
@@ -431,8 +431,8 @@ int ssg_dump(const ssg_t s, const char *fname)
     fd = open(fname, O_WRONLY | O_CREAT | O_EXCL, 0644);
     if (fd == -1) { ret = -1; goto end; }
     // don't include the null char at the end
-    written = write(fd, addrs_dup, s->buf_size-1);
-    if (written != s->buf_size-1) ret = -1;
+    written = write(fd, addrs_dup, s->buf_size);
+    if (written != s->buf_size) ret = -1;
 
 end:
     free(addrs_dup);
