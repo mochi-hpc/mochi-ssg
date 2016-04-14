@@ -36,12 +36,6 @@ dnl
 PKG_PROG_PKG_CONFIG
 PKG_CONFIG="pkg-config --static"
 
-PKG_CHECK_MODULES_STATIC([MERCURY],[mercury],[],
-   [AC_MSG_ERROR([Could not find working mercury installation!])])
-LIBS="$MERCURY_LIBS $LIBS"
-CPPFLAGS="$MERCURY_CFLAGS $CPPFLAGS"
-CFLAGS="$MERCURY_CFLAGS $CFLAGS"
-
 check_mpi=auto
 AC_ARG_ENABLE([mpi],
     [--enable-mpi    Enable MPI (default: dynamic check)],
@@ -69,6 +63,36 @@ if test "x${check_mpi_status}" = xfail -a "x${check_mpi}" = xyes; then
 fi
 
 AM_CONDITIONAL([HAVE_MPI], [test "x${check_mpi_status}" = xsuccess])
+
+check_margo=auto
+AC_ARG_ENABLE([margo],
+    [--enable-margo    Enable Margo (default: dynamic check)],
+    [case "${enableval}" in
+     yes) check_margo=yes ;;
+     no)  check_margo=no  ;;
+     *)   AC_MSG_ERROR([Invalid value ${enableval} for --enable-margo])
+     esac])
+
+if test "x${check_margo}" = xauto -o "x${check_margo}" = xyes ; then
+    PKG_CHECK_MODULES_STATIC([MARGO],[margo],
+        [AC_DEFINE([HAVE_MARGO], [1], [Define to 1 if compiled with Margo support])
+         LIBS="$MARGO_LIBS $LIBS"
+         CPPFLAGS="$MARGO_CFLAGS $CPPFLAGS"
+         CFLAGS="$MARGO_CFLAGS $CFLAGS"
+         check_margo_status=success], [check_margo_status=fail])
+fi
+
+if test "x${check_margo_status}" = xfail -a "x${check_margo}" = xyes; then
+    AC_MSG_ERROR([Margo requested but unable to be used. See config.log])
+fi
+
+AM_CONDITIONAL([HAVE_MARGO], [test "x${check_margo_status}" = xsuccess])
+
+# mercury check goes last - libs should be linked in before margo
+PKG_CHECK_MODULES_STATIC([MERCURY],[mercury],
+    [LIBS="$MERCURY_LIBS $LIBS"
+     CPPFLAGS="$MERCURY_CFLAGS $CPPFLAGS"
+     CFLAGS="$MERCURY_CFLAGS $CFLAGS"])
 
 AC_CONFIG_FILES([Makefile maint/ssg.pc])
 AC_OUTPUT

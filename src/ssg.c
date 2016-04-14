@@ -15,6 +15,9 @@
 #ifdef HAVE_MPI
 #include <ssg-mpi.h>
 #endif
+#ifdef HAVE_MARGO
+#include <ssg-margo.h>
+#endif
 
 // helpers for looking up a server
 static hg_return_t lookup_serv_addr_cb(const struct hg_cb_info *info);
@@ -255,6 +258,60 @@ hg_return_t ssg_lookup(ssg_t s, hg_context_t *hgctx)
 
     return HG_SUCCESS;
 }
+
+#ifdef HAVE_MARGO
+// TODO: refactor - code is mostly a copy of ssg_lookup
+hg_return_t ssg_lookup_margo(ssg_t s, margo_instance_id mid)
+{
+    hg_context_t *hgctx;
+    hg_return_t hret;
+
+    // "effective" rank for the lookup loop
+    int eff_rank = 0;
+
+    // set the hg class up front - need for destructing addrs
+    hgctx = margo_get_context(mid);
+    if (hgctx == NULL) return HG_INVALID_PARAM;
+    s->hgcl = margo_get_class(mid);
+    if (s->hgcl == NULL) return HG_INVALID_PARAM;
+
+    // perform search for my rank if not already set
+    if (s->rank == SSG_RANK_UNKNOWN) {
+        hret = find_rank(s->hgcl, s);
+        if (hret != HG_SUCCESS) return hret;
+    }
+
+    if (s->rank == SSG_EXTERNAL_RANK) {
+        // do a completely arbitrary effective rank determination to try and
+        // prevent everyone talking to the same member at once
+        eff_rank = (((intptr_t)hgctx)/sizeof(hgctx)) % s->num_addrs;
+    }
+    else
+        eff_rank = s->rank;
+
+    // rank is set, perform lookup
+    for (int i = eff_rank+1; i < s->num_addrs; i++) {
+        hret = margo_addr_lookup(
+                mid, hgctx, s->addr_strs[i], &s->addrs[i]);
+        if (hret != HG_SUCCESS) return hret;
+        else if (s->addrs[i] == HG_ADDR_NULL) return HG_PROTOCOL_ERROR;
+    }
+    for (int i = 0; i < eff_rank; i++) {
+        hret = margo_addr_lookup(
+                mid, hgctx, s->addr_strs[i], &s->addrs[i]);
+        if (hret != HG_SUCCESS) return hret;
+        else if (s->addrs[i] == HG_ADDR_NULL) return HG_PROTOCOL_ERROR;
+    }
+    if (s->rank == SSG_EXTERNAL_RANK) {
+        hret = margo_addr_lookup(
+                mid, hgctx, s->addr_strs[eff_rank], &s->addrs[eff_rank]);
+        if (hret != HG_SUCCESS) return hret;
+        else if (s->addrs[eff_rank] == HG_ADDR_NULL) return HG_PROTOCOL_ERROR;
+    }
+
+    return HG_SUCCESS;
+}
+#endif
 
 void ssg_finalize(ssg_t s)
 {
