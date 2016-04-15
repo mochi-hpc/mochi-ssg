@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2016 UChicago Argonne, LLC
+ *
+ * See COPYRIGHT in top-level directory.
+ */
+
 #pragma once
 
 struct ssg

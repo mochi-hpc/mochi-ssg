@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2016 UChicago Argonne, LLC
+ *
+ * See COPYRIGHT in top-level directory.
+ */
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
