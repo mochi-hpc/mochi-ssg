@@ -344,7 +344,7 @@ int ssg_get_count(const ssg_t s)
 
 hg_addr_t ssg_get_addr(const ssg_t s, int rank)
 {
-    if (rank >= 0 || rank < s->num_addrs)
+    if (rank >= 0 && rank < s->num_addrs)
         return s->addrs[rank];
     else
         return HG_ADDR_NULL;
@@ -352,7 +352,7 @@ hg_addr_t ssg_get_addr(const ssg_t s, int rank)
 
 const char * ssg_get_addr_str(const ssg_t s, int rank)
 {
-    if (rank >= 0 || rank < s->num_addrs)
+    if (rank >= 0 && rank < s->num_addrs)
         return s->addr_strs[rank];
     else
         return NULL;
