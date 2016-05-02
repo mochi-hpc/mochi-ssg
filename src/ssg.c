@@ -297,20 +297,18 @@ hg_return_t ssg_lookup_margo(ssg_t s, margo_instance_id mid)
 
     // rank is set, perform lookup
     for (int i = eff_rank+1; i < s->num_addrs; i++) {
-        hret = margo_addr_lookup(
-                mid, hgctx, s->addr_strs[i], &s->addrs[i]);
+        hret = margo_addr_lookup(mid, s->addr_strs[i], &s->addrs[i]);
         if (hret != HG_SUCCESS) return hret;
         else if (s->addrs[i] == HG_ADDR_NULL) return HG_PROTOCOL_ERROR;
     }
     for (int i = 0; i < eff_rank; i++) {
-        hret = margo_addr_lookup(
-                mid, hgctx, s->addr_strs[i], &s->addrs[i]);
+        hret = margo_addr_lookup(mid, s->addr_strs[i], &s->addrs[i]);
         if (hret != HG_SUCCESS) return hret;
         else if (s->addrs[i] == HG_ADDR_NULL) return HG_PROTOCOL_ERROR;
     }
     if (s->rank == SSG_EXTERNAL_RANK) {
         hret = margo_addr_lookup(
-                mid, hgctx, s->addr_strs[eff_rank], &s->addrs[eff_rank]);
+                mid, s->addr_strs[eff_rank], &s->addrs[eff_rank]);
         if (hret != HG_SUCCESS) return hret;
         else if (s->addrs[eff_rank] == HG_ADDR_NULL) return HG_PROTOCOL_ERROR;
     }
