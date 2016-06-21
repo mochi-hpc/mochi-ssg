@@ -223,7 +223,7 @@ cleanup:
     HG_Destroy(ping_handle);
     ssg_finalize(c.s);
     hg_request_destroy(req);
-    hg_request_finalize(reqcl);
+    hg_request_finalize(reqcl, NULL);
     HG_Context_destroy(hgctx);
     HG_Finalize(hgcl);
 
