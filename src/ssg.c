@@ -129,7 +129,7 @@ fini:
     free(rdbuf);
     free(addr_strs);
     free(buf);
-    if (s->addrs == NULL) { free(s); s = NULL; }
+    if (s != NULL && s->addrs == NULL) { free(s); s = NULL; }
     return s;
 }
 
