@@ -8,14 +8,14 @@
 
 // lookup integrated into margo
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <mpi.h>
 #include <margo.h>
 
 #include "ssg.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 // a "margo-aware" version of hg_lookup - still looks up everyone in one go
 hg_return_t ssg_lookup_margo(ssg_t s, margo_instance_id mid);
