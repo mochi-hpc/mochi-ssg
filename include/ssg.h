@@ -38,6 +38,18 @@ typedef struct ssg *ssg_t;
 //             config entries
 ssg_t ssg_init_config(const char * fname, int is_member);
 
+// in the config-file initialization, rank determination is deferred until
+// lookup. In the case where the rank is needed but you don't want to
+// necessarily look up everyone, this call will resolve the rank. In the MPI
+// bootstrap mode, or if the rank has already been resolved, this operation
+// is a no-op
+//
+// the ssg_lookup functions implicitly call this
+//
+// this function works by using string comparison of HG_Addr_to_string against
+// the entries in the config file
+hg_return_t ssg_resolve_rank(ssg_t s, hg_class_t *hgcl);
+
 // once the ssg has been initialized, wireup (a collection of HG_Addr_lookups)
 // note that this is a simple blocking implementation - no margo/etc here
 hg_return_t ssg_lookup(ssg_t s, hg_context_t *hgctx);

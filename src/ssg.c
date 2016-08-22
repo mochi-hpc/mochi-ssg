@@ -31,8 +31,6 @@ static hg_addr_t lookup_serv_addr(
         hg_context_t *hgctx,
         const char *info_str);
 
-static hg_return_t find_rank(hg_class_t *hgcl, ssg_t s);
-
 static char** setup_addr_str_list(int num_addrs, char * buf);
 
 ssg_t ssg_init_config(const char * fname, int is_member)
@@ -224,6 +222,60 @@ fini:
 }
 #endif
 
+hg_return_t ssg_resolve_rank(ssg_t s, hg_class_t *hgcl)
+{
+    if (s->rank == SSG_EXTERNAL_RANK ||
+            s->rank != SSG_RANK_UNKNOWN)
+        return HG_SUCCESS;
+
+    // helpers
+    hg_addr_t self_addr = HG_ADDR_NULL;
+    char * self_addr_str = NULL;
+    const char * self_addr_substr = NULL;
+    hg_size_t self_addr_size = 0;
+    const char * addr_substr = NULL;
+    int rank = 0;
+    hg_return_t hret;
+
+    // get my address
+    hret = HG_Addr_self(hgcl, &self_addr);
+    if (hret != HG_SUCCESS) goto end;
+    hret = HG_Addr_to_string(hgcl, NULL, &self_addr_size, self_addr);
+    if (self_addr == NULL) { hret = HG_NOMEM_ERROR; goto end; }
+    self_addr_str = malloc(self_addr_size);
+    if (self_addr_str == NULL) { hret = HG_NOMEM_ERROR; goto end; }
+    hret = HG_Addr_to_string(hgcl, self_addr_str, &self_addr_size, self_addr);
+    if (hret != HG_SUCCESS) goto end;
+
+    // strstr is used here b/c there may be inconsistencies in whether the class
+    // is included in the address or not (it's not in HG_Addr_to_string, it
+    // should be in ssg_init_config)
+    self_addr_substr = strstr(self_addr_str, "://");
+    if (self_addr_substr == NULL) { hret = HG_INVALID_PARAM; goto end; }
+    self_addr_substr += 3;
+    for (rank = 0; rank < s->num_addrs; rank++) {
+        addr_substr = strstr(s->addr_strs[rank], "://");
+        if (addr_substr == NULL) { hret = HG_INVALID_PARAM; goto end; }
+        addr_substr+= 3;
+        if (strcmp(self_addr_substr, addr_substr) == 0)
+            break;
+    }
+    if (rank == s->num_addrs) {
+        hret = HG_INVALID_PARAM;
+        goto end;
+    }
+
+    // success - set
+    s->rank = rank;
+    s->addrs[rank] = self_addr; self_addr = HG_ADDR_NULL;
+
+end:
+    if (self_addr != HG_ADDR_NULL) HG_Addr_free(hgcl, self_addr);
+    free(self_addr_str);
+
+    return hret;
+}
+
 hg_return_t ssg_lookup(ssg_t s, hg_context_t *hgctx)
 {
     // "effective" rank for the lookup loop
@@ -235,7 +287,7 @@ hg_return_t ssg_lookup(ssg_t s, hg_context_t *hgctx)
 
     // perform search for my rank if not already set
     if (s->rank == SSG_RANK_UNKNOWN) {
-        hg_return_t hret = find_rank(s->hgcl, s);
+        hg_return_t hret = ssg_resolve_rank(s, s->hgcl);
         if (hret != HG_SUCCESS) return hret;
     }
 
@@ -302,7 +354,7 @@ hg_return_t ssg_lookup_margo(ssg_t s, margo_instance_id mid)
 
     // perform search for my rank if not already set
     if (s->rank == SSG_RANK_UNKNOWN) {
-        hret = find_rank(s->hgcl, s);
+        hret = ssg_resolve_rank(s, s->hgcl);
         if (hret != HG_SUCCESS) return hret;
     }
 
@@ -622,56 +674,6 @@ static hg_addr_t lookup_serv_addr(
     } while(hret == HG_SUCCESS || hret == HG_TIMEOUT);
 
     return out.addr;
-}
-
-static hg_return_t find_rank(hg_class_t *hgcl, ssg_t s)
-{
-    // helpers
-    hg_addr_t self_addr = HG_ADDR_NULL;
-    char * self_addr_str = NULL;
-    const char * self_addr_substr = NULL;
-    hg_size_t self_addr_size = 0;
-    const char * addr_substr = NULL;
-    int rank = 0;
-    hg_return_t hret;
-
-    // get my address
-    hret = HG_Addr_self(hgcl, &self_addr);
-    if (hret != HG_SUCCESS) goto end;
-    hret = HG_Addr_to_string(hgcl, NULL, &self_addr_size, self_addr);
-    if (self_addr == NULL) { hret = HG_NOMEM_ERROR; goto end; }
-    self_addr_str = malloc(self_addr_size);
-    if (self_addr_str == NULL) { hret = HG_NOMEM_ERROR; goto end; }
-    hret = HG_Addr_to_string(hgcl, self_addr_str, &self_addr_size, self_addr);
-    if (hret != HG_SUCCESS) goto end;
-
-    // strstr is used here b/c there may be inconsistencies in whether the class
-    // is included in the address or not (it's not in HG_Addr_to_string, it
-    // should be in ssg_init_config)
-    self_addr_substr = strstr(self_addr_str, "://");
-    if (self_addr_substr == NULL) { hret = HG_INVALID_PARAM; goto end; }
-    self_addr_substr += 3;
-    for (rank = 0; rank < s->num_addrs; rank++) {
-        addr_substr = strstr(s->addr_strs[rank], "://");
-        if (addr_substr == NULL) { hret = HG_INVALID_PARAM; goto end; }
-        addr_substr+= 3;
-        if (strcmp(self_addr_substr, addr_substr) == 0)
-            break;
-    }
-    if (rank == s->num_addrs) {
-        hret = HG_INVALID_PARAM;
-        goto end;
-    }
-
-    // success - set
-    s->rank = rank;
-    s->addrs[rank] = self_addr; self_addr = NULL;
-
-end:
-    if (self_addr != HG_ADDR_NULL) HG_Addr_free(hgcl, self_addr);
-    free(self_addr_str);
-
-    return hret;
 }
 
 static char** setup_addr_str_list(int num_addrs, char * buf)
