@@ -9,7 +9,7 @@
 #include <string.h>
 
 #include <mercury.h>
-#include <mercury_util/mercury_request.h>
+#include <mercury_request.h>
 #include <ssg.h>
 #include <ssg-config.h>
 #include "rpc.h"
