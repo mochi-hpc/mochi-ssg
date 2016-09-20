@@ -1,8 +1,10 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-AC_PREREQ([2.67])
+AC_PREREQ([2.63])
 AC_INIT([ssg], [0.1], [],[],[]) 
+AC_CONFIG_MACRO_DIR([m4])
+LT_INIT
 
 AC_CANONICAL_TARGET
 AC_CANONICAL_SYSTEM
@@ -15,14 +17,10 @@ m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
 AC_CONFIG_SRCDIR([README.md])
 AC_CONFIG_HEADERS([ssg-config.h])
-AC_CONFIG_MACRO_DIR([m4])
-
-AC_LANG([C])
 
 # Checks for programs.
 AC_PROG_CC
 AC_PROG_CC_C99
-AC_PROG_RANLIB
 
 dnl
 dnl Add warning flags by default
@@ -74,7 +72,7 @@ AC_ARG_ENABLE([margo],
      esac])
 
 if test "x${check_margo}" = xauto -o "x${check_margo}" = xyes ; then
-    PKG_CHECK_MODULES_STATIC([MARGO],[margo],
+    PKG_CHECK_MODULES([MARGO],[margo],
         [AC_DEFINE([HAVE_MARGO], [1], [Define to 1 if compiled with Margo support])
          LIBS="$MARGO_LIBS $LIBS"
          CPPFLAGS="$MARGO_CFLAGS $CPPFLAGS"
@@ -89,7 +87,7 @@ fi
 AM_CONDITIONAL([HAVE_MARGO], [test "x${check_margo_status}" = xsuccess])
 
 # mercury check goes last - libs should be linked in before margo
-PKG_CHECK_MODULES_STATIC([MERCURY],[mercury],
+PKG_CHECK_MODULES([MERCURY],[mercury],
     [LIBS="$MERCURY_LIBS $LIBS"
      CPPFLAGS="$MERCURY_CFLAGS $CPPFLAGS"
      CFLAGS="$MERCURY_CFLAGS $CFLAGS"])

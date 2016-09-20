@@ -3,9 +3,9 @@ ACLOCAL_AMFLAGS = -I m4
 
 bin_PROGRAMS =
 bin_SCRIPTS =
-noinst_LIBRARIES =
+noinst_LTLIBRARIES =
 noinst_PROGRAMS =
-lib_LIBRARIES =
+lib_LTLIBRARIES =
 noinst_HEADERS =
 TESTS =
 XFAIL_TESTS = 
@@ -38,12 +38,12 @@ noinst_HEADERS += \
   ssg-config.h \
   examples/rpc.h
 
-lib_LIBRARIES += src/libssg.a
-src_libssg_a_SOURCES = src/ssg.c
+lib_LTLIBRARIES += src/libssg.la
+src_libssg_la_SOURCES = src/ssg.c
 
 noinst_PROGRAMS += examples/ssg-example
 examples_ssg_example_SOURCES = examples/ssg-example.c examples/rpc.c
-examples_ssg_example_LDADD = src/libssg.a
+examples_ssg_example_LDADD = src/libssg.la
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = maint/ssg.pc
