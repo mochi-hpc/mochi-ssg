@@ -4,7 +4,7 @@ libdir=@libdir@
 includedir=@includedir@
 
 Name: ssg
-Description: Simple Stupid Group (SSG) interface for Mercury
+Description: Simple Static Group (SSG) interface for Mercury
 Version: 0.1
 URL: https://xgitlab.cels.anl.gov/sds/ssg
 Requires: mercury

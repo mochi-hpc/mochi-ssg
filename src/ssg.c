@@ -27,7 +27,7 @@
 #include <ssg-margo.h>
 #endif
 
-#define DO_DEBUG 0
+#define DO_DEBUG 1
 #define DEBUG(...) \
     do { \
         if(DO_DEBUG) { \

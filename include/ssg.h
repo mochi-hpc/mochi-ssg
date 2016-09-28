@@ -6,7 +6,7 @@
 
 #pragma once
 
-// "simple stupid group" interface
+// "simple static group" interface
 //
 // Contains trivial wireup and connection management functionality, with a
 // model of a static (at startup) member list.

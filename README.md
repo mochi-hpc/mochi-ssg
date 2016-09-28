@@ -1,4 +1,4 @@
-SSG is a Simple, Stupid Grouping mechanism for Mercury. It provides
+SSG is a Simple, Static Grouping mechanism for Mercury. It provides
 mechanisms for bootstrapping a set of pre-existing mercury processes. So
 far, we have the following:
 
