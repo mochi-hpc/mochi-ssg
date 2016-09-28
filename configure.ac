@@ -84,7 +84,13 @@ if test "x${check_margo_status}" = xfail -a "x${check_margo}" = xyes; then
     AC_MSG_ERROR([Margo requested but unable to be used. See config.log])
 fi
 
+MARGO_EXTRA_PROGS=
 AM_CONDITIONAL([HAVE_MARGO], [test "x${check_margo_status}" = xsuccess])
+if test "x${check_margo_status}" = xsuccess ; then
+    MARGO_EXTRA_PROGS="examples/ssg-example-margo examples/ssg-example-margo-dblgrp"
+fi
+
+AC_SUBST([MARGO_EXTRA_PROGS])
 
 # mercury check goes last - libs should be linked in before margo
 PKG_CHECK_MODULES([MERCURY],[mercury],

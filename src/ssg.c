@@ -11,8 +11,10 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 #include <mercury_proc.h>
+#include <mercury_macros.h>
 
 #include <ssg.h>
 #include <ssg-config.h>
@@ -25,13 +27,35 @@
 #include <ssg-margo.h>
 #endif
 
-// helpers for looking up a server
-static hg_return_t lookup_serv_addr_cb(const struct hg_cb_info *info);
-static hg_addr_t lookup_serv_addr(
-        hg_context_t *hgctx,
-        const char *info_str);
+#define DO_DEBUG 0
+#define DEBUG(...) \
+    do { \
+        if(DO_DEBUG) { \
+            printf(__VA_ARGS__); \
+            fflush(stdout); \
+        } \
+    } while(0)
+
+// helpers for looking up a group member
+static hg_return_t ssg_lookup_cb(const struct hg_cb_info *info);
 
 static char** setup_addr_str_list(int num_addrs, char * buf);
+
+// helper for hashing (don't want to pull in jenkins hash)
+// see http://www.isthe.com/chongo/tech/comp/fnv/index.html
+static uint64_t fnv1a_64(void *data, size_t size);
+
+#if HAVE_MARGO
+
+MERCURY_GEN_PROC(barrier_in_t,
+        ((int32_t)(barrier_id)) \
+        ((int32_t)(rank)))
+
+// barrier RPC decls
+static void proc_barrier(void *arg);
+DEFINE_MARGO_RPC_HANDLER(proc_barrier)
+
+#endif
 
 ssg_t ssg_init_config(const char * fname, int is_member)
 {
@@ -121,6 +145,15 @@ ssg_t ssg_init_config(const char * fname, int is_member)
     s->num_addrs = num_addrs;
     s->buf_size = addr_len;
     s->rank = is_member ? SSG_RANK_UNKNOWN : SSG_EXTERNAL_RANK;
+#if HAVE_MARGO
+    s->mid = MARGO_INSTANCE_NULL;
+    s->barrier_rpc_id = 0;
+    s->barrier_id = 0;
+    s->barrier_count = 0;
+    s->barrier_mutex = ABT_MUTEX_NULL;
+    s->barrier_cond  = ABT_COND_NULL;
+    s->barrier_eventual = ABT_EVENTUAL_NULL;
+#endif
 
 fini:
     if (fd != -1) close(fd);
@@ -276,8 +309,18 @@ end:
     return hret;
 }
 
+typedef struct ssg_lookup_out
+{
+    hg_return_t hret;
+    hg_addr_t addr;
+    int *cb_count;
+} ssg_lookup_out_t;
+
 hg_return_t ssg_lookup(ssg_t s, hg_context_t *hgctx)
 {
+    // set of outputs
+    ssg_lookup_out_t *out = NULL;
+    int cb_count = 0;
     // "effective" rank for the lookup loop
     int eff_rank = 0;
 
@@ -296,28 +339,87 @@ hg_return_t ssg_lookup(ssg_t s, hg_context_t *hgctx)
         // prevent everyone talking to the same member at once
         eff_rank = (((intptr_t)hgctx)/sizeof(hgctx)) % s->num_addrs;
     }
-    else
+    else {
         eff_rank = s->rank;
+        cb_count++;
+    }
+
+    // init addr metadata
+    out = malloc(s->num_addrs * sizeof(*out));
+    if (out == NULL) return HG_NOMEM_ERROR;
+    // FIXME: lookups don't have a cancellation path, so in an intermediate
+    // error we can't free the memory, lest we cause a segfault
 
     // rank is set, perform lookup
-    for (int i = eff_rank+1; i < s->num_addrs; i++) {
-        s->addrs[i] = lookup_serv_addr(hgctx, s->addr_strs[i]);
-        if (s->addrs[i] == HG_ADDR_NULL) return HG_PROTOCOL_ERROR;
+    hg_return_t hret;
+    for (int i = (s->rank == SSG_EXTERNAL_RANK); i < s->num_addrs; i++) {
+        int r = (eff_rank+i) % s->num_addrs;
+        out[r].cb_count = &cb_count;
+        hret = HG_Addr_lookup(hgctx, &ssg_lookup_cb, &out[r],
+                s->addr_strs[r], HG_OP_ID_IGNORE);
+        if (hret != HG_SUCCESS) return hret;
     }
-    for (int i = 0; i < eff_rank; i++) {
-        s->addrs[i] = lookup_serv_addr(hgctx, s->addr_strs[i]);
-        if (s->addrs[i] == HG_ADDR_NULL) return HG_PROTOCOL_ERROR;
+
+    // lookups posted, enter the progress loop until finished
+    do {
+        unsigned int count = 0;
+        do {
+            hret = HG_Trigger(hgctx, 0, 1, &count);
+        } while (hret == HG_SUCCESS && count > 0);
+        if (hret != HG_SUCCESS && hret != HG_TIMEOUT) return hret;
+
+        hret = HG_Progress(hgctx, 100);
+    } while (cb_count < s->num_addrs &&
+            (hret == HG_SUCCESS || hret == HG_TIMEOUT));
+
+    if (hret != HG_SUCCESS && hret != HG_TIMEOUT)
+        return hret;
+
+    for (int i = 0; i < s->num_addrs; i++) {
+        if (i != s->rank) {
+            if (out[i].hret != HG_SUCCESS)
+                return out[i].hret;
+            else
+                s->addrs[i] = out[i].addr;
+        }
     }
-    if (s->rank == SSG_EXTERNAL_RANK) {
-        s->addrs[eff_rank] =
-            lookup_serv_addr(hgctx, s->addr_strs[eff_rank]);
-        if (s->addrs[eff_rank] == HG_ADDR_NULL) return HG_PROTOCOL_ERROR;
-    }
+
+    free(out);
 
     return HG_SUCCESS;
 }
 
 #ifdef HAVE_MARGO
+
+// TODO: handle hash collision, misc errors
+void ssg_register_barrier(ssg_t s, hg_class_t *hgcl)
+{
+    if (s->num_addrs == 1) return;
+
+    s->barrier_rpc_id = fnv1a_64(s->backing_buf, s->buf_size);
+    hg_return_t hret = HG_Register(hgcl, s->barrier_rpc_id,
+            hg_proc_barrier_in_t, NULL, &proc_barrier_handler);
+    assert(hret == HG_SUCCESS);
+    hret = HG_Register_data(hgcl, s->barrier_rpc_id, s, NULL);
+    assert(hret == HG_SUCCESS);
+
+    int aret = ABT_mutex_create(&s->barrier_mutex);
+    assert(aret == ABT_SUCCESS);
+    aret = ABT_cond_create(&s->barrier_cond);
+    assert(aret == ABT_SUCCESS);
+    aret = ABT_eventual_create(0, &s->barrier_eventual);
+    assert(aret == ABT_SUCCESS);
+}
+
+void ssg_set_margo_id(ssg_t s, margo_instance_id mid)
+{
+    s->mid = mid;
+}
+
+margo_instance_id ssg_get_margo_id(ssg_t s)
+{
+    return s->mid;
+}
 
 struct lookup_ult_args
 {
@@ -331,12 +433,14 @@ static void lookup_ult(void *arg)
 {
     struct lookup_ult_args *l = arg;
 
+    DEBUG("%d (ult): looking up rank %d\n", l->ssg->rank, l->rank);
     l->out = margo_addr_lookup(l->mid, l->ssg->addr_strs[l->rank],
             &l->ssg->addrs[l->rank]);
+    DEBUG("%d (ult): looked up rank %d\n", l->ssg->rank, l->rank);
 }
 
 // TODO: refactor - code is mostly a copy of ssg_lookup
-hg_return_t ssg_lookup_margo(ssg_t s, margo_instance_id mid)
+hg_return_t ssg_lookup_margo(ssg_t s)
 {
     hg_context_t *hgctx;
     ABT_thread *ults;
@@ -346,10 +450,12 @@ hg_return_t ssg_lookup_margo(ssg_t s, margo_instance_id mid)
     // "effective" rank for the lookup loop
     int eff_rank = 0;
 
+    DEBUG("%d: entered lookup\n", s->rank);
+
     // set the hg class up front - need for destructing addrs
-    hgctx = margo_get_context(mid);
+    hgctx = margo_get_context(s->mid);
     if (hgctx == NULL) return HG_INVALID_PARAM;
-    s->hgcl = margo_get_class(mid);
+    s->hgcl = margo_get_class(s->mid);
     if (s->hgcl == NULL) return HG_INVALID_PARAM;
 
     // perform search for my rank if not already set
@@ -377,37 +483,17 @@ hg_return_t ssg_lookup_margo(ssg_t s, margo_instance_id mid)
     for (int i = 0; i < s->num_addrs; i++)
         ults[i] = ABT_THREAD_NULL;
 
-    for (int i = eff_rank+1; i < s->num_addrs; i++) {
-        args[i].ssg = s;
-        args[i].mid = mid;
-        args[i].rank = i;
+    DEBUG("%d: beginning thread create loop (%d...%d)\n", s->rank,
+            (s->rank!=SSG_EXTERNAL_RANK), s->num_addrs);
+    for (int i = (s->rank!=SSG_EXTERNAL_RANK); i < s->num_addrs; i++) {
+        int r = (eff_rank+i) % s->num_addrs;
+        args[r].ssg = s;
+        args[r].mid = s->mid;
+        args[r].rank = r;
 
-        int aret = ABT_thread_create(*margo_get_handler_pool(mid), &lookup_ult,
-                &args[i], ABT_THREAD_ATTR_NULL, &ults[i]);
-        if (aret != ABT_SUCCESS) {
-            hret = HG_OTHER_ERROR;
-            goto fin;
-        }
-    }
-    for (int i = 0; i < eff_rank; i++) {
-        args[i].ssg = s;
-        args[i].mid = mid;
-        args[i].rank = i;
-
-        int aret = ABT_thread_create(*margo_get_handler_pool(mid), &lookup_ult,
-                &args[i], ABT_THREAD_ATTR_NULL, &ults[i]);
-        if (aret != ABT_SUCCESS) {
-            hret = HG_OTHER_ERROR;
-            goto fin;
-        }
-    }
-    if (s->rank == SSG_EXTERNAL_RANK) {
-        args[eff_rank].ssg = s;
-        args[eff_rank].mid = mid;
-        args[eff_rank].rank = eff_rank;
-
-        int aret = ABT_thread_create(*margo_get_handler_pool(mid), &lookup_ult,
-                &args[eff_rank], ABT_THREAD_ATTR_NULL, &ults[eff_rank]);
+        DEBUG("%d: lookup: create thread for rank %d\n", s->rank, r);
+        int aret = ABT_thread_create(*margo_get_handler_pool(s->mid), &lookup_ult,
+                &args[r], ABT_THREAD_ATTR_NULL, &ults[r]);
         if (aret != ABT_SUCCESS) {
             hret = HG_OTHER_ERROR;
             goto fin;
@@ -415,19 +501,20 @@ hg_return_t ssg_lookup_margo(ssg_t s, margo_instance_id mid)
     }
 
     // wait on all
-    for (int i = 0; i < s->num_addrs; i++) {
-        if (ults[i] != ABT_THREAD_NULL) {
-            int aret = ABT_thread_join(ults[i]);
-            ABT_thread_free(&ults[i]);
-            ults[i] = ABT_THREAD_NULL; // in case of cascading failure from join
-            if (aret != ABT_SUCCESS) {
-                hret = HG_OTHER_ERROR;
-                break;
-            }
-            else if (args[i].out != HG_SUCCESS) {
-                hret = args[i].out;
-                break;
-            }
+    for (int i = (s->rank!=SSG_EXTERNAL_RANK); i < s->num_addrs; i++) {
+        int r = (eff_rank+i) % s->num_addrs;
+        DEBUG("%d: lookup: join thread for rank %d\n", s->rank, r);
+        int aret = ABT_thread_join(ults[r]);
+        DEBUG("%d: lookup: join thread for rank %d fin\n", s->rank, r);
+        ABT_thread_free(&ults[r]);
+        ults[r] = ABT_THREAD_NULL; // in case of cascading failure from join
+        if (aret != ABT_SUCCESS) {
+            hret = HG_OTHER_ERROR;
+            break;
+        }
+        else if (args[r].out != HG_SUCCESS) {
+            hret = args[r].out;
+            break;
         }
     }
 
@@ -436,6 +523,7 @@ fin:
     if (ults != NULL) {
         for (int i = 0; i < s->num_addrs; i++) {
             if (ults[i] != ABT_THREAD_NULL) {
+                DEBUG("%d: lookup failed, cancelling ULT %d\n", s->rank, i);
                 ABT_thread_cancel(ults[i]);
                 ABT_thread_free(ults[i]);
             }
@@ -446,12 +534,134 @@ fin:
 
     return hret;
 }
+
+// TODO: process errors in a sane manner
+static void proc_barrier(void *arg)
+{
+    barrier_in_t in;
+    hg_return_t hret;
+    int aret;
+    hg_handle_t h = arg;
+    struct hg_info *info = HG_Get_info(h);
+    ssg_t s = HG_Registered_data(info->hg_class, info->id);
+
+    assert(s->rank == 0);
+
+    hret = HG_Get_input(h, &in);
+    assert(hret == HG_SUCCESS);
+
+    DEBUG("%d: barrier ult: rx round %d from %d\n", s->rank, in.barrier_id,
+            in.rank);
+    // first wait until the nth barrier has been processed
+    aret = ABT_mutex_lock(s->barrier_mutex);
+    assert(aret == ABT_SUCCESS);
+    while (s->barrier_id < in.barrier_id) {
+        DEBUG("%d: barrier ult: waiting to enter round %d\n", s->rank,
+                in.barrier_id);
+        aret = ABT_cond_wait(s->barrier_cond, s->barrier_mutex);
+        assert(aret == ABT_SUCCESS);
+    }
+
+    // inform all other ULTs waiting on this
+    aret = ABT_cond_signal(s->barrier_cond);
+    assert(aret == ABT_SUCCESS);
+    // now wait until all barriers have been rx'd
+    DEBUG("%d: barrier ult: out, incr count to %d\n", s->rank,
+            s->barrier_count+1);
+    s->barrier_count++;
+    while (s->barrier_count < s->num_addrs-1) {
+        DEBUG("%d: barrier ult: waiting (count at %d)\n", s->rank,
+                s->barrier_count);
+        aret = ABT_cond_wait(s->barrier_cond, s->barrier_mutex);
+        assert(aret == ABT_SUCCESS);
+    }
+    DEBUG("%d: barrier ult: count compl, signal and respond\n", s->rank);
+    // all barriers rx'd, inform other ULTs
+    ABT_cond_signal(s->barrier_cond);
+    ABT_mutex_unlock(s->barrier_mutex);
+
+    hret = margo_respond(s->mid, h, NULL);
+    assert(hret == HG_SUCCESS);
+    HG_Destroy(h);
+
+    DEBUG("%d: barrier ult: respond compl, count at %d\n", s->rank,
+            s->barrier_count);
+
+    aret = ABT_mutex_lock(s->barrier_mutex);
+    assert(aret == ABT_SUCCESS);
+    // done -> I'm the last ULT to enter, I do the eventual set
+    int is_done = (++s->barrier_count) == 2*(s->num_addrs-1);
+    if (is_done) s->barrier_count = 0;
+    aret = ABT_mutex_unlock(s->barrier_mutex);
+    assert(aret == ABT_SUCCESS);
+    if (is_done) {
+        aret = ABT_eventual_set(s->barrier_eventual, NULL, 0);
+        assert(aret == ABT_SUCCESS);
+    }
+}
+
+hg_return_t ssg_barrier_margo(ssg_t s)
+{
+    // non-members can't barrier
+    if (s->rank < 0) return HG_INVALID_PARAM;
+
+    // return immediately if a singleton group
+    if (s->num_addrs == 1) return HG_SUCCESS;
+
+    int aret = ABT_eventual_reset(s->barrier_eventual);
+    if (aret != ABT_SUCCESS) return HG_OTHER_ERROR;
+
+    DEBUG("%d: barrier: lock and incr id to %d\n", s->rank, s->barrier_id+1);
+    int bid;
+    // init the barrier state
+    aret = ABT_mutex_lock(s->barrier_mutex);
+    if (aret != ABT_SUCCESS) return HG_OTHER_ERROR;
+    bid = ++s->barrier_id;
+    aret = ABT_cond_broadcast(s->barrier_cond);
+    if (aret != ABT_SUCCESS) {
+        ABT_mutex_unlock(s->barrier_mutex); return HG_OTHER_ERROR;
+    }
+    aret = ABT_mutex_unlock(s->barrier_mutex);
+    if (aret != ABT_SUCCESS) return HG_OTHER_ERROR;
+
+    if (s->rank > 0) {
+        DEBUG("%d: barrier: create and forward to 0\n", s->rank);
+        barrier_in_t in;
+        hg_handle_t h;
+        hg_return_t hret = HG_Create(margo_get_context(s->mid),
+                ssg_get_addr(s, 0), s->barrier_rpc_id, &h);
+        if (hret != HG_SUCCESS) return hret;
+
+        in.rank = s->rank;
+        in.barrier_id = bid;
+        hret = margo_forward(s->mid, h, &in);
+        DEBUG("%d: barrier: finish\n", s->rank);
+        HG_Destroy(h);
+        if (hret != HG_SUCCESS) return hret;
+    }
+    else {
+        DEBUG("%d: barrier: wait on eventual\n", s->rank);
+        aret = ABT_eventual_wait(s->barrier_eventual, NULL);
+        if (aret != ABT_SUCCESS) return HG_OTHER_ERROR;
+    }
+
+    return HG_SUCCESS;
+}
+
 #endif
 
 void ssg_finalize(ssg_t s)
 {
     if (s == SSG_NULL) return;
 
+#ifdef HAVE_MARGO
+    if (s->barrier_mutex != ABT_MUTEX_NULL)
+        ABT_mutex_free(&s->barrier_mutex);
+    if (s->barrier_cond != ABT_COND_NULL)
+        ABT_cond_free(&s->barrier_cond);
+    if (s->barrier_eventual != ABT_EVENTUAL_NULL)
+        ABT_eventual_free(&s->barrier_eventual);
+#endif
     for (int i = 0; i < s->num_addrs; i++) {
         if (s->addrs[i] != HG_ADDR_NULL) HG_Addr_free(s->hgcl, s->addrs[i]);
     }
@@ -633,47 +843,16 @@ end:
     return ret;
 }
 
-typedef struct serv_addr_out
+static hg_return_t ssg_lookup_cb(const struct hg_cb_info *info)
 {
-    hg_addr_t addr;
-    int set;
-} serv_addr_out_t;
-
-static hg_return_t lookup_serv_addr_cb(const struct hg_cb_info *info)
-{
-    serv_addr_out_t *out = info->arg;
-    out->addr = info->info.lookup.addr;
-    out->set = 1;
+    ssg_lookup_out_t *out = info->arg;
+    *out->cb_count += 1;
+    out->hret = info->ret;
+    if (out->hret != HG_SUCCESS)
+        out->addr = HG_ADDR_NULL;
+    else
+        out->addr = info->info.lookup.addr;
     return HG_SUCCESS;
-}
-
-static hg_addr_t lookup_serv_addr(
-        hg_context_t *hgctx,
-        const char *info_str)
-{
-    serv_addr_out_t out;
-    hg_return_t hret;
-
-    out.addr = HG_ADDR_NULL;
-    out.set = 0;
-
-    hret = HG_Addr_lookup(hgctx, &lookup_serv_addr_cb, &out,
-            info_str, HG_OP_ID_IGNORE);
-    if (hret != HG_SUCCESS) return HG_ADDR_NULL;
-
-    // run the progress loop until we've got the output
-    do {
-        unsigned int count = 0;
-        do {
-            hret = HG_Trigger(hgctx, 0, 1, &count);
-        } while (hret == HG_SUCCESS && count > 0);
-
-        if (out.set != 0) break;
-
-        hret = HG_Progress(hgctx, 5000);
-    } while(hret == HG_SUCCESS || hret == HG_TIMEOUT);
-
-    return out.addr;
 }
 
 static char** setup_addr_str_list(int num_addrs, char * buf)
@@ -687,4 +866,16 @@ static char** setup_addr_str_list(int num_addrs, char * buf)
         ret[i] = a + strlen(a) + 1;
     }
     return ret;
+}
+
+static uint64_t fnv1a_64(void *data, size_t size)
+{
+    uint64_t hash = 14695981039346656037ul;
+    unsigned char *d = data;
+
+    for (size_t i = 0; i < size; i++) {
+        hash ^= (uint64_t)*d++;
+        hash *= 1099511628211;
+    }
+    return hash;
 }
