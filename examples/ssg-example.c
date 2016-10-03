@@ -27,6 +27,15 @@
         } \
     } while(0)
 
+#define DO_DEBUG 0
+#define DEBUG(fmt, ...) \
+    do { \
+        if (DO_DEBUG) { \
+            printf(fmt, ##__VA_ARGS__); \
+            fflush(stdout); \
+        } \
+    } while(0)
+
 static void usage()
 {
     fputs("Usage: "
@@ -73,7 +82,7 @@ int main(int argc, char *argv[])
     int sleep_time = 0;
 
     // process state
-    rpc_context_t c = { SSG_NULL, 0 };
+    rpc_context_t c = { SSG_NULL, 0, 0 };
     int rank; // not mpi
 
     // comm vars
@@ -173,7 +182,7 @@ int main(int argc, char *argv[])
     peer_addr = ssg_get_addr(c.s, peer_rank);
     DIE_IF(peer_addr == HG_ADDR_NULL, "ssg_get_addr(%d)", peer_rank);
 
-    printf("%d: pinging %d\n", rank, peer_rank);
+    DEBUG("%d: pinging %d\n", rank, peer_rank);
     hret = HG_Create(hgctx, peer_addr, ping_id, &ping_handle);
     DIE_IF(hret != HG_SUCCESS, "HG_Create");
     ping_in.rank = rank;
@@ -195,7 +204,7 @@ int main(int argc, char *argv[])
             hret = HG_Progress(hgctx, c.shutdown_flag ? 100 : HG_MAX_IDLE_TIME);
         } while ((hret == HG_SUCCESS || hret == HG_TIMEOUT) && !c.shutdown_flag);
         DIE_IF(hret != HG_SUCCESS && hret != HG_TIMEOUT, "HG_Progress");
-        printf("%d: shutting down\n", rank);
+        DEBUG("%d: shutting down\n", rank);
 
         // trigger remaining
         do {
@@ -204,7 +213,7 @@ int main(int argc, char *argv[])
         } while (hret == HG_SUCCESS && num_trigger == 1);
     }
     else {
-        printf("%d: initiating shutdown\n", rank);
+        DEBUG("%d: initiating shutdown\n", rank);
         hg_handle_t shutdown_handle = HG_HANDLE_NULL;
         hret = HG_Create(hgctx, peer_addr, shutdown_id, &shutdown_handle);
         DIE_IF(hret != HG_SUCCESS, "HG_Create");
@@ -218,7 +227,7 @@ int main(int argc, char *argv[])
     }
 
 cleanup:
-    printf("%d: cleaning up\n", rank);
+    DEBUG("%d: cleaning up\n", rank);
     // cleanup
     HG_Destroy(ping_handle);
     ssg_finalize(c.s);
