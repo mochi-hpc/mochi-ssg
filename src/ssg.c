@@ -244,6 +244,15 @@ ssg_t ssg_init_mpi(hg_class_t *hgcl, MPI_Comm comm)
     s->buf_size = sizes_psum[comm_size];
     s->rank = comm_rank;
     self_addr = HG_ADDR_NULL; // don't free this on success
+#if HAVE_MARGO
+    s->mid = MARGO_INSTANCE_NULL;
+    s->barrier_rpc_id = 0;
+    s->barrier_id = 0;
+    s->barrier_count = 0;
+    s->barrier_mutex = ABT_MUTEX_NULL;
+    s->barrier_cond  = ABT_COND_NULL;
+    s->barrier_eventual = ABT_EVENTUAL_NULL;
+#endif
 
 fini:
     if (self_addr != HG_ADDR_NULL) HG_Addr_free(hgcl, self_addr);
