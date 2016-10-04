@@ -16,7 +16,7 @@ for pid in ${pids[@]} ; do
     else
         wait $pid
         err=$?
-        if [[ $err != 0 ]] then
+        if [[ $err != 0 ]] ; then
             echo "ERROR (code $err), killing remaining"
         fi
     fi
