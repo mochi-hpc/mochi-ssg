@@ -361,7 +361,7 @@ hg_return_t ssg_lookup(ssg_t s, hg_context_t *hgctx)
 
     // rank is set, perform lookup
     hg_return_t hret;
-    for (int i = (s->rank == SSG_EXTERNAL_RANK); i < s->num_addrs; i++) {
+    for (int i = (s->rank != SSG_EXTERNAL_RANK); i < s->num_addrs; i++) {
         int r = (eff_rank+i) % s->num_addrs;
         out[r].cb_count = &cb_count;
         hret = HG_Addr_lookup(hgctx, &ssg_lookup_cb, &out[r],
