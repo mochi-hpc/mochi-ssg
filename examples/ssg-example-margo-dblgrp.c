@@ -177,6 +177,11 @@ int main(int argc, char *argv[])
         DEBUG("%d:%d: ping complete\n", grp_id, srank);
         HG_Destroy(h);
 
+        DEBUG("%d:%d: enter barrier\n", grp_id, srank);
+        hret = ssg_barrier_margo(src_group);
+        DIE_IF(hret != HG_SUCCESS, "barrier");
+        DEBUG("%d:%d: leave barrier\n", grp_id, srank);
+
         if (srank == 0) {
             for (i = 0; i < ssg_get_count(sink_group); i++) {
                 DEBUG("%d:%d: sending shutdown to %d\n", grp_id, srank, i);
@@ -189,6 +194,7 @@ int main(int argc, char *argv[])
             }
         }
         hret = ssg_barrier_margo(src_group);
+        DIE_IF(hret != HG_SUCCESS, "barrier");
     }
 
     DEBUG("%d:%d cleaning up\n", grp_id, srank);
