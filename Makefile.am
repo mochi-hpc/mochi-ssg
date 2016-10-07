@@ -34,24 +34,24 @@ if HAVE_MARGO
 include_HEADERS += include/ssg-margo.h
 endif
 
-noinst_HEADERS += \
-  ssg-config.h \
-  examples/rpc.h
+noinst_HEADERS += ssg-config.h
 
 lib_LTLIBRARIES += src/libssg.la
 src_libssg_la_SOURCES = src/ssg.c
 
-EXTRA_PROGRAMS += examples/ssg-example-margo examples/ssg-example-margo-dblgrp
-examples_ssg_example_margo_SOURCES = examples/ssg-example-margo.c examples/rpc.c
-examples_ssg_example_margo_LDADD = src/libssg.la
-examples_ssg_example_margo_dblgrp_SOURCES = examples/ssg-example-margo-dblgrp.c examples/rpc.c
-examples_ssg_example_margo_dblgrp_LDADD = src/libssg.la
+#EXTRA_PROGRAMS += examples/ssg-example-margo examples/ssg-example-margo-dblgrp
+#examples_ssg_example_margo_SOURCES = examples/ssg-example-margo.c examples/rpc.c
+#examples_ssg_example_margo_LDADD = src/libssg.la
+#examples_ssg_example_margo_dblgrp_SOURCES = examples/ssg-example-margo-dblgrp.c examples/rpc.c
+#examples_ssg_example_margo_dblgrp_LDADD = src/libssg.la
 
-noinst_PROGRAMS += examples/ssg-example $(MARGO_EXTRA_PROGS)
-examples_ssg_example_SOURCES = examples/ssg-example.c examples/rpc.c
-examples_ssg_example_LDADD = src/libssg.la
+#noinst_PROGRAMS += examples/ssg-example $(MARGO_EXTRA_PROGS)
+#examples_ssg_example_SOURCES = examples/ssg-example.c examples/rpc.c
+#examples_ssg_example_LDADD = src/libssg.la
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = maint/ssg.pc
 
 include Make.rules
+
+include $(top_srcdir)/tests/Makefile.subdir

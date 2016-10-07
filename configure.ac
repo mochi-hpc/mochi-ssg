@@ -71,9 +71,11 @@ AC_ARG_ENABLE([margo],
      *)   AC_MSG_ERROR([Invalid value ${enableval} for --enable-margo])
      esac])
 
+check_progs=
 if test "x${check_margo}" = xauto -o "x${check_margo}" = xyes ; then
     PKG_CHECK_MODULES([MARGO],[margo],
         [AC_DEFINE([HAVE_MARGO], [1], [Define to 1 if compiled with Margo support])
+         check_progs="tests/ssg-test-margo tests/ssg-test-margo-dblgrp"
          LIBS="$MARGO_LIBS $LIBS"
          CPPFLAGS="$MARGO_CFLAGS $CPPFLAGS"
          CFLAGS="$MARGO_CFLAGS $CFLAGS"
@@ -84,13 +86,8 @@ if test "x${check_margo_status}" = xfail -a "x${check_margo}" = xyes; then
     AC_MSG_ERROR([Margo requested but unable to be used. See config.log])
 fi
 
-MARGO_EXTRA_PROGS=
+AC_SUBST([CHECK_PROGS], [${check_progs}])
 AM_CONDITIONAL([HAVE_MARGO], [test "x${check_margo_status}" = xsuccess])
-if test "x${check_margo_status}" = xsuccess ; then
-    MARGO_EXTRA_PROGS="examples/ssg-example-margo examples/ssg-example-margo-dblgrp"
-fi
-
-AC_SUBST([MARGO_EXTRA_PROGS])
 
 # mercury check goes last - libs should be linked in before margo
 PKG_CHECK_MODULES([MERCURY],[mercury],

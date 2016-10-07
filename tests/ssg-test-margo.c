@@ -41,7 +41,7 @@
 static void usage()
 {
     fputs("Usage: "
-          "./ssg-example [-s <time>] <addr> <config mode> [config file]\n"
+          "./ssg-test-margo [-s <time>] <addr> <config mode> [config file]\n"
           "  -s <time> - time to sleep before doing lookup\n"
           "  <config mode> - \"mpi\" (if supported) or \"conf\"\n"
           "  if conf is the mode, then [config file] is required\n",

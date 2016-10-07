@@ -39,7 +39,7 @@
 static void usage()
 {
     fputs("Usage: "
-          "./ssg-example [-s <time>] <addr> <config mode> [config file]\n"
+          "./ssg-test [-s <time>] <addr> <config mode> [config file]\n"
           "  -s <time> - time to sleep before doing lookup\n"
           "  <config mode> - \"mpi\" (if supported) or \"conf\"\n"
           "  if conf is the mode, then [config file] is required\n",
@@ -56,7 +56,6 @@ static int progress(unsigned int timeout, void *arg)
 }
 static int trigger(unsigned int timeout, unsigned int *flag, void *arg)
 {
-    (void)arg;
     if (HG_Trigger((hg_context_t*)arg, timeout, 1, flag) != HG_SUCCESS) {
         return HG_UTIL_FAIL;
     }
@@ -206,7 +205,10 @@ int main(int argc, char *argv[])
         DIE_IF(hret != HG_SUCCESS && hret != HG_TIMEOUT, "HG_Progress");
         DEBUG("%d: shutting down\n", rank);
 
-        // trigger remaining
+        // trigger/progress remaining
+        do {
+            hret = HG_Progress(hgctx, 0);
+        } while (hret == HG_SUCCESS);
         do {
             num_trigger = 0;
             hret = HG_Trigger(hgctx, 0, 1, &num_trigger);

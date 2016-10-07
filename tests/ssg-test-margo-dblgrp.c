@@ -37,7 +37,7 @@
 static void usage()
 {
     fputs("Usage: "
-          "./ssg-example [-s <time>] <grp id> <addr> <config file 0> <config file 1>\n"
+          "./ssg-test-margo-dblgrp [-s <time>] <grp id> <addr> <config file 0> <config file 1>\n"
           "  -s <time> - time to sleep before doing lookup\n"
           "  <grp id> - 0 or 1\n"
           "  <addr> - process's listen addr\n"
