@@ -89,6 +89,26 @@ fi
 AC_SUBST([CHECK_PROGS], [${check_progs}])
 AM_CONDITIONAL([HAVE_MARGO], [test "x${check_margo_status}" = xsuccess])
 
+check_swim_fd=auto
+AC_ARG_ENABLE([swim-fd],
+    [--enable-swim-fd   Enable SWIM failure detection (default: dynamic check)],
+    [case "${enableval}" in
+     yes) check_swim_fd=yes ;;
+     no)  check_swim_fd=no  ;;
+     *)   AC_MSG_ERROR([Invalid value ${enableval} for --enable-swim-fd])
+     esac])
+
+check_swim_fd_status=fail
+if test "x${check_swim_fd}" = xauto -o "x${check_swim_fd}" = xyes ; then
+    PKG_CHECK_MODULES([SWIM_FD],[swim-fd],
+        [AC_DEFINE([HAVE_SWIM_FD], [1], [Defined to 1 if compiled with SWIM failure detection support])
+         check_swim_fd_status=success], [check_swim_fd_status=fail])
+fi
+
+if test "x${check_swim_fd_status}" = xfail -a "x${check_swim_fd}" = xyes; then
+    AC_MSG_ERROR([SWIM failure detector requested but unable to be used. See config.log])
+fi
+
 # mercury check goes last - libs should be linked in before margo
 PKG_CHECK_MODULES([MERCURY],[mercury],
     [LIBS="$MERCURY_LIBS $LIBS"
