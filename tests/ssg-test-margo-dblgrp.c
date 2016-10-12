@@ -113,17 +113,12 @@ int main(int argc, char *argv[])
     ADVANCE
     conf1 = *argv;
 
-    src_group =  ssg_init_config(conf0, grp_id == 0);
-    sink_group = ssg_init_config(conf1, grp_id == 1);
+    src_group =  ssg_init_config(hgcl, conf0, grp_id == 0);
+    sink_group = ssg_init_config(hgcl, conf1, grp_id == 1);
     DIE_IF(src_group == SSG_NULL || sink_group == SSG_NULL,
             "ssg_init_config with %s and %s\n", conf0, conf1);
 
     ssg_register_barrier(grp_id == 0 ? src_group : sink_group, hgcl);
-
-    hret = ssg_resolve_rank(src_group, hgcl);
-    DIE_IF(hret != HG_SUCCESS, "ssg_resolve_rank");
-    hret = ssg_resolve_rank(sink_group, hgcl);
-    DIE_IF(hret != HG_SUCCESS, "ssg_resolve_rank");
 
     DEBUG("hg, ssg init complete, init margo...\n");
 

@@ -156,15 +156,13 @@ int main(int argc, char *argv[])
         if (!argc) { usage(); return 1; }
         conf = argv[0];
         argc--; argv++;
-        c.s = ssg_init_config(conf, 1);
+        c.s = ssg_init_config(hgcl, conf, 1);
     }
     else {
         fprintf(stderr, "Error: bad mode passed in %s\n", mode);
         return 1;
     }
 
-    hret = ssg_resolve_rank(c.s, hgcl);
-    DIE_IF(hret != HG_SUCCESS, "ssg_resolve_rank");
     rank = ssg_get_rank(c.s);
     size = ssg_get_count(c.s);
 

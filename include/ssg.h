@@ -36,7 +36,7 @@ typedef struct ssg *ssg_t;
 // is_member - nonzero if caller is expected to be in the group, zero otherwise
 //           - ssg_lookup fails if caller is unable to identify with one of the
 //             config entries
-ssg_t ssg_init_config(const char * fname, int is_member);
+ssg_t ssg_init_config(hg_class_t *hgcl, const char * fname, int is_member);
 
 // in the config-file initialization, rank determination is deferred until
 // lookup. In the case where the rank is needed but you don't want to

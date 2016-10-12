@@ -146,7 +146,7 @@ int main(int argc, char *argv[])
         if (!argc) { usage(); return 1; }
         conf = argv[0];
         argc--; argv++;
-        c.s = ssg_init_config(conf, 1);
+        c.s = ssg_init_config(hgcl, conf, 1);
     }
     else {
         fprintf(stderr, "Error: bad mode passed in %s\n", mode);
