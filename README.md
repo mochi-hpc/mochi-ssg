@@ -2,10 +2,8 @@ SSG is a Simple, Static Grouping mechanism for Mercury. It provides
 mechanisms for bootstrapping a set of pre-existing mercury processes. So
 far, we have the following:
 
-- MPI bootstrap (this works well with CCI, where the addresses you pass in
-  aren't the addresses used)
-- config-file bootstrap (where each process is assumed to exist in the
-  membership list - CCI can't currently be used with this method)
+- MPI bootstrap
+- config-file bootstrap
 
 Serializers for the ssg data structure are also provided (untested so far).
 
