@@ -27,6 +27,10 @@
 #include <ssg-margo.h>
 #endif
 
+#ifdef HAVE_SWIM_FD
+#include <swim.h>
+#endif
+
 #define DO_DEBUG 0
 #define DEBUG(...) \
     do { \
@@ -501,8 +505,6 @@ hg_return_t ssg_lookup_margo(ssg_t s)
     // set the hg class up front - need for destructing addrs
     hgctx = margo_get_context(s->mid);
     if (hgctx == NULL) return HG_INVALID_PARAM;
-    s->hgcl = margo_get_class(s->mid);
-    if (s->hgcl == NULL) return HG_INVALID_PARAM;
 
     // perform search for my rank if not already set
     if (s->rank == SSG_RANK_UNKNOWN) {
@@ -564,6 +566,14 @@ hg_return_t ssg_lookup_margo(ssg_t s)
         }
     }
 
+#ifdef HAVE_SWIM_FD
+    // TODO: SWIM INITIALIZATION
+//    if(s->rank == 0)
+//        swim_init(s->mid, s, 1);
+//    else
+        swim_init(s->mid, s, 0);
+#endif
+    
 fin:
     // cleanup
     if (ults != NULL) {

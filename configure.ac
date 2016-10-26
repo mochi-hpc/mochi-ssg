@@ -102,6 +102,9 @@ check_swim_fd_status=fail
 if test "x${check_swim_fd}" = xauto -o "x${check_swim_fd}" = xyes ; then
     PKG_CHECK_MODULES([SWIM_FD],[swim-fd],
         [AC_DEFINE([HAVE_SWIM_FD], [1], [Defined to 1 if compiled with SWIM failure detection support])
+         LIBS="$SWIM_FD_LIBS $LIBS"
+         CPPFLAGS="$SWIM_FD_CFLAGS $CPPFLAGS"
+         CFLAGS="$SWIM_FD_CFLAGS $CFLAGS"
          check_swim_fd_status=success], [check_swim_fd_status=fail])
 fi
 
