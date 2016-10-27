@@ -260,6 +260,8 @@ fini:
     free(sizes);
     free(addr_strs);
     free(addrs);
+    free(self_addr_str);
+    free(sizes_psum);
     return s;
 }
 #endif
