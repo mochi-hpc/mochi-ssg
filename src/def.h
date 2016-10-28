@@ -12,6 +12,9 @@
 #include <abt.h>
 #include <margo.h>
 #endif
+#ifdef HAVE_SWIM_FD
+#include <swim.h>
+#endif
 
 struct ssg
 {
@@ -30,5 +33,8 @@ struct ssg
     ABT_mutex barrier_mutex;
     ABT_cond  barrier_cond;
     ABT_eventual barrier_eventual;
+#endif
+#if HAVE_SWIM_FD
+    swim_context_t *swim_ctx;
 #endif
 };

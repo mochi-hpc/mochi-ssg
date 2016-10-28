@@ -27,10 +27,6 @@
 #include <ssg-margo.h>
 #endif
 
-#ifdef HAVE_SWIM_FD
-#include <swim.h>
-#endif
-
 #define DO_DEBUG 0
 #define DEBUG(...) \
     do { \
@@ -571,7 +567,7 @@ hg_return_t ssg_lookup_margo(ssg_t s)
 //    if(s->rank == 0)
 //        swim_init(s->mid, s, 1);
 //    else
-        swim_init(s->mid, s, 0);
+        s->swim_ctx = swim_init(s->mid, s, 0);
 #endif
     
 fin:
@@ -709,6 +705,11 @@ hg_return_t ssg_barrier_margo(ssg_t s)
 void ssg_finalize(ssg_t s)
 {
     if (s == SSG_NULL) return;
+
+#ifdef HAVE_SWIM_FD
+    if(s->swim_ctx)
+        swim_finalize(s->swim_ctx);
+#endif
 
 #ifdef HAVE_MARGO
     if (s->barrier_mutex != ABT_MUTEX_NULL)
