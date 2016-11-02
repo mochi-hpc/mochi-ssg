@@ -563,11 +563,8 @@ hg_return_t ssg_lookup_margo(ssg_t s)
     }
 
 #ifdef HAVE_SWIM_FD
-    // TODO: SWIM INITIALIZATION
-//    if(s->rank == 0)
-//        swim_init(s->mid, s, 1);
-//    else
-        s->swim_ctx = swim_init(s->mid, s, 0);
+    // initialize swim failure detector
+    s->swim_ctx = swim_init(s->mid, s, 1);
 #endif
     
 fin:
