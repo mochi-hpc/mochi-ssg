@@ -77,8 +77,8 @@ static void ping_dispatch_ult(void *arg)
 int main(int argc, char *argv[])
 {
     // mercury
-    hg_class_t *hgcl;
-    hg_context_t *hgctx;
+    hg_class_t *hgcl = NULL;
+    hg_context_t *hgctx = NULL;
     hg_id_t ping_id, shutdown_id;
 
     // margo
@@ -239,6 +239,7 @@ int main(int argc, char *argv[])
             DIE_IF(hret != HG_SUCCESS, "margo_forward (shutdown)");
             HG_Destroy(shutdown_handle);
         }
+        ssg_finalize(c.s);
         margo_finalize(mid);
     }
     else {
@@ -249,9 +250,8 @@ int main(int argc, char *argv[])
 cleanup:
     DEBUG("%d: cleaning up\n", rank);
     // cleanup
-    ssg_finalize(c.s);
-    HG_Context_destroy(hgctx);
-    HG_Finalize(hgcl);
+    if(hgctx) HG_Context_destroy(hgctx);
+    if(hgcl) HG_Finalize(hgcl);
     free(ults);
     free(args);
 

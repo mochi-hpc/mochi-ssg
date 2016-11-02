@@ -61,6 +61,7 @@ static void shutdown_rpc_ult(void *arg)
     fflush(stdout);
 
     HG_Destroy(h);
+    ssg_finalize(c->s);
     margo_finalize(mid);
 }
 DEFINE_MARGO_RPC_HANDLER(shutdown_rpc_ult)
