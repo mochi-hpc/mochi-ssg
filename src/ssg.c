@@ -824,6 +824,10 @@ int ssg_dump(const ssg_t s, const char *fname)
     char * tok = NULL;
     char * addrs_dup_end = NULL;
 
+    // tmp filename
+    size_t tmp_fname_len;
+    char * tmp_fname = NULL;
+
     // return code
     int ret = 0;
 
@@ -840,16 +844,26 @@ int ssg_dump(const ssg_t s, const char *fname)
         *tok = '\n';
     }
 
-    // open the file and dump in a single call
-    fd = open(fname, O_WRONLY | O_CREAT | O_EXCL, 0644);
+
+    // write to the temp file, rename on success
+    tmp_fname_len = strlen(fname) + 8;
+    tmp_fname = malloc(tmp_fname_len);
+    if (tmp_fname == NULL) goto end;
+    ret = snprintf(tmp_fname, tmp_fname_len, "%s.XXXXXX", fname);
+    if (ret != (int) tmp_fname_len - 1) goto end;
+
+    fd = mkstemp(tmp_fname);
     if (fd == -1) { ret = -1; goto end; }
     // don't include the null char at the end
     written = write(fd, addrs_dup, s->buf_size);
     if (written != s->buf_size) ret = -1;
+    close(fd);
+    ret = rename(tmp_fname, fname);
+    if (ret == -1) unlink(tmp_fname);
 
 end:
+    free(tmp_fname);
     free(addrs_dup);
-    if (fd != -1) close(fd);
 
     return ret;
 }
