@@ -564,7 +564,8 @@ hg_return_t ssg_lookup_margo(ssg_t s)
 
 #ifdef HAVE_SWIM_FD
     // initialize swim failure detector
-    s->swim_ctx = swim_init(s->mid, s, 1);
+    if(s->rank != SSG_EXTERNAL_RANK)
+        s->swim_ctx = swim_init(s->mid, s, 1);
 #endif
     
 fin:
