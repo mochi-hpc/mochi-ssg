@@ -9,10 +9,8 @@
 
 #include <mercury.h>
 #include <ssg.h>
-#include "rpc.h"
-
-#ifdef HAVE_MARGO
 #include <ssg-margo.h>
+#include "rpc.h"
 
 #define DO_DEBUG 0
 #define DEBUG(fmt, ...) \
@@ -65,7 +63,6 @@ static void shutdown_rpc_ult(void *arg)
     margo_finalize(mid);
 }
 DEFINE_MARGO_RPC_HANDLER(shutdown_rpc_ult)
-#endif
 
 hg_return_t ping_rpc_handler(hg_handle_t h)
 {

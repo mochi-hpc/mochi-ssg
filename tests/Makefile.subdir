@@ -1,15 +1,12 @@
 EXTRA_PROGRAMS += tests/ssg-test-margo tests/ssg-test-margo-dblgrp
 
 check_PROGRAMS += \
- tests/ssg-test tests/ssg-swim-test $(CHECK_PROGS)
+ tests/ssg-swim-test $(CHECK_PROGS)
 
 tests_ssg_test_margo_SOURCES = tests/ssg-test-margo.c tests/rpc.c
 tests_ssg_test_margo_LDADD = src/libssg.la
 tests_ssg_test_margo_dblgrp_SOURCES = tests/ssg-test-margo-dblgrp.c tests/rpc.c
 tests_ssg_test_margo_dblgrp_LDADD = src/libssg.la
-
-tests_ssg_test_SOURCES = tests/ssg-test.c tests/rpc.c
-tests_ssg_test_LDADD = src/libssg.la
 
 tests_ssg_swim_test_SOURCES = tests/ssg-swim-test.c
 tests_ssg_swim_test_LDADD = src/libssg.la
@@ -18,11 +15,6 @@ TESTS += \
  tests/run-test-conf.sh
 EXTRA_DIST += \
  tests/run-test-conf.sh
-
-if HAVE_MARGO
-TESTS += tests/run-test-margo-conf.sh tests/run-test-margo-dblgrp.sh
-EXTRA_DIST += tests/run-test-margo-conf.sh tests/run-test-margo-dblgrp.sh
-endif
 
 if HAVE_MPI
 TESTS += tests/run-test-mpi.sh

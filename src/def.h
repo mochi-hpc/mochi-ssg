@@ -7,11 +7,10 @@
 #pragma once
 
 #include <ssg-config.h>
-#if HAVE_MARGO
 #include <mercury_types.h>
 #include <abt.h>
 #include <margo.h>
-#endif
+
 #ifdef HAVE_SWIM_FD
 #include <swim.h>
 #endif
@@ -25,7 +24,6 @@ struct ssg
     int num_addrs;
     int buf_size;
     int rank;
-#if HAVE_MARGO
     margo_instance_id mid;
     hg_id_t barrier_rpc_id;
     int barrier_id;
@@ -33,7 +31,6 @@ struct ssg
     ABT_mutex barrier_mutex;
     ABT_cond  barrier_cond;
     ABT_eventual barrier_eventual;
-#endif
 #if HAVE_SWIM_FD
     swim_context_t *swim_ctx;
 #endif

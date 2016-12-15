@@ -16,15 +16,13 @@
 #include <mercury_proc.h>
 #include <mercury_macros.h>
 
-#include <ssg.h>
 #include <ssg-config.h>
+#include <ssg.h>
+#include <ssg-margo.h>
 #include "def.h"
 
 #ifdef HAVE_MPI
 #include <ssg-mpi.h>
-#endif
-#ifdef HAVE_MARGO
-#include <ssg-margo.h>
 #endif
 
 #define DO_DEBUG 0
@@ -40,16 +38,11 @@
 static ssg_t ssg_init_internal(hg_class_t *hgcl, hg_addr_t self_addr, int rank,
     int num_addrs, char *addr_buf, int addr_buf_size);
 
-// helpers for looking up a group member
-static hg_return_t ssg_lookup_cb(const struct hg_cb_info *info);
-
 static char** setup_addr_str_list(int num_addrs, char * buf);
 
 // helper for hashing (don't want to pull in jenkins hash)
 // see http://www.isthe.com/chongo/tech/comp/fnv/index.html
 static uint64_t fnv1a_64(void *data, size_t size);
-
-#if HAVE_MARGO
 
 MERCURY_GEN_PROC(barrier_in_t,
         ((int32_t)(barrier_id)) \
@@ -58,8 +51,6 @@ MERCURY_GEN_PROC(barrier_in_t,
 // barrier RPC decls
 static void proc_barrier(void *arg);
 DEFINE_MARGO_RPC_HANDLER(proc_barrier)
-
-#endif
 
 ssg_t ssg_init_config(hg_class_t *hgcl, const char * fname, int is_member)
 {
@@ -285,7 +276,6 @@ static ssg_t ssg_init_internal(hg_class_t *hgcl, hg_addr_t self_addr, int rank,
     s->buf_size = addr_buf_size;
     s->rank = rank;
     s->addrs[rank] = self_addr; // NOTE: remaining addrs are set in ssg_lookup
-#if HAVE_MARGO
     s->mid = MARGO_INSTANCE_NULL;
     s->barrier_rpc_id = 0;
     s->barrier_id = 0;
@@ -293,7 +283,6 @@ static ssg_t ssg_init_internal(hg_class_t *hgcl, hg_addr_t self_addr, int rank,
     s->barrier_mutex = ABT_MUTEX_NULL;
     s->barrier_cond  = ABT_COND_NULL;
     s->barrier_eventual = ABT_EVENTUAL_NULL;
-#endif
 
 fini:
     free(addr_strs);
@@ -354,88 +343,6 @@ end:
 
     return hret;
 }
-
-typedef struct ssg_lookup_out
-{
-    hg_return_t hret;
-    hg_addr_t addr;
-    int *cb_count;
-} ssg_lookup_out_t;
-
-hg_return_t ssg_lookup(ssg_t s, hg_context_t *hgctx)
-{
-    // set of outputs
-    ssg_lookup_out_t *out = NULL;
-    int cb_count = 0;
-    // "effective" rank for the lookup loop
-    int eff_rank = 0;
-
-    // set the hg class up front - need for destructing addrs
-    s->hgcl = HG_Context_get_class(hgctx);
-    if (s->hgcl == NULL) return HG_INVALID_PARAM;
-
-    // perform search for my rank if not already set
-    if (s->rank == SSG_RANK_UNKNOWN) {
-        hg_return_t hret = ssg_resolve_rank(s, s->hgcl);
-        if (hret != HG_SUCCESS) return hret;
-    }
-
-    if (s->rank == SSG_EXTERNAL_RANK) {
-        // do a completely arbitrary effective rank determination to try and
-        // prevent everyone talking to the same member at once
-        eff_rank = (((intptr_t)hgctx)/sizeof(hgctx)) % s->num_addrs;
-    }
-    else {
-        eff_rank = s->rank;
-        cb_count++;
-    }
-
-    // init addr metadata
-    out = malloc(s->num_addrs * sizeof(*out));
-    if (out == NULL) return HG_NOMEM_ERROR;
-    // FIXME: lookups don't have a cancellation path, so in an intermediate
-    // error we can't free the memory, lest we cause a segfault
-
-    // rank is set, perform lookup
-    hg_return_t hret;
-    for (int i = (s->rank != SSG_EXTERNAL_RANK); i < s->num_addrs; i++) {
-        int r = (eff_rank+i) % s->num_addrs;
-        out[r].cb_count = &cb_count;
-        hret = HG_Addr_lookup(hgctx, &ssg_lookup_cb, &out[r],
-                s->addr_strs[r], HG_OP_ID_IGNORE);
-        if (hret != HG_SUCCESS) return hret;
-    }
-
-    // lookups posted, enter the progress loop until finished
-    do {
-        unsigned int count = 0;
-        do {
-            hret = HG_Trigger(hgctx, 0, 1, &count);
-        } while (hret == HG_SUCCESS && count > 0);
-        if (hret != HG_SUCCESS && hret != HG_TIMEOUT) return hret;
-
-        hret = HG_Progress(hgctx, 100);
-    } while (cb_count < s->num_addrs &&
-            (hret == HG_SUCCESS || hret == HG_TIMEOUT));
-
-    if (hret != HG_SUCCESS && hret != HG_TIMEOUT)
-        return hret;
-
-    for (int i = 0; i < s->num_addrs; i++) {
-        if (i != s->rank) {
-            if (out[i].hret != HG_SUCCESS)
-                return out[i].hret;
-            else
-                s->addrs[i] = out[i].addr;
-        }
-    }
-
-    free(out);
-
-    return HG_SUCCESS;
-}
-
-#ifdef HAVE_MARGO
 
 // TODO: handle hash collision, misc errors
 void ssg_register_barrier(ssg_t s, hg_class_t *hgcl)
@@ -698,8 +605,6 @@ hg_return_t ssg_barrier_margo(ssg_t s)
     return HG_SUCCESS;
 }
 
-#endif
-
 void ssg_finalize(ssg_t s)
 {
     if (s == SSG_NULL) return;
@@ -709,14 +614,13 @@ void ssg_finalize(ssg_t s)
         swim_finalize(s->swim_ctx);
 #endif
 
-#ifdef HAVE_MARGO
     if (s->barrier_mutex != ABT_MUTEX_NULL)
         ABT_mutex_free(&s->barrier_mutex);
     if (s->barrier_cond != ABT_COND_NULL)
         ABT_cond_free(&s->barrier_cond);
     if (s->barrier_eventual != ABT_EVENTUAL_NULL)
         ABT_eventual_free(&s->barrier_eventual);
-#endif
+
     for (int i = 0; i < s->num_addrs; i++) {
         if (s->addrs[i] != HG_ADDR_NULL) HG_Addr_free(s->hgcl, s->addrs[i]);
     }
@@ -896,18 +800,6 @@ end:
     if (fd != -1) close(fd);
 
     return ret;
-}
-
-static hg_return_t ssg_lookup_cb(const struct hg_cb_info *info)
-{
-    ssg_lookup_out_t *out = info->arg;
-    *out->cb_count += 1;
-    out->hret = info->ret;
-    if (out->hret != HG_SUCCESS)
-        out->addr = HG_ADDR_NULL;
-    else
-        out->addr = info->info.lookup.addr;
-    return HG_SUCCESS;
 }
 
 static char** setup_addr_str_list(int num_addrs, char * buf)

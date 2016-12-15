@@ -8,12 +8,10 @@
 
 #include <mercury.h>
 #include <mercury_macros.h>
+#include <margo.h>
+
 #include <ssg.h>
 #include <ssg-config.h>
-
-#ifdef HAVE_MARGO
-#include <margo.h>
-#endif
 
 /* visible API for example RPC operation */
 
@@ -29,7 +27,5 @@ MERCURY_GEN_PROC(ping_t, ((int32_t)(rank)))
 hg_return_t ping_rpc_handler(hg_handle_t h);
 hg_return_t shutdown_rpc_handler(hg_handle_t h);
 
-#ifdef HAVE_MARGO
 DECLARE_MARGO_RPC_HANDLER(ping_rpc_ult)
 DECLARE_MARGO_RPC_HANDLER(shutdown_rpc_ult)
-#endif

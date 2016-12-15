@@ -62,33 +62,6 @@ fi
 
 AM_CONDITIONAL([HAVE_MPI], [test "x${check_mpi_status}" = xsuccess])
 
-check_margo=auto
-AC_ARG_ENABLE([margo],
-    [--enable-margo    Enable Margo (default: dynamic check)],
-    [case "${enableval}" in
-     yes) check_margo=yes ;;
-     no)  check_margo=no  ;;
-     *)   AC_MSG_ERROR([Invalid value ${enableval} for --enable-margo])
-     esac])
-
-check_progs=
-if test "x${check_margo}" = xauto -o "x${check_margo}" = xyes ; then
-    PKG_CHECK_MODULES([MARGO],[margo],
-        [AC_DEFINE([HAVE_MARGO], [1], [Define to 1 if compiled with Margo support])
-         check_progs="tests/ssg-test-margo tests/ssg-test-margo-dblgrp"
-         LIBS="$MARGO_LIBS $LIBS"
-         CPPFLAGS="$MARGO_CFLAGS $CPPFLAGS"
-         CFLAGS="$MARGO_CFLAGS $CFLAGS"
-         check_margo_status=success], [check_margo_status=fail])
-fi
-
-if test "x${check_margo_status}" = xfail -a "x${check_margo}" = xyes; then
-    AC_MSG_ERROR([Margo requested but unable to be used. See config.log])
-fi
-
-AC_SUBST([CHECK_PROGS], [${check_progs}])
-AM_CONDITIONAL([HAVE_MARGO], [test "x${check_margo_status}" = xsuccess])
-
 check_swim_fd=auto
 AC_ARG_ENABLE([swim-fd],
     [--enable-swim-fd   Enable SWIM failure detection (default: dynamic check)],
