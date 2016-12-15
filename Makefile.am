@@ -15,8 +15,7 @@ CLEANFILES = $(bin_SCRIPTS)
 MAINTAINERCLEANFILES =
 EXTRA_DIST =
 BUILT_SOURCES =
-include_HEADERS = include/ssg.h include/ssg-margo.h
-EXTRA_HEADERS = include/ssg-mpi.h
+include_HEADERS = include/ssg.h
 
 EXTRA_DIST += prepare.sh
 
@@ -25,10 +24,6 @@ AM_CPPFLAGS = -I$(top_srcdir)/include
 AM_CFLAGS =
 
 AM_LIBS =
-
-if HAVE_MPI
-include_HEADERS += include/ssg-mpi.h
-endif
 
 noinst_HEADERS += ssg-config.h
 

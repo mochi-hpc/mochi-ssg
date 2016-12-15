@@ -4,6 +4,8 @@
  * See COPYRIGHT in top-level directory.
  */
 
+#include <ssg-config.h>
+
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
@@ -12,13 +14,7 @@
 #include <abt.h>
 #include <mercury.h>
 #include <ssg.h>
-#include <ssg-margo.h>
-#include <ssg-config.h>
 #include "rpc.h"
-
-#ifdef HAVE_MPI
-#include <ssg-mpi.h>
-#endif
 
 #define DIE_IF(cond_expr, err_fmt, ...) \
     do { \

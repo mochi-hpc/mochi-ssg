@@ -4,20 +4,16 @@
  * See COPYRIGHT in top-level directory.
  */
 
+#include <ssg-config.h>
+
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
 
-#include <margo.h>
-#include <abt.h>
 #include <mercury.h>
+#include <abt.h>
+#include <margo.h>
 #include <ssg.h>
-#include <ssg-margo.h>
-#include <ssg-config.h>
-
-#ifdef HAVE_MPI
-#include <ssg-mpi.h>
-#endif
 
 #define DIE_IF(cond_expr, err_fmt, ...) \
     do { \

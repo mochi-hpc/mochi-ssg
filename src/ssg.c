@@ -4,6 +4,8 @@
  * See COPYRIGHT in top-level directory.
  */
 
+#include <ssg-config.h>
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -13,17 +15,13 @@
 #include <string.h>
 #include <assert.h>
 
+#include <mercury.h>
 #include <mercury_proc.h>
 #include <mercury_macros.h>
-
-#include <ssg-config.h>
+#include <abt.h>
+#include <margo.h>
 #include <ssg.h>
-#include <ssg-margo.h>
 #include "def.h"
-
-#ifdef HAVE_MPI
-#include <ssg-mpi.h>
-#endif
 
 #define DO_DEBUG 0
 #define DEBUG(...) \
