@@ -44,7 +44,6 @@ AC_ARG_ENABLE([mpi],
      esac],
     [])
 
-
 check_mpi_status=fail
 if test "x${check_mpi}" = xauto -o "x${check_mpi}" = xyes ; then
     AC_MSG_CHECKING([If MPI programs can be compiled])
@@ -61,6 +60,12 @@ if test "x${check_mpi_status}" = xfail -a "x${check_mpi}" = xyes; then
 fi
 
 AM_CONDITIONAL([HAVE_MPI], [test "x${check_mpi_status}" = xsuccess])
+
+PKG_CHECK_MODULES([MARGO],[margo],[],
+   [AC_MSG_ERROR([Could not find working margo installation!])])
+LIBS="$MARGO_LIBS $LIBS"
+CPPFLAGS="$MARGO_CFLAGS $CPPFLAGS"
+CFLAGS="$MARGO_CFLAGS $CFLAGS"
 
 check_swim_fd=auto
 AC_ARG_ENABLE([swim-fd],
@@ -84,12 +89,6 @@ fi
 if test "x${check_swim_fd_status}" = xfail -a "x${check_swim_fd}" = xyes; then
     AC_MSG_ERROR([SWIM failure detector requested but unable to be used. See config.log])
 fi
-
-# mercury check goes last - libs should be linked in before margo
-PKG_CHECK_MODULES([MERCURY],[mercury],
-    [LIBS="$MERCURY_LIBS $LIBS"
-     CPPFLAGS="$MERCURY_CFLAGS $CPPFLAGS"
-     CFLAGS="$MERCURY_CFLAGS $CFLAGS"])
 
 AC_CONFIG_FILES([Makefile maint/ssg.pc])
 AC_OUTPUT
