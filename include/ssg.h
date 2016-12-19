@@ -41,30 +41,14 @@ typedef struct ssg *ssg_t;
 // is_member - nonzero if caller is expected to be in the group, zero otherwise
 //           - ssg_lookup fails if caller is unable to identify with one of the
 //             config entries
-ssg_t ssg_init_config(hg_class_t *hgcl, const char * fname, int is_member);
+ssg_t ssg_init_config(margo_instance_id mid, const char * fname, int is_member);
 
 #ifdef HAVE_MPI
 // mpi based (no config file) - all participants (defined by the input
 // communicator) do a global address exchange
 // in this case, the caller has already initialized HG with its address
-ssg_t ssg_init_mpi(hg_class_t *hgcl, MPI_Comm comm);
+ssg_t ssg_init_mpi(margo_instance_id mid, MPI_Comm comm);
 #endif
-
-// in the config-file initialization, rank determination is deferred until
-// lookup. In the case where the rank is needed but you don't want to
-// necessarily look up everyone, this call will resolve the rank. In the MPI
-// bootstrap mode, or if the rank has already been resolved, this operation
-// is a no-op
-//
-// the ssg_lookup functions implicitly call this
-//
-// this function works by using string comparison of HG_Addr_to_string against
-// the entries in the config file
-hg_return_t ssg_resolve_rank(ssg_t s, hg_class_t *hgcl);
-
-// once the ssg has been initialized, wireup (a collection of HG_Addr_lookups)
-// note that this is a simple blocking implementation - no margo/etc here
-hg_return_t ssg_lookup(ssg_t s, hg_context_t *hgctx);
 
 /// finalization
 
@@ -87,6 +71,7 @@ const char * ssg_get_addr_str(const ssg_t s, int rank);
 
 /// mercury support
 
+#if 0
 // group serialization mechanism
 hg_return_t hg_proc_ssg_t(hg_proc_t proc, ssg_t *s);
 
@@ -101,19 +86,12 @@ int ssg_dump(const ssg_t s, const char *fname);
 // race condition - call this before kicking off the progress loop with margo
 void ssg_register_barrier(ssg_t s, hg_class_t *hgcl);
 
-// set/get the margo instance id used in margo communication calls
-void ssg_set_margo_id(ssg_t s, margo_instance_id mid);
-margo_instance_id ssg_get_margo_id(ssg_t s);
-
-// a "margo-aware" version of hg_lookup - still looks up everyone in one go.
-// requires ssg_set_margo_id to have been called.
-hg_return_t ssg_lookup_margo(ssg_t s);
-
 // perform a naive N-1 barrier using margo.
 // requires ssg_set_margo_id to have been called.
 // NOTE: rank must be set on all ranks prior to calling this. I.e. should init
 // the rank prior to starting up margo
 hg_return_t ssg_barrier_margo(ssg_t s);
+#endif
 
 #ifdef __cplusplus
 }

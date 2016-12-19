@@ -64,9 +64,6 @@ int main(int argc, char *argv[])
     // process state
     int rank, size; // not mpi
 
-    // return codes
-    hg_return_t hret;
-
     ABT_init(argc, argv);
 
 #ifdef HAVE_MPI
@@ -83,18 +80,9 @@ int main(int argc, char *argv[])
         argc -= 2; argv += 2;
     }
 
-#if 1
     if (!argc) { usage(); return 1; }
     addr_str = argv[0];
     argc--; argv++;
-#else
-    int mpi_rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
-    if(mpi_rank == 0)
-        addr_str = "bmi+tcp://3344";
-    else
-        addr_str = "bmi+tcp://3345";
-#endif
     
     // init HG
     hgcl = HG_Init(addr_str, HG_TRUE);
@@ -112,7 +100,7 @@ int main(int argc, char *argv[])
     argc--; argv++;
     if (strcmp(mode, "mpi") == 0) {
 #ifdef HAVE_MPI
-        s = ssg_init_mpi(hgcl, MPI_COMM_WORLD);
+        s = ssg_init_mpi(mid, MPI_COMM_WORLD);
 #else
         fprintf(stderr, "Error: MPI support not built in\n");
         return 1;
@@ -123,7 +111,7 @@ int main(int argc, char *argv[])
         if (!argc) { usage(); return 1; }
         conf = argv[0];
         argc--; argv++;
-        s = ssg_init_config(hgcl, conf, 1);
+        s = ssg_init_config(mid, conf, 1);
     }
     else {
         fprintf(stderr, "Error: bad mode passed in %s\n", mode);
@@ -132,14 +120,8 @@ int main(int argc, char *argv[])
 
     DIE_IF(s == SSG_NULL, "ssg_init (mode %s)", mode);
 
-    ssg_set_margo_id(s, mid);
     rank = ssg_get_rank(s);
     size = ssg_get_count(s);
-
-    // resolve group addresses
-    hret = ssg_lookup_margo(s);
-    DIE_IF(hret != HG_SUCCESS, "ssg_lookup");
-    DEBUG("%d of %d: ssg_lookup complete\n", rank, size);
 
     if (sleep_time >= 0) margo_thread_sleep(mid, sleep_time * 1000.0);
     DEBUG("%d of %d: sleep over\n", rank, size);

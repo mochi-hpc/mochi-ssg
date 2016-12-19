@@ -33,11 +33,15 @@
     } while(0)
 
 // internal initialization of ssg data structures
-static ssg_t ssg_init_internal(hg_class_t *hgcl, hg_addr_t self_addr, int rank,
-    int num_addrs, char *addr_buf, int addr_buf_size);
+static ssg_t ssg_init_internal(margo_instance_id mid, hg_addr_t self_addr,
+    int rank, int num_addrs, char *addr_buf, int addr_buf_size);
+
+// lookup peer addresses
+static hg_return_t ssg_lookup(ssg_t s);
 
 static char** setup_addr_str_list(int num_addrs, char * buf);
 
+#if 0
 // helper for hashing (don't want to pull in jenkins hash)
 // see http://www.isthe.com/chongo/tech/comp/fnv/index.html
 static uint64_t fnv1a_64(void *data, size_t size);
@@ -49,8 +53,9 @@ MERCURY_GEN_PROC(barrier_in_t,
 // barrier RPC decls
 static void proc_barrier(void *arg);
 DEFINE_MARGO_RPC_HANDLER(proc_barrier)
+#endif
 
-ssg_t ssg_init_config(hg_class_t *hgcl, const char * fname, int is_member)
+ssg_t ssg_init_config(margo_instance_id mid, const char * fname, int is_member)
 {
     // file to read
     int fd = -1;
@@ -70,6 +75,7 @@ ssg_t ssg_init_config(hg_class_t *hgcl, const char * fname, int is_member)
     void *buf = NULL;
 
     // self rank/addr resolution helpers
+    hg_class_t *hgcl = NULL;
     hg_addr_t self_addr = HG_ADDR_NULL;
     char * self_addr_str = NULL;
     const char * self_addr_substr = NULL;
@@ -78,12 +84,12 @@ ssg_t ssg_init_config(hg_class_t *hgcl, const char * fname, int is_member)
     // TODO: what is the purpose of an "external" rank (is_member flag)?
     int rank = is_member ? SSG_RANK_UNKNOWN : SSG_EXTERNAL_RANK;
 
-    // return data
-    ssg_t s = NULL;
-
     // misc return codes
     int ret;
-    int hret;
+    hg_return_t hret;
+
+    // return data
+    ssg_t s = NULL;
 
     // open file for reading
     fd = open(fname, O_RDONLY);
@@ -101,6 +107,9 @@ ssg_t ssg_init_config(hg_class_t *hgcl, const char * fname, int is_member)
     rdsz = read(fd, rdbuf, st.st_size);
     if (rdsz != st.st_size) goto fini;
     rdbuf[rdsz]='\0';
+
+    hgcl = margo_get_class(mid);
+    if(!hgcl) goto fini;
 
     if(is_member) {
         // get my address
@@ -153,7 +162,7 @@ ssg_t ssg_init_config(hg_class_t *hgcl, const char * fname, int is_member)
     } while (tok != NULL);
 
     // init ssg internal structures
-    s = ssg_init_internal(hgcl, self_addr, rank, num_addrs, buf, addr_len);
+    s = ssg_init_internal(mid, self_addr, rank, num_addrs, buf, addr_len);
     if (s == NULL) goto fini;
 
     // don't free this on success
@@ -163,15 +172,16 @@ fini:
     if (fd != -1) close(fd);
     free(rdbuf);
     free(buf);
-    if (self_addr != HG_ADDR_NULL) HG_Addr_free(hgcl, self_addr);
+    if (hgcl && self_addr != HG_ADDR_NULL) HG_Addr_free(hgcl, self_addr);
     free(self_addr_str);
     return s;
 }
 
 #ifdef HAVE_MPI
-ssg_t ssg_init_mpi(hg_class_t *hgcl, MPI_Comm comm)
+ssg_t ssg_init_mpi(margo_instance_id mid, MPI_Comm comm)
 {
     // my addr
+    hg_class_t *hgcl = NULL;
     hg_addr_t self_addr = HG_ADDR_NULL;
     char * self_addr_str = NULL;
     hg_size_t self_addr_size = 0;
@@ -184,11 +194,14 @@ ssg_t ssg_init_mpi(hg_class_t *hgcl, MPI_Comm comm)
     int comm_size = 0;
     int comm_rank = 0;
 
+    // misc return codes
+    hg_return_t hret;
+
     // return data
     ssg_t s = NULL;
 
-    // misc return codes
-    hg_return_t hret;
+    hgcl = margo_get_class(mid);
+    if(!hgcl) goto fini;
 
     // get my address
     hret = HG_Addr_self(hgcl, &self_addr);
@@ -224,39 +237,42 @@ ssg_t ssg_init_mpi(hg_class_t *hgcl, MPI_Comm comm)
             buf, sizes, sizes_psum, MPI_BYTE, comm);
 
     // init ssg internal structures
-    s = ssg_init_internal(hgcl, self_addr, comm_rank, comm_size,
+    s = ssg_init_internal(mid, self_addr, comm_rank, comm_size,
         buf, sizes_psum[comm_size]);
     if (s == NULL) goto fini;
 
     // don't free these on success
-    self_addr = HG_ADDR_NULL;
     buf = NULL;
+    self_addr = HG_ADDR_NULL;
 fini:
-    if (self_addr != HG_ADDR_NULL) HG_Addr_free(hgcl, self_addr);
-    free(self_addr_str);
     free(sizes);
     free(sizes_psum);
     free(buf);
+    if (hgcl && self_addr != HG_ADDR_NULL) HG_Addr_free(hgcl, self_addr);
+    free(self_addr_str);
     return s;
 }
 #endif
 
-static ssg_t ssg_init_internal(hg_class_t *hgcl, hg_addr_t self_addr, int rank,
-    int num_addrs, char *addr_buf, int addr_buf_size)
+static ssg_t ssg_init_internal(margo_instance_id mid, hg_addr_t self_addr,
+    int rank, int num_addrs, char *addr_buf, int addr_buf_size)
 {
     // arrays of peer address strings and addresses
     char **addr_strs = NULL;
     hg_addr_t *addrs = NULL;
 
+    // misc return codes
+    hg_return_t hret;
+
     // return data
     ssg_t s = NULL;
 
-    if(rank == SSG_RANK_UNKNOWN) goto fini;
-    if(self_addr == HG_ADDR_NULL && rank != SSG_EXTERNAL_RANK) goto fini;
+    if (rank == SSG_RANK_UNKNOWN) goto fini;
+    if (self_addr == HG_ADDR_NULL && rank != SSG_EXTERNAL_RANK) goto fini;
 
     // set peer address strings
     addr_strs = setup_addr_str_list(num_addrs, addr_buf);
-    if(addr_strs == NULL) goto fini;
+    if (addr_strs == NULL) goto fini;
 
     // init peer addresses
     addrs = malloc(num_addrs*sizeof(*addrs));
@@ -266,116 +282,51 @@ static ssg_t ssg_init_internal(hg_class_t *hgcl, hg_addr_t self_addr, int rank,
     // set up the output
     s = malloc(sizeof(*s));
     if (s == NULL) goto fini;
-    s->hgcl = hgcl;
+    s->mid = mid;
+    s->rank = rank;
+    s->num_addrs = num_addrs;
     s->addr_strs = addr_strs; addr_strs = NULL;
     s->addrs = addrs; addrs = NULL;
     s->backing_buf = addr_buf;
-    s->num_addrs = num_addrs;
     s->buf_size = addr_buf_size;
-    s->rank = rank;
     s->addrs[rank] = self_addr; // NOTE: remaining addrs are set in ssg_lookup
-    s->mid = MARGO_INSTANCE_NULL;
     s->barrier_rpc_id = 0;
     s->barrier_id = 0;
     s->barrier_count = 0;
     s->barrier_mutex = ABT_MUTEX_NULL;
     s->barrier_cond  = ABT_COND_NULL;
     s->barrier_eventual = ABT_EVENTUAL_NULL;
+    s->swim_ctx = NULL;
 
+    // lookup hg addr information for all group members
+    hret = ssg_lookup(s);
+    if (hret != HG_SUCCESS)
+    {
+        ssg_finalize(s); s = NULL;
+        goto fini;
+    }
+
+#ifdef HAVE_SWIM_FD
+    // initialize swim failure detector
+    if (s->rank != SSG_EXTERNAL_RANK)
+    {
+        s->swim_ctx = swim_init(s->mid, s, 1);
+        if (s->swim_ctx == NULL)
+        {
+            ssg_finalize(s); s = NULL;
+        }
+    }
+#endif
+    
 fini:
     free(addr_strs);
     free(addrs);
     return s;
 }
 
-hg_return_t ssg_resolve_rank(ssg_t s, hg_class_t *hgcl)
-{
-    if (s->rank == SSG_EXTERNAL_RANK ||
-            s->rank != SSG_RANK_UNKNOWN)
-        return HG_SUCCESS;
-
-    // helpers
-    hg_addr_t self_addr = HG_ADDR_NULL;
-    char * self_addr_str = NULL;
-    const char * self_addr_substr = NULL;
-    hg_size_t self_addr_size = 0;
-    const char * addr_substr = NULL;
-    int rank = 0;
-    hg_return_t hret;
-
-    // get my address
-    hret = HG_Addr_self(hgcl, &self_addr);
-    if (hret != HG_SUCCESS) goto end;
-    hret = HG_Addr_to_string(hgcl, NULL, &self_addr_size, self_addr);
-    if (self_addr == NULL) { hret = HG_NOMEM_ERROR; goto end; }
-    self_addr_str = malloc(self_addr_size);
-    if (self_addr_str == NULL) { hret = HG_NOMEM_ERROR; goto end; }
-    hret = HG_Addr_to_string(hgcl, self_addr_str, &self_addr_size, self_addr);
-    if (hret != HG_SUCCESS) goto end;
-
-    // strstr is used here b/c there may be inconsistencies in whether the class
-    // is included in the address or not (it's not in HG_Addr_to_string, it
-    // should be in ssg_init_config)
-    self_addr_substr = strstr(self_addr_str, "://");
-    if (self_addr_substr == NULL) { hret = HG_INVALID_PARAM; goto end; }
-    self_addr_substr += 3;
-    for (rank = 0; rank < s->num_addrs; rank++) {
-        addr_substr = strstr(s->addr_strs[rank], "://");
-        if (addr_substr == NULL) { hret = HG_INVALID_PARAM; goto end; }
-        addr_substr+= 3;
-        if (strcmp(self_addr_substr, addr_substr) == 0)
-            break;
-    }
-    if (rank == s->num_addrs) {
-        hret = HG_INVALID_PARAM;
-        goto end;
-    }
-
-    // success - set
-    s->rank = rank;
-    s->addrs[rank] = self_addr; self_addr = HG_ADDR_NULL;
-
-end:
-    if (self_addr != HG_ADDR_NULL) HG_Addr_free(hgcl, self_addr);
-    free(self_addr_str);
-
-    return hret;
-}
-
-// TODO: handle hash collision, misc errors
-void ssg_register_barrier(ssg_t s, hg_class_t *hgcl)
-{
-    if (s->num_addrs == 1) return;
-
-    s->barrier_rpc_id = fnv1a_64(s->backing_buf, s->buf_size);
-    hg_return_t hret = HG_Register(hgcl, s->barrier_rpc_id,
-            hg_proc_barrier_in_t, NULL, &proc_barrier_handler);
-    assert(hret == HG_SUCCESS);
-    hret = HG_Register_data(hgcl, s->barrier_rpc_id, s, NULL);
-    assert(hret == HG_SUCCESS);
-
-    int aret = ABT_mutex_create(&s->barrier_mutex);
-    assert(aret == ABT_SUCCESS);
-    aret = ABT_cond_create(&s->barrier_cond);
-    assert(aret == ABT_SUCCESS);
-    aret = ABT_eventual_create(0, &s->barrier_eventual);
-    assert(aret == ABT_SUCCESS);
-}
-
-void ssg_set_margo_id(ssg_t s, margo_instance_id mid)
-{
-    s->mid = mid;
-}
-
-margo_instance_id ssg_get_margo_id(ssg_t s)
-{
-    return s->mid;
-}
-
 struct lookup_ult_args
 {
     ssg_t ssg;
-    margo_instance_id mid;
     int rank;
     hg_return_t out;
 };
@@ -385,13 +336,12 @@ static void lookup_ult(void *arg)
     struct lookup_ult_args *l = arg;
 
     DEBUG("%d (ult): looking up rank %d\n", l->ssg->rank, l->rank);
-    l->out = margo_addr_lookup(l->mid, l->ssg->addr_strs[l->rank],
+    l->out = margo_addr_lookup(l->ssg->mid, l->ssg->addr_strs[l->rank],
             &l->ssg->addrs[l->rank]);
     DEBUG("%d (ult): looked up rank %d\n", l->ssg->rank, l->rank);
 }
 
-// TODO: refactor - code is mostly a copy of ssg_lookup
-hg_return_t ssg_lookup_margo(ssg_t s)
+static hg_return_t ssg_lookup(ssg_t s)
 {
     hg_context_t *hgctx;
     ABT_thread *ults;
@@ -406,12 +356,6 @@ hg_return_t ssg_lookup_margo(ssg_t s)
     // set the hg class up front - need for destructing addrs
     hgctx = margo_get_context(s->mid);
     if (hgctx == NULL) return HG_INVALID_PARAM;
-
-    // perform search for my rank if not already set
-    if (s->rank == SSG_RANK_UNKNOWN) {
-        hret = ssg_resolve_rank(s, s->hgcl);
-        if (hret != HG_SUCCESS) return hret;
-    }
 
     if (s->rank == SSG_EXTERNAL_RANK) {
         // do a completely arbitrary effective rank determination to try and
@@ -437,7 +381,6 @@ hg_return_t ssg_lookup_margo(ssg_t s)
     for (int i = (s->rank!=SSG_EXTERNAL_RANK); i < s->num_addrs; i++) {
         int r = (eff_rank+i) % s->num_addrs;
         args[r].ssg = s;
-        args[r].mid = s->mid;
         args[r].rank = r;
 
         DEBUG("%d: lookup: create thread for rank %d\n", s->rank, r);
@@ -445,7 +388,7 @@ hg_return_t ssg_lookup_margo(ssg_t s)
                 &args[r], ABT_THREAD_ATTR_NULL, &ults[r]);
         if (aret != ABT_SUCCESS) {
             hret = HG_OTHER_ERROR;
-            goto fin;
+            goto fini;
         }
     }
 
@@ -454,7 +397,7 @@ hg_return_t ssg_lookup_margo(ssg_t s)
         int r = (eff_rank+i) % s->num_addrs;
         DEBUG("%d: lookup: join thread for rank %d\n", s->rank, r);
         int aret = ABT_thread_join(ults[r]);
-        DEBUG("%d: lookup: join thread for rank %d fin\n", s->rank, r);
+        DEBUG("%d: lookup: join thread for rank %d fini\n", s->rank, r);
         ABT_thread_free(&ults[r]);
         ults[r] = ABT_THREAD_NULL; // in case of cascading failure from join
         if (aret != ABT_SUCCESS) {
@@ -467,13 +410,7 @@ hg_return_t ssg_lookup_margo(ssg_t s)
         }
     }
 
-#ifdef HAVE_SWIM_FD
-    // initialize swim failure detector
-    if(s->rank != SSG_EXTERNAL_RANK)
-        s->swim_ctx = swim_init(s->mid, s, 1);
-#endif
-    
-fin:
+fini:
     // cleanup
     if (ults != NULL) {
         for (int i = 0; i < s->num_addrs; i++) {
@@ -488,6 +425,27 @@ fin:
     if (args != NULL) free(args);
 
     return hret;
+}
+
+#if 0
+// TODO: handle hash collision, misc errors
+void ssg_register_barrier(ssg_t s, hg_class_t *hgcl)
+{
+    if (s->num_addrs == 1) return;
+
+    s->barrier_rpc_id = fnv1a_64(s->backing_buf, s->buf_size);
+    hg_return_t hret = HG_Register(hgcl, s->barrier_rpc_id,
+            hg_proc_barrier_in_t, NULL, &proc_barrier_handler);
+    assert(hret == HG_SUCCESS);
+    hret = HG_Register_data(hgcl, s->barrier_rpc_id, s, NULL);
+    assert(hret == HG_SUCCESS);
+
+    int aret = ABT_mutex_create(&s->barrier_mutex);
+    assert(aret == ABT_SUCCESS);
+    aret = ABT_cond_create(&s->barrier_cond);
+    assert(aret == ABT_SUCCESS);
+    aret = ABT_eventual_create(0, &s->barrier_eventual);
+    assert(aret == ABT_SUCCESS);
 }
 
 // TODO: process errors in a sane manner
@@ -602,6 +560,7 @@ hg_return_t ssg_barrier_margo(ssg_t s)
 
     return HG_SUCCESS;
 }
+#endif
 
 void ssg_finalize(ssg_t s)
 {
@@ -620,7 +579,8 @@ void ssg_finalize(ssg_t s)
         ABT_eventual_free(&s->barrier_eventual);
 
     for (int i = 0; i < s->num_addrs; i++) {
-        if (s->addrs[i] != HG_ADDR_NULL) HG_Addr_free(s->hgcl, s->addrs[i]);
+        if (s->addrs[i] != HG_ADDR_NULL)
+            HG_Addr_free(margo_get_class(s->mid), s->addrs[i]);
     }
     free(s->backing_buf);
     free(s->addr_strs);
@@ -654,6 +614,7 @@ const char * ssg_get_addr_str(const ssg_t s, int rank)
         return NULL;
 }
 
+#if 0
 // serialization format looks like:
 // < num members, buffer size, buffer... >
 // doesn't attempt to grab hg_addr's, string buffers, etc. - client will be
@@ -799,6 +760,7 @@ end:
 
     return ret;
 }
+#endif
 
 static char** setup_addr_str_list(int num_addrs, char * buf)
 {
@@ -813,6 +775,7 @@ static char** setup_addr_str_list(int num_addrs, char * buf)
     return ret;
 }
 
+#if 0
 static uint64_t fnv1a_64(void *data, size_t size)
 {
     uint64_t hash = 14695981039346656037ul;
@@ -824,3 +787,5 @@ static uint64_t fnv1a_64(void *data, size_t size)
     }
     return hash;
 }
+#endif
+

@@ -18,14 +18,13 @@
 
 struct ssg
 {
-    hg_class_t *hgcl;
+    margo_instance_id mid;
+    int rank;
+    int num_addrs;
     char **addr_strs;
     hg_addr_t *addrs;
     void *backing_buf;
-    int num_addrs;
     int buf_size;
-    int rank;
-    margo_instance_id mid;
     hg_id_t barrier_rpc_id;
     int barrier_id;
     int barrier_count;
