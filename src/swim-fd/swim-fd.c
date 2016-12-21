@@ -4,13 +4,21 @@
  * See COPYRIGHT in top-level directory.
  */
 
+#include <ssg-config.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <assert.h>
 #include <time.h>
 
+#include <ssg.h>
 #include "swim-fd.h"
+#include "swim-fd-internal.h"
+
+/* SWIM ABT ULT prototypes */
+static void swim_prot_ult(
+    void *t_arg);
 
 swim_context_t *swim_init(
     margo_instance_id mid,
@@ -18,17 +26,17 @@ swim_context_t *swim_init(
     int active)
 {
     swim_context_t *swim_ctx;
-#if 0
     int ret;
 
     /* TODO: this may end up being identical across many processes => hotspots */
-    srand(time(NULL));
+    //srand(time(NULL));
 
     /* allocate structure for storing swim context */
     swim_ctx = malloc(sizeof(*swim_ctx));
     assert(swim_ctx);
     memset(swim_ctx, 0, sizeof(*swim_ctx));
 
+#if 0
     /* initialize swim state */
     swim_ctx->mid = mid;
     swim_ctx->hg_ctx = margo_get_context(mid);
@@ -45,6 +53,7 @@ swim_context_t *swim_init(
     swim_ctx->prot_subgroup_sz = SWIM_DEF_SUBGROUP_SIZE;
 
     swim_register_ping_rpcs(margo_get_class(mid), swim_ctx);
+#endif
 
     if(active)
     {
@@ -56,14 +65,38 @@ swim_context_t *swim_init(
             return(NULL);
         }
     }
-#endif
 
     return(swim_ctx);
 }
 
+static void swim_prot_ult(
+    void *t_arg)
+{
+    int ret;
+    swim_context_t *swim_ctx = (swim_context_t *)t_arg;
+
+    while(!(swim_ctx->shutdown_flag))
+    {
+        printf("Loop\n");
+#if 0
+        /* spawn a ULT to run this tick */
+        ret = ABT_thread_create(swim_ctx->prot_pool, swim_tick_ult, swim_ctx,
+            ABT_THREAD_ATTR_NULL, NULL);
+        if(ret != ABT_SUCCESS)
+        {
+            fprintf(stderr, "Error: unable to create ULT for SWIM protocol tick\n");
+        }
+#endif
+
+        /* sleep for a protocol period length */
+        margo_thread_sleep(swim_ctx->mid, swim_ctx->prot_period_len);
+    }
+
+    return;
+}
+
 void swim_finalize(swim_context_t *swim_ctx)
 {
-#if 0
     /* set shutdown flag so ULTs know to start wrapping up */
     swim_ctx->shutdown_flag = 1;
 
@@ -76,9 +109,10 @@ void swim_finalize(swim_context_t *swim_ctx)
         DEBUG_LOG("swim protocol shutdown complete\n", swim_ctx);
     }
 
+#if 0
     free(swim_ctx->membership_view);
-    free(swim_ctx);
 #endif
+    free(swim_ctx);
 
     return;
 }

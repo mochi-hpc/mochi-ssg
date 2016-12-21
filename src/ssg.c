@@ -21,7 +21,8 @@
 #include <abt.h>
 #include <margo.h>
 #include <ssg.h>
-#include "def.h"
+
+#include "ssg-internal.h"
 
 #define DO_DEBUG 0
 #define DEBUG(...) \
