@@ -36,7 +36,7 @@ PKG_CONFIG="pkg-config --static"
 
 check_mpi=auto
 AC_ARG_ENABLE([mpi],
-    [--enable-mpi    Enable MPI (default: dynamic check)],
+    [  --enable-mpi            enable MPI (default: dynamic check)],
     [ case "${enableval}" in
      yes) check_mpi=yes ;;
      no)  check_mpi=no ;;
@@ -67,28 +67,15 @@ LIBS="$MARGO_LIBS $LIBS"
 CPPFLAGS="$MARGO_CFLAGS $CPPFLAGS"
 CFLAGS="$MARGO_CFLAGS $CFLAGS"
 
-check_swim_fd=auto
 AC_ARG_ENABLE([swim-fd],
-    [--enable-swim-fd   Enable SWIM failure detection (default: dynamic check)],
-    [case "${enableval}" in
-     yes) check_swim_fd=yes ;;
-     no)  check_swim_fd=no  ;;
-     *)   AC_MSG_ERROR([Invalid value ${enableval} for --enable-swim-fd])
-     esac])
+    [  --enable-swim-fd        enable SWIM failure detection (default: disabled)],
+    [if test "x$enable_swim_fd" = "xyes" ; then
+        AC_DEFINE(USE_SWIM_FD, 1, Define to 1 if the SWIM failure detector should be used)
+    elif test "x$enableval" != "xno" ; then
+        AC_MSG_ERROR(bad value ${enable_swim_fd} for --enable-swim-fd)
+    fi],)
 
-check_swim_fd_status=fail
-if test "x${check_swim_fd}" = xauto -o "x${check_swim_fd}" = xyes ; then
-    PKG_CHECK_MODULES([SWIM_FD],[swim-fd],
-        [AC_DEFINE([HAVE_SWIM_FD], [1], [Defined to 1 if compiled with SWIM failure detection support])
-         LIBS="$SWIM_FD_LIBS $LIBS"
-         CPPFLAGS="$SWIM_FD_CFLAGS $CPPFLAGS"
-         CFLAGS="$SWIM_FD_CFLAGS $CFLAGS"
-         check_swim_fd_status=success], [check_swim_fd_status=fail])
-fi
-
-if test "x${check_swim_fd_status}" = xfail -a "x${check_swim_fd}" = xyes; then
-    AC_MSG_ERROR([SWIM failure detector requested but unable to be used. See config.log])
-fi
+AM_CONDITIONAL([USE_SWIM_FD], [test "x${enable_swim_fd}" = xyes])
 
 AC_CONFIG_FILES([Makefile maint/ssg.pc])
 AC_OUTPUT

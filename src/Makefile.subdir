@@ -1,0 +1,3 @@
+src_libssg_la_SOURCES += \
+ src/def.h \
+ src/ssg.c

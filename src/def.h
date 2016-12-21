@@ -12,8 +12,8 @@
 #include <abt.h>
 #include <margo.h>
 
-#ifdef HAVE_SWIM_FD
-#include <swim.h>
+#if USE_SWIM_FD
+#include "swim-fd/swim-fd.h"
 #endif
 
 struct ssg
@@ -31,7 +31,7 @@ struct ssg
     ABT_mutex barrier_mutex;
     ABT_cond  barrier_cond;
     ABT_eventual barrier_eventual;
-#if HAVE_SWIM_FD
+#if USE_SWIM_FD
     swim_context_t *swim_ctx;
 #endif
 };

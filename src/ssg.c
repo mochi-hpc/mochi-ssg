@@ -296,7 +296,9 @@ static ssg_t ssg_init_internal(margo_instance_id mid, hg_addr_t self_addr,
     s->barrier_mutex = ABT_MUTEX_NULL;
     s->barrier_cond  = ABT_COND_NULL;
     s->barrier_eventual = ABT_EVENTUAL_NULL;
+#if USE_SWIM_FD
     s->swim_ctx = NULL;
+#endif
 
     // lookup hg addr information for all group members
     hret = ssg_lookup(s);
@@ -306,7 +308,7 @@ static ssg_t ssg_init_internal(margo_instance_id mid, hg_addr_t self_addr,
         goto fini;
     }
 
-#ifdef HAVE_SWIM_FD
+#if USE_SWIM_FD
     // initialize swim failure detector
     if (s->rank != SSG_EXTERNAL_RANK)
     {
@@ -566,7 +568,7 @@ void ssg_finalize(ssg_t s)
 {
     if (s == SSG_NULL) return;
 
-#ifdef HAVE_SWIM_FD
+#if USE_SWIM_FD
     if(s->swim_ctx)
         swim_finalize(s->swim_ctx);
 #endif

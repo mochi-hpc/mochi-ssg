@@ -15,7 +15,10 @@ CLEANFILES = $(bin_SCRIPTS)
 MAINTAINERCLEANFILES =
 EXTRA_DIST =
 BUILT_SOURCES =
+src_libssg_la_SOURCES =
 include_HEADERS = include/ssg.h
+noinst_HEADERS += ssg-config.h
+lib_LTLIBRARIES += src/libssg.la
 
 EXTRA_DIST += prepare.sh
 
@@ -25,14 +28,14 @@ AM_CFLAGS =
 
 AM_LIBS =
 
-noinst_HEADERS += ssg-config.h
-
-lib_LTLIBRARIES += src/libssg.la
-src_libssg_la_SOURCES = src/ssg.c
-
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = maint/ssg.pc
 
 include Make.rules
+
+include $(top_srcdir)/src/Makefile.subdir
+if USE_SWIM_FD
+include $(top_srcdir)/src/swim-fd/Makefile.subdir
+endif
 
 include $(top_srcdir)/tests/Makefile.subdir
