@@ -4,8 +4,8 @@
  * See COPYRIGHT in top-level directory.
  */
 
-#ifndef __SWIM_INTERNAL_H
-#define __SWIM_INTERNAL_H
+#ifndef __SWIM_FD_INTERNAL_H
+#define __SWIM_FD_INTERNAL_H
 
 #ifdef __cplusplus
 extern "C" {

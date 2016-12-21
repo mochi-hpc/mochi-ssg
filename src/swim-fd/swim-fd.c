@@ -36,7 +36,6 @@ swim_context_t *swim_init(
     assert(swim_ctx);
     memset(swim_ctx, 0, sizeof(*swim_ctx));
 
-#if 0
     /* initialize swim state */
     swim_ctx->mid = mid;
     swim_ctx->hg_ctx = margo_get_context(mid);
@@ -44,6 +43,7 @@ swim_context_t *swim_init(
     swim_ctx->group = swim_group;
     swim_ctx->ping_target = SWIM_MEMBER_ID_UNKNOWN;
 
+#if 0
     /* initialize membership context */
     swim_init_membership_view(swim_ctx);
 
@@ -77,7 +77,6 @@ static void swim_prot_ult(
 
     while(!(swim_ctx->shutdown_flag))
     {
-        printf("Loop\n");
 #if 0
         /* spawn a ULT to run this tick */
         ret = ABT_thread_create(swim_ctx->prot_pool, swim_tick_ult, swim_ctx,
@@ -103,10 +102,8 @@ void swim_finalize(swim_context_t *swim_ctx)
     if(swim_ctx->prot_thread)
     {
         /* wait for the protocol ULT to terminate */
-        DEBUG_LOG("attempting to shutdown ult %p\n", swim_ctx, swim_ctx->prot_thread);
         ABT_thread_join(swim_ctx->prot_thread);
         ABT_thread_free(&(swim_ctx->prot_thread));
-        DEBUG_LOG("swim protocol shutdown complete\n", swim_ctx);
     }
 
 #if 0

@@ -6,8 +6,6 @@
 
 #pragma once
 
-#include <ssg-config.h>
-
 #include <mercury_types.h>
 #include <abt.h>
 #include <margo.h>
