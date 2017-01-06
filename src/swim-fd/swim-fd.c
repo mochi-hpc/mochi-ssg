@@ -19,6 +19,8 @@
 /* SWIM ABT ULT prototypes */
 static void swim_prot_ult(
     void *t_arg);
+static void swim_tick_ult(
+    void *t_arg);
 
 swim_context_t *swim_init(
     margo_instance_id mid,
@@ -46,12 +48,14 @@ swim_context_t *swim_init(
 #if 0
     /* initialize membership context */
     swim_init_membership_view(swim_ctx);
+#endif
 
     /* set protocol parameters */
     swim_ctx->prot_period_len = SWIM_DEF_PROTOCOL_PERIOD_LEN;
     swim_ctx->prot_susp_timeout = SWIM_DEF_SUSPECT_TIMEOUT;
     swim_ctx->prot_subgroup_sz = SWIM_DEF_SUBGROUP_SIZE;
 
+#if 0
     swim_register_ping_rpcs(margo_get_class(mid), swim_ctx);
 #endif
 
@@ -77,7 +81,6 @@ static void swim_prot_ult(
 
     while(!(swim_ctx->shutdown_flag))
     {
-#if 0
         /* spawn a ULT to run this tick */
         ret = ABT_thread_create(swim_ctx->prot_pool, swim_tick_ult, swim_ctx,
             ABT_THREAD_ATTR_NULL, NULL);
@@ -85,12 +88,17 @@ static void swim_prot_ult(
         {
             fprintf(stderr, "Error: unable to create ULT for SWIM protocol tick\n");
         }
-#endif
 
         /* sleep for a protocol period length */
         margo_thread_sleep(swim_ctx->mid, swim_ctx->prot_period_len);
     }
 
+    return;
+}
+
+static void swim_tick_ult(
+    void *t_arg)
+{
     return;
 }
 

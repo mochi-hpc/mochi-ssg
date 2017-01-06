@@ -34,7 +34,15 @@ typedef struct ssg *ssg_t;
 // the receiving entity is not part of the group
 #define SSG_EXTERNAL_RANK (-2)
 
-/// participant initialization
+typedef enum ssg_member_status
+{
+    SSG_MEMBER_UNKNOWN = 0,
+    SSG_MEMBER_ALIVE,
+    SSG_MEMBER_SUSPECT,
+    SSG_MEMBER_DEAD
+} ssg_member_status_t;
+
+/// group member initialization
 
 // config file based - load up the given config file
 // containing a set of hostnames
@@ -52,18 +60,18 @@ ssg_t ssg_init_mpi(margo_instance_id mid, MPI_Comm comm);
 
 /// finalization
 
-// teardown all connections associated with the given ssg
+// teardown all state associated with the given ssg group
 void ssg_finalize(ssg_t s);
 
 /// accessors
 
-// get my rank
-int ssg_get_rank(const ssg_t s);
+// get my rank in the group
+int ssg_get_group_rank(const ssg_t s);
 
-// get the number of participants
-int ssg_get_count(const ssg_t s);
+// get the size of the group
+int ssg_get_group_size(const ssg_t s);
 
-// get the address for the group member at the given rank
+// get the HG address for the group member at the given rank
 hg_addr_t ssg_get_addr(const ssg_t s, int rank);
 
 // get the string hostname for the group member at the given rank

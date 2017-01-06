@@ -22,7 +22,7 @@ lib_LTLIBRARIES += src/libssg.la
 
 EXTRA_DIST += prepare.sh
 
-AM_CPPFLAGS = -I$(top_srcdir)/include
+AM_CPPFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/src
 
 AM_CFLAGS =
 

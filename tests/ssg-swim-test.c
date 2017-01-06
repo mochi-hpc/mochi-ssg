@@ -120,8 +120,8 @@ int main(int argc, char *argv[])
 
     DIE_IF(s == SSG_NULL, "ssg_init (mode %s)", mode);
 
-    rank = ssg_get_rank(s);
-    size = ssg_get_count(s);
+    rank = ssg_get_group_rank(s);
+    size = ssg_get_group_size(s);
 
     if (sleep_time >= 0) margo_thread_sleep(mid, sleep_time * 1000.0);
     DEBUG("%d of %d: sleep over\n", rank, size);
