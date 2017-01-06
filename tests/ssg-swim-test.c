@@ -111,7 +111,7 @@ int main(int argc, char *argv[])
         if (!argc) { usage(); return 1; }
         conf = argv[0];
         argc--; argv++;
-        s = ssg_init_config(mid, conf, 1);
+        s = ssg_init_config(mid, conf);
     }
     else {
         fprintf(stderr, "Error: bad mode passed in %s\n", mode);

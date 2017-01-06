@@ -58,7 +58,7 @@ DEFINE_MARGO_RPC_HANDLER(proc_barrier)
 #endif
 
 
-ssg_t ssg_init_config(margo_instance_id mid, const char * fname, int is_member)
+ssg_t ssg_init_config(margo_instance_id mid, const char * fname)
 {
     // file to read
     int fd = -1;
@@ -84,8 +84,7 @@ ssg_t ssg_init_config(margo_instance_id mid, const char * fname, int is_member)
     const char * self_addr_substr = NULL;
     hg_size_t self_addr_size = 0;
     const char * addr_substr = NULL;
-    // TODO: what is the purpose of an "external" rank (is_member flag)?
-    int rank = is_member ? SSG_RANK_UNKNOWN : SSG_EXTERNAL_RANK;
+    int rank = -1;
 
     // misc return codes
     int ret;
@@ -114,24 +113,22 @@ ssg_t ssg_init_config(margo_instance_id mid, const char * fname, int is_member)
     hgcl = margo_get_class(mid);
     if(!hgcl) goto fini;
 
-    if(is_member) {
-        // get my address
-        hret = HG_Addr_self(hgcl, &self_addr);
-        if (hret != HG_SUCCESS) goto fini;
-        hret = HG_Addr_to_string(hgcl, NULL, &self_addr_size, self_addr);
-        if (hret != HG_SUCCESS) goto fini;
-        self_addr_str = malloc(self_addr_size);
-        if (self_addr_str == NULL) goto fini;
-        hret = HG_Addr_to_string(hgcl, self_addr_str, &self_addr_size, self_addr);
-        if (hret != HG_SUCCESS) goto fini;
+    // get my address
+    hret = HG_Addr_self(hgcl, &self_addr);
+    if (hret != HG_SUCCESS) goto fini;
+    hret = HG_Addr_to_string(hgcl, NULL, &self_addr_size, self_addr);
+    if (hret != HG_SUCCESS) goto fini;
+    self_addr_str = malloc(self_addr_size);
+    if (self_addr_str == NULL) goto fini;
+    hret = HG_Addr_to_string(hgcl, self_addr_str, &self_addr_size, self_addr);
+    if (hret != HG_SUCCESS) goto fini;
 
-        // strstr is used here b/c there may be inconsistencies in whether the class
-        // is included in the address or not (it's not in HG_Addr_to_string, it
-        // should be in ssg_init_config)
-        self_addr_substr = strstr(self_addr_str, "://");
-        if (self_addr_substr == NULL) goto fini;
-        self_addr_substr += 3;
-    }
+    // strstr is used here b/c there may be inconsistencies in whether the class
+    // is included in the address or not (it's not in HG_Addr_to_string, it
+    // should be in ssg_init_config)
+    self_addr_substr = strstr(self_addr_str, "://");
+    if (self_addr_substr == NULL) goto fini;
+    self_addr_substr += 3;
 
     // strtok the result - each space-delimited address is assumed to be
     // a unique mercury address
@@ -150,19 +147,22 @@ ssg_t ssg_init_config(margo_instance_id mid, const char * fname, int is_member)
             if (tmp == NULL) goto fini;
             addr_buf = tmp;
         }
-        if(is_member) {
-            // check if this is my addr to resolve rank
-            addr_substr = strstr(tok, "://");
-            if (addr_substr == NULL) goto fini;
-            addr_substr+= 3;
-            if (strcmp(self_addr_substr, addr_substr) == 0)
-                rank = num_addrs;
-        }
+
+        // check if this is my addr to resolve rank
+        addr_substr = strstr(tok, "://");
+        if (addr_substr == NULL) goto fini;
+        addr_substr+= 3;
+        if (strcmp(self_addr_substr, addr_substr) == 0)
+            rank = num_addrs;
+
         memcpy((char*)addr_buf + addr_len, tok, tok_sz+1);
         addr_len += tok_sz+1;
         num_addrs++;
         tok = strtok(NULL, "\r\n\t ");
     } while (tok != NULL);
+
+    // if rank not resolved, fail
+    if (rank == -1) goto fini;
 
     // init ssg internal structures
     s = ssg_init_internal(mid, rank, num_addrs, self_addr, addr_buf, addr_len);
@@ -260,8 +260,6 @@ fini:
 static ssg_t ssg_init_internal(margo_instance_id mid, int self_rank,
     int group_size, hg_addr_t self_addr, char *addr_str_buf, int addr_str_buf_size)
 {
-    int i;
-
     // arrays of peer address strings
     char **addr_strs = NULL;
 
@@ -271,8 +269,8 @@ static ssg_t ssg_init_internal(margo_instance_id mid, int self_rank,
     // return data
     ssg_t s = NULL;
 
-    if (self_rank == SSG_RANK_UNKNOWN) goto fini;
-    if (self_addr == HG_ADDR_NULL && self_rank != SSG_EXTERNAL_RANK) goto fini;
+    if (self_rank < 0 || self_rank >= group_size || self_addr == HG_ADDR_NULL)
+        goto fini;
 
     // set peer address strings
     addr_strs = setup_addr_str_list(group_size, addr_str_buf);
@@ -289,17 +287,26 @@ static ssg_t ssg_init_internal(margo_instance_id mid, int self_rank,
     // initialize the group "view"
     s->view.self_rank = self_rank;
     s->view.group_size = group_size;
-    for (i = self_rank + 1; i < group_size; i++)
+    s->view.member_states = malloc(group_size * sizeof(*(s->view.member_states)));
+    if (s->view.member_states == NULL)
     {
-        s->view.member_states[i].status = SSG_MEMBER_UNKNOWN;
+        free(s);
+        s = NULL;
+        goto fini;
+    }
+    memset(s->view.member_states, 0, group_size * sizeof(*(s->view.member_states)));
+    for (int i = 1; i < group_size; i++)
+    {
+        int r = (self_rank + i) % group_size;
+        s->view.member_states[r].status = SSG_MEMBER_UNKNOWN;
         // NOTE: remote addrs are set in ssg_lookup
-        s->view.member_states[i].addr = HG_ADDR_NULL;
-        s->view.member_states[i].addr_str = addr_strs[i];
+        s->view.member_states[r].addr = HG_ADDR_NULL;
+        s->view.member_states[r].addr_str = addr_strs[r];
     }
     // set view info for self
-    s->view.member_states[i].status = SSG_MEMBER_ALIVE;
-    s->view.member_states[i].addr = self_addr;
-    s->view.member_states[i].addr_str = addr_strs[i];
+    s->view.member_states[self_rank].status = SSG_MEMBER_ALIVE;
+    s->view.member_states[self_rank].addr = self_addr;
+    s->view.member_states[self_rank].addr_str = addr_strs[self_rank];
 
 #if 0
     s->barrier_mutex = ABT_MUTEX_NULL;
@@ -319,13 +326,10 @@ static ssg_t ssg_init_internal(margo_instance_id mid, int self_rank,
 
 #if USE_SWIM_FD
     // initialize swim failure detector
-    if (self_rank != SSG_EXTERNAL_RANK)
+    s->swim_ctx = swim_init(s->mid, s, 1);
+    if (s->swim_ctx == NULL)
     {
-        s->swim_ctx = swim_init(s->mid, s, 1);
-        if (s->swim_ctx == NULL)
-        {
-            ssg_finalize(s); s = NULL;
-        }
+        ssg_finalize(s); s = NULL;
     }
 #endif
     
@@ -596,6 +600,7 @@ void ssg_finalize(ssg_t s)
         if (s->view.member_states[i].addr != HG_ADDR_NULL)
             HG_Addr_free(margo_get_class(s->mid), s->view.member_states[i].addr);
     }
+    free(s->view.member_states);
     free(s->addr_str_buf);
     free(s);
 }

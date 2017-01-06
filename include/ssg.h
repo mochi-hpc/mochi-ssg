@@ -28,11 +28,6 @@ typedef struct ssg *ssg_t;
 // some defines
 // null pointer shim
 #define SSG_NULL ((ssg_t)NULL)
-// after init, rank is possibly unknown
-#define SSG_RANK_UNKNOWN (-1)
-// if ssg_t is gotten from another process (RPC output), then, by definition,
-// the receiving entity is not part of the group
-#define SSG_EXTERNAL_RANK (-2)
 
 typedef enum ssg_member_status
 {
@@ -44,12 +39,8 @@ typedef enum ssg_member_status
 
 /// group member initialization
 
-// config file based - load up the given config file
-// containing a set of hostnames
-// is_member - nonzero if caller is expected to be in the group, zero otherwise
-//           - ssg_lookup fails if caller is unable to identify with one of the
-//             config entries
-ssg_t ssg_init_config(margo_instance_id mid, const char * fname, int is_member);
+// config file based - load up the given config file containing a set of hostnames
+ssg_t ssg_init_config(margo_instance_id mid, const char * fname);
 
 #ifdef HAVE_MPI
 // mpi based (no config file) - all participants (defined by the input
