@@ -25,22 +25,12 @@
 #include "swim-fd/swim-fd.h"
 #endif
 
-#define DO_DEBUG 0
-#define DEBUG(...) \
-    do { \
-        if(DO_DEBUG) { \
-            printf(__VA_ARGS__); \
-            fflush(stdout); \
-        } \
-    } while(0)
-
 // internal initialization of ssg data structures
 static ssg_t ssg_init_internal(margo_instance_id mid, int self_rank,
     int group_size, hg_addr_t self_addr, char *addr_str_buf, int addr_str_buf_size);
 
 // lookup peer addresses
 static hg_return_t ssg_lookup(ssg_t s);
-
 static char** setup_addr_str_list(int num_addrs, char * buf);
 
 #if 0
@@ -308,6 +298,11 @@ static ssg_t ssg_init_internal(margo_instance_id mid, int self_rank,
     s->view.member_states[self_rank].addr = self_addr;
     s->view.member_states[self_rank].addr_str = addr_strs[self_rank];
 
+#ifdef DEBUG
+    // TODO: log file debug option, instead of just stderr
+    s->dbg_strm = stderr;
+#endif
+
 #if 0
     s->barrier_mutex = ABT_MUTEX_NULL;
     s->barrier_cond  = ABT_COND_NULL;
@@ -350,10 +345,10 @@ static void lookup_ult(void *arg)
     struct lookup_ult_args *l = arg;
     ssg_t s = l->ssg;
 
-    DEBUG("%d (ult): looking up rank %d\n", s->view.self_rank, l->rank);
+    SSG_DEBUG(s, "looking up rank %d\n", l->rank);
     l->out = margo_addr_lookup(s->mid, s->view.member_states[l->rank].addr_str,
             &s->view.member_states[l->rank].addr);
-    DEBUG("%d (ult): looked up rank %d\n", s->view.self_rank, l->rank);
+    SSG_DEBUG(s, "looked up rank %d\n", l->rank);
 }
 
 static hg_return_t ssg_lookup(ssg_t s)
@@ -364,8 +359,6 @@ static hg_return_t ssg_lookup(ssg_t s)
     hg_return_t hret = HG_SUCCESS;
 
     if (s == SSG_NULL) return HG_INVALID_PARAM;
-
-    DEBUG("%d: entered lookup\n", s->view.self_rank);
 
     // set the hg class up front - need for destructing addrs
     hgctx = margo_get_context(s->mid);
@@ -382,13 +375,11 @@ static hg_return_t ssg_lookup(ssg_t s)
     for (int i = 0; i < s->view.group_size; i++)
         ults[i] = ABT_THREAD_NULL;
 
-    DEBUG("%d: beginning thread create loop\n", s->view.self_rank);
     for (int i = 1; i < s->view.group_size; i++) {
         int r = (s->view.self_rank + i) % s->view.group_size;
         args[r].ssg = s;
         args[r].rank = r;
 
-        DEBUG("%d: lookup: create thread for rank %d\n", s->view.self_rank, r);
         int aret = ABT_thread_create(*margo_get_handler_pool(s->mid), &lookup_ult,
                 &args[r], ABT_THREAD_ATTR_NULL, &ults[r]);
         if (aret != ABT_SUCCESS) {
@@ -400,9 +391,7 @@ static hg_return_t ssg_lookup(ssg_t s)
     // wait on all
     for (int i = 1; i < s->view.group_size; i++) {
         int r = (s->view.self_rank + i) % s->view.group_size;
-        DEBUG("%d: lookup: join thread for rank %d\n", s->view.self_rank, r);
         int aret = ABT_thread_join(ults[r]);
-        DEBUG("%d: lookup: join thread for rank %d fini\n", s->view.self_rank, r);
         ABT_thread_free(&ults[r]);
         ults[r] = ABT_THREAD_NULL; // in case of cascading failure from join
         if (aret != ABT_SUCCESS) {
@@ -420,8 +409,6 @@ fini:
     if (ults != NULL) {
         for (int i = 0; i < s->view.group_size; i++) {
             if (ults[i] != ABT_THREAD_NULL) {
-                DEBUG("%d: lookup failed, cancelling ULT %d\n",
-                    s->view.self_rank, i);
                 ABT_thread_cancel(ults[i]);
                 ABT_thread_free(ults[i]);
             }

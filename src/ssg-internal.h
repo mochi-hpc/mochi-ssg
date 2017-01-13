@@ -4,11 +4,27 @@
  * See COPYRIGHT in top-level directory.
  */
 #pragma once
+
+#include <mercury.h>
+#include <abt.h>
 #include <margo.h>
 #include <ssg.h>
 
 #if USE_SWIM_FD
 #include "swim-fd/swim-fd.h"
+#endif
+
+// debug printing macro for SSG
+#ifdef DEBUG
+#define SSG_DEBUG(__s, __fmt, ...) do { \
+    double __now = ABT_get_wtime(); \
+    fprintf(__s->dbg_strm, "%.6lf <%d>: " __fmt, \
+        __now, __s->view.self_rank, ## __VA_ARGS__); \
+    fflush(__s->dbg_strm); \
+} while(0)
+#else
+#define SSG_DEBUG(__s, __fmt, ...) do { \
+} while(0)
 #endif
 
 typedef struct ssg_view ssg_view_t;
@@ -31,11 +47,14 @@ struct ssg_member_state
 struct ssg
 {
     margo_instance_id mid;
-    ssg_view_t view;
+    ssg_view_t view; // TODO: we probably need to protect access to this structure at very least
     void *addr_str_buf;
     int addr_str_buf_size;
 #if USE_SWIM_FD
     swim_context_t *swim_ctx;
+#endif
+#ifdef DEBUG
+    FILE *dbg_strm;
 #endif
 #if 0
     hg_id_t barrier_rpc_id;
