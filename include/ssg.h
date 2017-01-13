@@ -95,7 +95,3 @@ hg_return_t ssg_barrier_margo(ssg_t s);
 #ifdef __cplusplus
 }
 #endif
-
-/**
- * vim: ft=c sw=4 ts=4 sts=4 tw=80 expandtab
- */

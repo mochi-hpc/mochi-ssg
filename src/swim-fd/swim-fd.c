@@ -1,6 +1,6 @@
 /*
- * (C) 2016 The University of Chicago
- * 
+ * Copyright (c) 2016 UChicago Argonne, LLC
+ *
  * See COPYRIGHT in top-level directory.
  */
 

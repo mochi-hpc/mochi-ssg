@@ -1,11 +1,10 @@
 /*
- * (C) 2016 The University of Chicago
- * 
+ * Copyright (c) 2016 UChicago Argonne, LLC
+ *
  * See COPYRIGHT in top-level directory.
  */
 
-#ifndef __SWIM_FD_H
-#define __SWIM_FD_H
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,6 +26,3 @@ void swim_finalize(
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __SWIM_FD_H */
-

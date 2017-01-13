@@ -3,7 +3,12 @@
  *
  * See COPYRIGHT in top-level directory.
  */
+
 #pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include <mercury.h>
 #include <abt.h>
@@ -65,3 +70,7 @@ struct ssg
     ABT_eventual barrier_eventual;
 #endif
 };
+
+#ifdef __cplusplus
+}
+#endif
