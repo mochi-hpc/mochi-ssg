@@ -130,8 +130,11 @@ cleanup:
     // cleanup
     if(s) ssg_finalize(s);
     if(mid != MARGO_INSTANCE_NULL) margo_finalize(mid);
-    if(hgctx) HG_Context_destroy(hgctx);
-    if(hgcl) HG_Finalize(hgcl);
+    /* XXX: hg does not shut down properly if we simulate failures or
+     * if a member receives RPCs before registering SWIM RPC handlers
+     */
+    if(hgctx && 0) HG_Context_destroy(hgctx);
+    if(hgcl && 0) HG_Finalize(hgcl);
 
 #ifdef HAVE_MPI
     MPI_Finalize();

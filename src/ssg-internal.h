@@ -19,6 +19,10 @@ extern "C" {
 #include "swim-fd/swim-fd.h"
 #endif
 
+// define an identifier for an unknown group rank value
+// TODO: move to SWIM? only used by the swim module so far
+#define SSG_MEMBER_RANK_UNKNOWN (-1)
+
 // debug printing macro for SSG
 #ifdef DEBUG
 #define SSG_DEBUG(__s, __fmt, ...) do { \
@@ -44,17 +48,17 @@ struct ssg_view
 
 struct ssg_member_state
 {
-    ssg_member_status_t status;
     hg_addr_t addr;
-    char *addr_str;
+#if USE_SWIM_FD
+    int swim_susp_level;
+    int swim_inc_nr;
+#endif
 };
 
 struct ssg
 {
     margo_instance_id mid;
     ssg_view_t view; // TODO: we probably need to protect access to this structure at very least
-    void *addr_str_buf;
-    int addr_str_buf_size;
 #if USE_SWIM_FD
     swim_context_t *swim_ctx;
 #endif

@@ -27,10 +27,10 @@
 
 // internal initialization of ssg data structures
 static ssg_t ssg_init_internal(margo_instance_id mid, int self_rank,
-    int group_size, hg_addr_t self_addr, char *addr_str_buf, int addr_str_buf_size);
+    int group_size, hg_addr_t self_addr, char *addr_str_buf);
 
 // lookup peer addresses
-static hg_return_t ssg_lookup(ssg_t s);
+static hg_return_t ssg_lookup(ssg_t s, char **addr_strs);
 static char** setup_addr_str_list(int num_addrs, char * buf);
 
 #if 0
@@ -155,11 +155,10 @@ ssg_t ssg_init_config(margo_instance_id mid, const char * fname)
     if (rank == -1) goto fini;
 
     // init ssg internal structures
-    s = ssg_init_internal(mid, rank, num_addrs, self_addr, addr_buf, addr_len);
+    s = ssg_init_internal(mid, rank, num_addrs, self_addr, addr_buf);
     if (s == NULL) goto fini;
 
     // don't free this on success
-    addr_buf = NULL;
     self_addr = HG_ADDR_NULL;
 fini:
     if (fd != -1) close(fd);
@@ -230,12 +229,10 @@ ssg_t ssg_init_mpi(margo_instance_id mid, MPI_Comm comm)
             addr_buf, sizes, sizes_psum, MPI_BYTE, comm);
 
     // init ssg internal structures
-    s = ssg_init_internal(mid, comm_rank, comm_size, self_addr,
-        addr_buf, sizes_psum[comm_size]);
+    s = ssg_init_internal(mid, comm_rank, comm_size, self_addr, addr_buf);
     if (s == NULL) goto fini;
 
     // don't free these on success
-    addr_buf = NULL;
     self_addr = HG_ADDR_NULL;
 fini:
     free(sizes);
@@ -248,7 +245,7 @@ fini:
 #endif
 
 static ssg_t ssg_init_internal(margo_instance_id mid, int self_rank,
-    int group_size, hg_addr_t self_addr, char *addr_str_buf, int addr_str_buf_size)
+    int group_size, hg_addr_t self_addr, char *addr_str_buf)
 {
     // arrays of peer address strings
     char **addr_strs = NULL;
@@ -271,8 +268,6 @@ static ssg_t ssg_init_internal(margo_instance_id mid, int self_rank,
     if (s == NULL) goto fini;
     memset(s, 0, sizeof(*s));
     s->mid = mid;
-    s->addr_str_buf = addr_str_buf;
-    s->addr_str_buf_size = addr_str_buf_size;
 
     // initialize the group "view"
     s->view.self_rank = self_rank;
@@ -288,19 +283,15 @@ static ssg_t ssg_init_internal(margo_instance_id mid, int self_rank,
     for (int i = 1; i < group_size; i++)
     {
         int r = (self_rank + i) % group_size;
-        s->view.member_states[r].status = SSG_MEMBER_UNKNOWN;
         // NOTE: remote addrs are set in ssg_lookup
         s->view.member_states[r].addr = HG_ADDR_NULL;
-        s->view.member_states[r].addr_str = addr_strs[r];
     }
     // set view info for self
-    s->view.member_states[self_rank].status = SSG_MEMBER_ALIVE;
     s->view.member_states[self_rank].addr = self_addr;
-    s->view.member_states[self_rank].addr_str = addr_strs[self_rank];
 
 #ifdef DEBUG
-    // TODO: log file debug option, instead of just stderr
-    s->dbg_strm = stderr;
+    // TODO: log file debug option, instead of just stdout
+    s->dbg_strm = stdout;
 #endif
 
 #if 0
@@ -310,21 +301,24 @@ static ssg_t ssg_init_internal(margo_instance_id mid, int self_rank,
 #endif
 
     // lookup hg addr information for all group members
-    hret = ssg_lookup(s);
+    hret = ssg_lookup(s, addr_strs);
     if (hret != HG_SUCCESS)
     {
-        /* TODO: is finalize needed? or just free? */
         ssg_finalize(s);
         s = NULL;
         goto fini;
     }
+    SSG_DEBUG(s, "group lookup succesful\n");
 
 #if USE_SWIM_FD
     // initialize swim failure detector
-    s->swim_ctx = swim_init(s->mid, s, 1);
+    // TODO: we should probably barrier or sync somehow to avoid rpc failures
+    // due to timing skew of different ranks initializing swim
+    s->swim_ctx = swim_init(s, 1);
     if (s->swim_ctx == NULL)
     {
-        ssg_finalize(s); s = NULL;
+        ssg_finalize(s);
+        s = NULL;
     }
 #endif
     
@@ -337,6 +331,7 @@ struct lookup_ult_args
 {
     ssg_t ssg;
     int rank;
+    char *addr_str;
     hg_return_t out;
 };
 
@@ -345,13 +340,13 @@ static void lookup_ult(void *arg)
     struct lookup_ult_args *l = arg;
     ssg_t s = l->ssg;
 
-    SSG_DEBUG(s, "looking up rank %d\n", l->rank);
-    l->out = margo_addr_lookup(s->mid, s->view.member_states[l->rank].addr_str,
-            &s->view.member_states[l->rank].addr);
-    SSG_DEBUG(s, "looked up rank %d\n", l->rank);
+    l->out = margo_addr_lookup(s->mid, l->addr_str,
+        &s->view.member_states[l->rank].addr);
+    if(l->out != HG_SUCCESS)
+        SSG_DEBUG(s, "look up on rank %d failed [%d]\n", l->rank, l->out);
 }
 
-static hg_return_t ssg_lookup(ssg_t s)
+static hg_return_t ssg_lookup(ssg_t s, char **addr_strs)
 {
     hg_context_t *hgctx;
     ABT_thread *ults;
@@ -379,6 +374,7 @@ static hg_return_t ssg_lookup(ssg_t s)
         int r = (s->view.self_rank + i) % s->view.group_size;
         args[r].ssg = s;
         args[r].rank = r;
+        args[r].addr_str = addr_strs[r];
 
         int aret = ABT_thread_create(*margo_get_handler_pool(s->mid), &lookup_ult,
                 &args[r], ABT_THREAD_ATTR_NULL, &ults[r]);
@@ -578,7 +574,6 @@ void ssg_finalize(ssg_t s)
             HG_Addr_free(margo_get_class(s->mid), s->view.member_states[i].addr);
     }
     free(s->view.member_states);
-    free(s->addr_str_buf);
     free(s);
 }
 
@@ -598,14 +593,6 @@ hg_addr_t ssg_get_addr(const ssg_t s, int rank)
         return s->view.member_states[rank].addr;
     else
         return HG_ADDR_NULL;
-}
-
-const char * ssg_get_addr_str(const ssg_t s, int rank)
-{
-    if (rank >= 0 && rank < s->view.group_size)
-        return s->view.member_states[rank].addr_str;
-    else
-        return NULL;
 }
 
 #if 0

@@ -29,14 +29,6 @@ typedef struct ssg *ssg_t;
 // null pointer shim
 #define SSG_NULL ((ssg_t)NULL)
 
-typedef enum ssg_member_status
-{
-    SSG_MEMBER_UNKNOWN = 0,
-    SSG_MEMBER_ALIVE,
-    SSG_MEMBER_SUSPECT,
-    SSG_MEMBER_DEAD
-} ssg_member_status_t;
-
 /// group member initialization
 
 // config file based - load up the given config file containing a set of hostnames
@@ -64,9 +56,6 @@ int ssg_get_group_size(const ssg_t s);
 
 // get the HG address for the group member at the given rank
 hg_addr_t ssg_get_addr(const ssg_t s, int rank);
-
-// get the string hostname for the group member at the given rank
-const char * ssg_get_addr_str(const ssg_t s, int rank);
 
 /// mercury support
 

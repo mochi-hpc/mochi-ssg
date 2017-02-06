@@ -16,8 +16,7 @@ extern "C" {
 typedef struct swim_context swim_context_t;
 
 swim_context_t *swim_init(
-    margo_instance_id m_id,
-    ssg_t swim_group,
+    ssg_t s,
     int active);
 
 void swim_finalize(
