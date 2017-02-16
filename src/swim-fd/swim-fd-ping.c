@@ -141,6 +141,7 @@ static int swim_send_dping(ssg_t s, int target)
             return(ret);
 
         SSG_DEBUG(s, "recv dping ack from %d\n", dping_resp.msg.source_rank);
+        assert((int)dping_resp.msg.source_rank == target);
 
         /* extract target's membership state from response */
         swim_unpack_message(s, &(dping_resp.msg));

@@ -308,7 +308,7 @@ static ssg_t ssg_init_internal(margo_instance_id mid, int self_rank,
         s = NULL;
         goto fini;
     }
-    SSG_DEBUG(s, "group lookup succesful\n");
+    SSG_DEBUG(s, "group lookup successful\n");
 
 #if USE_SWIM_FD
     // initialize swim failure detector
@@ -375,19 +375,27 @@ static hg_return_t ssg_lookup(ssg_t s, char **addr_strs)
         args[r].ssg = s;
         args[r].rank = r;
         args[r].addr_str = addr_strs[r];
-
+#if 0
         int aret = ABT_thread_create(*margo_get_handler_pool(s->mid), &lookup_ult,
                 &args[r], ABT_THREAD_ATTR_NULL, &ults[r]);
         if (aret != ABT_SUCCESS) {
             hret = HG_OTHER_ERROR;
             goto fini;
         }
+#endif
     }
 
     // wait on all
     for (int i = 1; i < s->view.group_size; i++) {
         int r = (s->view.self_rank + i) % s->view.group_size;
-        int aret = ABT_thread_join(ults[r]);
+        int aret = ABT_thread_create(*margo_get_handler_pool(s->mid), &lookup_ult,
+                &args[r], ABT_THREAD_ATTR_NULL, &ults[r]);
+        if (aret != ABT_SUCCESS) {
+            hret = HG_OTHER_ERROR;
+            goto fini;
+        }
+        aret = ABT_thread_join(ults[r]);
+        //int aret = ABT_thread_join(ults[r]);
         ABT_thread_free(&ults[r]);
         ults[r] = ABT_THREAD_NULL; // in case of cascading failure from join
         if (aret != ABT_SUCCESS) {
