@@ -18,17 +18,19 @@
 #include "swim-fd-internal.h"
 #include "utlist.h"
 
-typedef struct swim_suspect_member_link_s
+typedef struct swim_suspect_member_link
 {
     int member_rank;
-    struct swim_suspect_member_link_s *next;
+    double susp_start;
+    swim_inc_nr_t inc_nr;
+    struct swim_suspect_member_link *next;
 } swim_suspect_member_link_t;
 
-typedef struct swim_member_update_link_s
+typedef struct swim_member_update_link
 {
     int member_rank;
     int tx_count;
-    struct swim_member_update_link_s *next;
+    struct swim_member_update_link *next;
 } swim_member_update_link_t;
 
 /* SWIM ABT ULT prototypes */
@@ -38,10 +40,14 @@ static void swim_tick_ult(
     void *t_arg);
 
 /* SWIM group membership utility function prototypes */
-//static void swim_suspect_member(
-//    ssg_t s, int member_rank);
-//static void swim_kill_member(
-//    ssg_t s, int member_rank);
+static void swim_suspect_member(
+    ssg_t s, int member_rank, swim_inc_nr_t inc_nr);
+static void swim_unsuspect_member(
+    ssg_t s, int member_rank, swim_inc_nr_t inc_nr);
+static void swim_kill_member(
+    ssg_t s, int member_rank, swim_inc_nr_t inc_nr);
+static void swim_update_suspected_members(
+    ssg_t s, double susp_timeout);
 static int swim_get_rand_group_member(
     ssg_t s, int *member_rank);
 static int swim_get_rand_group_member_set(
@@ -68,11 +74,17 @@ swim_context_t *swim_init(
     assert(swim_ctx);
     memset(swim_ctx, 0, sizeof(*swim_ctx));
 
-    /* initialize swim state */
+    /* initialize swim context */
     swim_ctx->prot_pool = *margo_get_handler_pool(s->mid);
     swim_ctx->ping_target = SSG_MEMBER_RANK_UNKNOWN;
     for(i = 0; i < SWIM_MAX_SUBGROUP_SIZE; i++)
         swim_ctx->subgroup_members[i] = SSG_MEMBER_RANK_UNKNOWN;
+
+    swim_ctx->member_inc_nrs = malloc(s->view.group_size *
+        sizeof(*(swim_ctx->member_inc_nrs)));
+    assert(swim_ctx->member_inc_nrs);
+    memset(swim_ctx->member_inc_nrs, 0, s->view.group_size *
+        sizeof(*(swim_ctx->member_inc_nrs)));
 
     /* set protocol parameters */
     swim_ctx->prot_period_len = SWIM_DEF_PROTOCOL_PERIOD_LEN;
@@ -134,9 +146,8 @@ static void swim_tick_ult(
     swim_ctx = s->swim_ctx;
     assert(swim_ctx != NULL);
 
-#if 0
     /* update status of any suspected members */
-    swim_update_suspected_members(swim_ctx, swim_ctx->prot_susp_timeout *
+    swim_update_suspected_members(s, swim_ctx->prot_susp_timeout *
         swim_ctx->prot_period_len);
 
     /* check whether the ping target from the previous protocol tick
@@ -146,18 +157,22 @@ static void swim_tick_ult(
         !(swim_ctx->ping_target_acked))
     {
         /* no response from direct/indirect pings, suspect this member */
-        swim_suspect_member(swim_ctx, swim_ctx->ping_target);
+        swim_suspect_member(s, swim_ctx->ping_target, swim_ctx->ping_target_inc_nr);
     }
-#endif
 
     /* pick a random member from view and ping */
     if(swim_get_rand_group_member(s, &(swim_ctx->ping_target)) == 0)
-        return; /* no available members, back out */
+    {
+        /* no available members, back out */
+        SSG_DEBUG(s, "no group members available to dping\n");
+        return;
+    }
 
     /* TODO: calculate estimated RTT using sliding window of past RTTs */
     swim_ctx->dping_timeout = 250.0;
 
     /* kick off dping request ULT */
+    swim_ctx->ping_target_inc_nr = swim_ctx->member_inc_nrs[swim_ctx->ping_target];
     swim_ctx->ping_target_acked = 0;
     ret = ABT_thread_create(swim_ctx->prot_pool, swim_dping_send_ult, s,
         ABT_THREAD_ATTR_NULL, NULL);
@@ -213,6 +228,7 @@ void swim_finalize(swim_context_t *swim_ctx)
         ABT_thread_free(&(swim_ctx->prot_thread));
     }
 
+    free(swim_ctx->member_inc_nrs);
     free(swim_ctx);
 
     return;
@@ -222,8 +238,7 @@ void swim_finalize(swim_context_t *swim_ctx)
  * SWIM group membership utility functions *
  *******************************************/
 
-#if 0
-static void swim_suspect_member(ssg_t s, int member_rank)
+static void swim_suspect_member(ssg_t s, int member_rank, swim_inc_nr_t inc_nr)
 {
     swim_context_t *swim_ctx = s->swim_ctx;
     swim_suspect_member_link_t *iter, *tmp;
@@ -232,33 +247,38 @@ static void swim_suspect_member(ssg_t s, int member_rank)
         (swim_suspect_member_link_t **)&(swim_ctx->suspect_list);
 
     /* ignore members already confirmed as dead */
-    if(s->view.member_states[member_rank].swim_susp_level == -1) //TODO
+    if(!(s->view.member_states[member_rank].is_member))
         return;
 
     /* if there is no suspicion timeout, just kill the member */
     if(swim_ctx->prot_susp_timeout == 0)
     {
-        swim_kill_member(s, member_rank);
+        swim_kill_member(s, member_rank, inc_nr);
         return;
     }
 
-    /* check if we are already suspecting this member */
+    /* determine if this member is already suspected */
     LL_FOREACH_SAFE(*suspect_list_p, iter, tmp)
     {
         if(iter->member_rank == member_rank)
         {
-            /* we are already suspecting this member in a previous
-             * incarnation -- remove the member from the suspect
-             * list so we can update its membership info and add
-             * back to the tail of the suspect list
+            if(inc_nr <= iter->inc_nr)
+            {
+                /* ignore a suspicion in an incarnation number less than
+                 * or equal to the current suspicion's incarnation
+                 */
+                return;
+            }
+
+            /* otherwise, we have a suspicion in a more recent incarnation --
+             * remove the current suspicion so we can update it
              */
             LL_DELETE(*suspect_list_p, iter);
             suspect_link = iter;
         }
     }
 
-    SSG_DEBUG(s, "swim SUSPECT member %d, inc_nr=%d\n", member_rank,
-        s->view.member_states[member_rank].swim_inc_nr);
+    SSG_DEBUG(s, "swim member %d SUSPECT (inc_nr=%d)\n", member_rank, inc_nr);
 
     if(suspect_link == NULL)
     {
@@ -268,16 +288,17 @@ static void swim_suspect_member(ssg_t s, int member_rank)
         suspect_link = malloc(sizeof(*suspect_link));
         assert(suspect_link);
         memset(suspect_link, 0, sizeof(*suspect_link));
-        suspect_link->member = member;
-#if 0
-        /* mark the member as suspected */
-        swim_ctx->membership_view[member].status = SWIM_MEMBER_SUSPECT;
-#endif
+        suspect_link->member_rank = member_rank;
     }
 
-    /* add to suspect list */
-    suspect_link->inc_nr = swim_ctx->membership_view[member].inc_nr;
+    suspect_link->susp_start = ABT_get_wtime();
+    suspect_link->inc_nr = inc_nr;
+
+    /* add to end of suspect list */
     LL_APPEND(*suspect_list_p, suspect_link);
+
+    /* update swim membership state */
+    swim_ctx->member_inc_nrs[member_rank] = inc_nr;
 
 #if 0
     /* add this update to recent update list so it will be piggybacked
@@ -289,7 +310,7 @@ static void swim_suspect_member(ssg_t s, int member_rank)
     return;
 }
 
-static void swim_kill_member(ssg_t s, int member_rank)
+static void swim_unsuspect_member(ssg_t s, int member_rank, swim_inc_nr_t inc_nr)
 {
     swim_context_t *swim_ctx = s->swim_ctx;
     swim_suspect_member_link_t *iter, *tmp;
@@ -297,15 +318,51 @@ static void swim_kill_member(ssg_t s, int member_rank)
         (swim_suspect_member_link_t **)&(swim_ctx->suspect_list);
 
     /* ignore members already confirmed as dead */
-    if(swim_ctx->membership_view[member].status == SWIM_MEMBER_DEAD)
+    if(!(s->view.member_states[member_rank].is_member))
         return;
 
-    DEBUG_LOG("swim CONFIRM %d DEAD, inc_nr=%d\n", swim_ctx, member,
-        swim_ctx->membership_view[member].inc_nr);
+    SSG_DEBUG(s, "swim member %d ALIVE (inc_nr=%d)\n", member_rank, inc_nr);
+
+    /* remove this member from the suspect list */
+    LL_FOREACH_SAFE(*suspect_list_p, iter, tmp)
+    {
+        if(iter->member_rank == member_rank)
+        {
+            LL_DELETE(*suspect_list_p, iter);
+            free(iter);
+            break;
+        }
+    }
+
+    /* update swim membership state */
+    swim_ctx->member_inc_nrs[member_rank] = inc_nr;
+
+#if 0
+    /* add this update to recent update list so it will be piggybacked
+     * on future protocol messages
+     */
+    swim_add_recent_member_update(swim_ctx, member);
+#endif
+
+    return;
+}
+
+static void swim_kill_member(ssg_t s, int member_rank, swim_inc_nr_t inc_nr)
+{
+    swim_context_t *swim_ctx = s->swim_ctx;
+    swim_suspect_member_link_t *iter, *tmp;
+    swim_suspect_member_link_t **suspect_list_p =
+        (swim_suspect_member_link_t **)&(swim_ctx->suspect_list);
+
+    /* ignore members already confirmed as dead */
+    if(!(s->view.member_states[member_rank].is_member))
+        return;
+
+    SSG_DEBUG(s, "swim member %d DEAD (inc_nr=%d)\n", member_rank, inc_nr);
 
     LL_FOREACH_SAFE(*suspect_list_p, iter, tmp)
     {
-        if(iter->member == member)
+        if(iter->member_rank == member_rank)
         {
             /* remove member from suspect list */
             LL_DELETE(*suspect_list_p, iter);
@@ -314,14 +371,45 @@ static void swim_kill_member(ssg_t s, int member_rank)
         }
     }
 
-    swim_ctx->membership_view[member].status = SWIM_MEMBER_DEAD;
+    /* update swim membership state */
+    swim_ctx->member_inc_nrs[member_rank] = inc_nr;
 
-    /* propagate an update for confirming this member as dead */
+    /* TODO: some sort of callback to ssg to do something more elaborate? */
+    s->view.member_states[member_rank].is_member = 0;
+
+#if 0
+    /* add this update to recent update list so it will be piggybacked
+     * on future protocol messages
+     */
     swim_add_recent_member_update(swim_ctx, member);
+#endif
 
     return;
 }
-#endif
+
+static void swim_update_suspected_members(ssg_t s, double susp_timeout)
+{
+    swim_context_t *swim_ctx = s->swim_ctx;
+    double now = ABT_get_wtime();
+    double susp_dur;
+    swim_suspect_member_link_t *iter, *tmp;
+    swim_suspect_member_link_t **suspect_list_p =
+        (swim_suspect_member_link_t **)&(swim_ctx->suspect_list);
+
+    LL_FOREACH_SAFE(*suspect_list_p, iter, tmp)
+    {
+        susp_dur = now - iter->susp_start;
+        if(susp_dur >= (susp_timeout / 1000))
+        {
+            /* if this member has exceeded its allowable suspicion timeout,
+             * we mark it as dead
+             */
+            swim_kill_member(s, iter->member_rank, iter->inc_nr);
+        }
+    }
+
+    return;
+}
 
 static int swim_get_rand_group_member(ssg_t s, int *member_rank)
 {
@@ -350,7 +438,7 @@ static int swim_get_rand_group_member_set(ssg_t s, int *member_ranks,
         if(rand_member == s->view.self_rank || rand_member == excluded_rank)
             continue;
 
-        if(s->view.member_states[rand_member].swim_susp_level == -1) //TODO
+        if(!(s->view.member_states[rand_member].is_member))
         {
             avail_members--;
             continue;

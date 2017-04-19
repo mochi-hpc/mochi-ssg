@@ -37,7 +37,7 @@ static void usage()
 {
     fputs("Usage: "
           "./ssg-test-margo [-s <time>] <addr> <config mode> [config file]\n"
-          "  -s <time> - time to sleep before doing lookup\n"
+          "  -s <time> - time to sleep while SWIM runs\n"
           "  <config mode> - \"mpi\" (if supported) or \"conf\"\n"
           "  if conf is the mode, then [config file] is required\n",
           stderr);
@@ -130,8 +130,8 @@ cleanup:
     // cleanup
     if(s) ssg_finalize(s);
     if(mid != MARGO_INSTANCE_NULL) margo_finalize(mid);
-    if(hgctx && 0) HG_Context_destroy(hgctx);
-    if(hgcl && 0) HG_Finalize(hgcl);
+    //if(hgctx && 0) HG_Context_destroy(hgctx);
+    //if(hgcl && 0) HG_Finalize(hgcl);
 
 #ifdef HAVE_MPI
     MPI_Finalize();

@@ -14,7 +14,6 @@ extern "C" {
 #include <abt.h>
 #include <margo.h>
 #include <ssg.h>
-
 #if USE_SWIM_FD
 #include "swim-fd/swim-fd.h"
 #endif
@@ -36,23 +35,20 @@ extern "C" {
 } while(0)
 #endif
 
-typedef struct ssg_view ssg_view_t;
 typedef struct ssg_member_state ssg_member_state_t;
+typedef struct ssg_view ssg_view_t;
+
+struct ssg_member_state
+{
+    hg_addr_t addr;
+    int is_member;
+};
 
 struct ssg_view
 {
     int self_rank;
     int group_size;
     ssg_member_state_t *member_states;
-};
-
-struct ssg_member_state
-{
-    hg_addr_t addr;
-#if USE_SWIM_FD
-    int swim_susp_level;
-    int swim_inc_nr;
-#endif
 };
 
 struct ssg

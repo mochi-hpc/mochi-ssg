@@ -19,6 +19,8 @@ extern "C" {
 #define SWIM_MAX_PIGGYBACK_ENTRIES      8
 #define SWIM_MAX_PIGGYBACK_TX_COUNT     50
 
+typedef uint32_t swim_inc_nr_t;
+
 /* internal swim context implementation */
 struct swim_context
 {
@@ -26,11 +28,13 @@ struct swim_context
     ABT_pool prot_pool;
     /* SWIM internal state */
     int ping_target;
+    swim_inc_nr_t ping_target_inc_nr;
     int ping_target_acked;
     double dping_timeout;
     int subgroup_members[SWIM_MAX_SUBGROUP_SIZE];
     int shutdown_flag;
     /* current membership state */
+    swim_inc_nr_t *member_inc_nrs;
     void *suspect_list;
     void *recent_update_list;
     /* SWIM protocol parameters */

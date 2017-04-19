@@ -62,11 +62,17 @@ void swim_register_ping_rpcs(
 {
     hg_class_t *hg_cls = margo_get_class(s->mid);
 
+    /* register RPC handlers for SWIM pings */
     dping_rpc_id = MERCURY_REGISTER(hg_cls, "dping", swim_dping_req_t,
         swim_dping_resp_t, swim_dping_recv_ult_handler);
     iping_rpc_id = MERCURY_REGISTER(hg_cls, "iping", swim_iping_req_t,
         swim_iping_resp_t, swim_iping_recv_ult_handler);
 
+    /* TODO: disable responses for RPCs to make them one-way operations */
+    //HG_Registered_disable_response(hg_cls, dping_rpc_id, HG_TRUE);
+    //HG_Registered_disable_response(hg_cls, iping_rpc_id, HG_TRUE);
+
+    /* register swim context data structure with each RPC type */
     HG_Register_data(hg_cls, dping_rpc_id, s, NULL);
     HG_Register_data(hg_cls, iping_rpc_id, s, NULL);
 
@@ -95,7 +101,6 @@ void swim_dping_send_ult(
     ret = swim_send_dping(s, target);
     if (ret == 0)
     {
-        // TODO is this if check necessary?
         /* mark this dping req as acked, double checking to make
          * sure we aren't inadvertently ack'ing a ping request
          * for a more recent tick of the protocol
@@ -161,7 +166,7 @@ static void swim_dping_recv_ult(hg_handle_t handle)
 {
     ssg_t s;
     swim_context_t *swim_ctx;
-    struct hg_info *info;
+    const struct hg_info *info;
     swim_dping_req_t dping_req;
     swim_dping_resp_t dping_resp;
     hg_return_t hret;
@@ -266,7 +271,6 @@ void swim_iping_send_ult(
         /* extract target's membership state from response */
         swim_unpack_message(s, &(iping_resp.msg));
 
-        // TODO is this if check necessary?
         /* mark this iping req as acked, double checking to make
          * sure we aren't inadvertently ack'ing a ping request
          * for a more recent tick of the protocol
@@ -288,7 +292,7 @@ static void swim_iping_recv_ult(hg_handle_t handle)
 {
     ssg_t s;
     swim_context_t *swim_ctx;
-    struct hg_info *info;
+    const struct hg_info *info;
     swim_iping_req_t iping_req;
     swim_iping_resp_t iping_resp;
     hg_return_t hret;
@@ -340,11 +344,13 @@ DEFINE_MARGO_RPC_HANDLER(swim_iping_recv_ult)
 
 static void swim_pack_message(ssg_t s, swim_message_t *msg)
 {
+    swim_context_t *swim_ctx = s->swim_ctx;
+
     memset(msg, 0, sizeof(*msg));
 
     /* fill in self information */
     msg->source_rank = s->view.self_rank;
-    msg->source_inc_nr = s->view.member_states[s->view.self_rank].swim_inc_nr;
+    msg->source_inc_nr = swim_ctx->member_inc_nrs[s->view.self_rank];
 
 #if 0
     /* piggyback a set of membership states on this message */

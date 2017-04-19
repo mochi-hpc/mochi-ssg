@@ -285,9 +285,11 @@ static ssg_t ssg_init_internal(margo_instance_id mid, int self_rank,
         int r = (self_rank + i) % group_size;
         // NOTE: remote addrs are set in ssg_lookup
         s->view.member_states[r].addr = HG_ADDR_NULL;
+        s->view.member_states[r].is_member = 1;
     }
     // set view info for self
     s->view.member_states[self_rank].addr = self_addr;
+    s->view.member_states[self_rank].is_member = 1;
 
 #ifdef DEBUG
     // TODO: log file debug option, instead of just stdout
@@ -351,6 +353,7 @@ static hg_return_t ssg_lookup(ssg_t s, char **addr_strs)
     hg_context_t *hgctx;
     ABT_thread *ults;
     struct lookup_ult_args *args;
+    int aret;
     hg_return_t hret = HG_SUCCESS;
 
     if (s == SSG_NULL) return HG_INVALID_PARAM;
@@ -375,8 +378,8 @@ static hg_return_t ssg_lookup(ssg_t s, char **addr_strs)
         args[r].ssg = s;
         args[r].rank = r;
         args[r].addr_str = addr_strs[r];
-#if 0
-        int aret = ABT_thread_create(*margo_get_handler_pool(s->mid), &lookup_ult,
+#if 1
+        aret = ABT_thread_create(*margo_get_handler_pool(s->mid), &lookup_ult,
                 &args[r], ABT_THREAD_ATTR_NULL, &ults[r]);
         if (aret != ABT_SUCCESS) {
             hret = HG_OTHER_ERROR;
@@ -388,14 +391,15 @@ static hg_return_t ssg_lookup(ssg_t s, char **addr_strs)
     // wait on all
     for (int i = 1; i < s->view.group_size; i++) {
         int r = (s->view.self_rank + i) % s->view.group_size;
+#if 0
         int aret = ABT_thread_create(*margo_get_handler_pool(s->mid), &lookup_ult,
                 &args[r], ABT_THREAD_ATTR_NULL, &ults[r]);
         if (aret != ABT_SUCCESS) {
             hret = HG_OTHER_ERROR;
             goto fini;
         }
+#endif
         aret = ABT_thread_join(ults[r]);
-        //int aret = ABT_thread_join(ults[r]);
         ABT_thread_free(&ults[r]);
         ults[r] = ABT_THREAD_NULL; // in case of cascading failure from join
         if (aret != ABT_SUCCESS) {
