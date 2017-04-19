@@ -426,6 +426,9 @@ static int swim_get_rand_group_member_set(ssg_t s, int *member_ranks,
     int rand_member;
     int avail_members = s->view.group_size - 1;
 
+    if(num_members == 0)
+        return(0);
+
     if(excluded_rank != SSG_MEMBER_RANK_UNKNOWN)
         avail_members--;
 
