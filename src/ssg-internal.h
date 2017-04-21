@@ -10,6 +10,8 @@
 extern "C" {
 #endif
 
+#include <stdint.h>
+#include <inttypes.h>
 #include <mercury.h>
 #include <abt.h>
 #include <margo.h>

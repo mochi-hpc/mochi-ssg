@@ -19,7 +19,24 @@ extern "C" {
 #define SWIM_MAX_PIGGYBACK_ENTRIES      8
 #define SWIM_MAX_PIGGYBACK_TX_COUNT     50
 
-typedef uint32_t swim_inc_nr_t;
+typedef int64_t swim_member_id_t;
+typedef uint8_t swim_member_status_t;
+typedef uint32_t swim_member_inc_nr_t;
+typedef struct swim_member_update swim_member_update_t;
+
+enum swim_member_status
+{
+    SWIM_MEMBER_ALIVE = 0,
+    SWIM_MEMBER_SUSPECT,
+    SWIM_MEMBER_DEAD
+};
+
+struct swim_member_update
+{
+    swim_member_id_t id;
+    swim_member_status_t status;
+    swim_member_inc_nr_t inc_nr;
+};
 
 /* internal swim context implementation */
 struct swim_context
@@ -27,14 +44,14 @@ struct swim_context
     /* argobots pool for launching SWIM threads */
     ABT_pool prot_pool;
     /* SWIM internal state */
-    int ping_target;
-    swim_inc_nr_t ping_target_inc_nr;
+    swim_member_id_t ping_target;
+    swim_member_inc_nr_t ping_target_inc_nr;
     int ping_target_acked;
     double dping_timeout;
-    int subgroup_members[SWIM_MAX_SUBGROUP_SIZE];
+    swim_member_id_t subgroup_members[SWIM_MAX_SUBGROUP_SIZE];
     int shutdown_flag;
     /* current membership state */
-    swim_inc_nr_t *member_inc_nrs;
+    swim_member_inc_nr_t *member_inc_nrs;
     void *suspect_list;
     void *recent_update_list;
     /* SWIM protocol parameters */
@@ -45,14 +62,23 @@ struct swim_context
     ABT_thread prot_thread;
 };
 
+/* SWIM ping function prototypes */
 void swim_register_ping_rpcs(
     ssg_t s);
-
 void swim_dping_send_ult(
     void *t_arg);
-
 void swim_iping_send_ult(
     void *t_arg);
+
+/* SWIM membership update function prototypes */
+void swim_retrieve_membership_updates(
+    ssg_t s,
+    swim_member_update_t *updates,
+    int update_count);
+void swim_apply_membership_updates(
+    ssg_t s,
+    swim_member_update_t *updates,
+    int update_count);
 
 #ifdef __cplusplus
 }
