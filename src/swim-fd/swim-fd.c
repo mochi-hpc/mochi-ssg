@@ -22,7 +22,6 @@ typedef struct swim_suspect_member_link
 {
     int member_rank;
     double susp_start;
-    swim_inc_nr_t inc_nr;
     struct swim_suspect_member_link *next;
 } swim_suspect_member_link_t;
 
@@ -246,23 +245,16 @@ static void swim_suspect_member(ssg_t s, int member_rank, swim_inc_nr_t inc_nr)
     swim_suspect_member_link_t **suspect_list_p =
         (swim_suspect_member_link_t **)&(swim_ctx->suspect_list);
 
-    /* ignore members already confirmed as dead */
+    /* ignore updates for dead members */
     if(!(s->view.member_states[member_rank].is_member))
         return;
-
-    /* if there is no suspicion timeout, just kill the member */
-    if(swim_ctx->prot_susp_timeout == 0)
-    {
-        swim_kill_member(s, member_rank, inc_nr);
-        return;
-    }
 
     /* determine if this member is already suspected */
     LL_FOREACH_SAFE(*suspect_list_p, iter, tmp)
     {
         if(iter->member_rank == member_rank)
         {
-            if(inc_nr <= iter->inc_nr)
+            if(inc_nr <= swim_ctx->member_inc_nrs[member_rank])
             {
                 /* ignore a suspicion in an incarnation number less than
                  * or equal to the current suspicion's incarnation
@@ -278,6 +270,17 @@ static void swim_suspect_member(ssg_t s, int member_rank, swim_inc_nr_t inc_nr)
         }
     }
 
+    /* ignore suspicions for a member that is alive in a newer incarnation */
+    if((suspect_link == NULL) && (inc_nr < swim_ctx->member_inc_nrs[member_rank]))
+        return;
+
+    /* if there is no suspicion timeout, just kill the member */
+    if(swim_ctx->prot_susp_timeout == 0)
+    {
+        swim_kill_member(s, member_rank, inc_nr);
+        return;
+    }
+
     SSG_DEBUG(s, "swim member %d SUSPECT (inc_nr=%d)\n", member_rank, inc_nr);
 
     if(suspect_link == NULL)
@@ -290,9 +293,7 @@ static void swim_suspect_member(ssg_t s, int member_rank, swim_inc_nr_t inc_nr)
         memset(suspect_link, 0, sizeof(*suspect_link));
         suspect_link->member_rank = member_rank;
     }
-
     suspect_link->susp_start = ABT_get_wtime();
-    suspect_link->inc_nr = inc_nr;
 
     /* add to end of suspect list */
     LL_APPEND(*suspect_list_p, suspect_link);
@@ -317,13 +318,17 @@ static void swim_unsuspect_member(ssg_t s, int member_rank, swim_inc_nr_t inc_nr
     swim_suspect_member_link_t **suspect_list_p =
         (swim_suspect_member_link_t **)&(swim_ctx->suspect_list);
 
-    /* ignore members already confirmed as dead */
+    /* ignore updates for dead members */
     if(!(s->view.member_states[member_rank].is_member))
+        return;
+
+    /* ignore alive updates for incarnation numbers that aren't new */
+    if(inc_nr <= swim_ctx->member_inc_nrs[member_rank])
         return;
 
     SSG_DEBUG(s, "swim member %d ALIVE (inc_nr=%d)\n", member_rank, inc_nr);
 
-    /* remove this member from the suspect list */
+    /* if member is suspected, remove from suspect list */
     LL_FOREACH_SAFE(*suspect_list_p, iter, tmp)
     {
         if(iter->member_rank == member_rank)
@@ -354,7 +359,7 @@ static void swim_kill_member(ssg_t s, int member_rank, swim_inc_nr_t inc_nr)
     swim_suspect_member_link_t **suspect_list_p =
         (swim_suspect_member_link_t **)&(swim_ctx->suspect_list);
 
-    /* ignore members already confirmed as dead */
+    /* ignore updates for dead members */
     if(!(s->view.member_states[member_rank].is_member))
         return;
 
@@ -399,12 +404,13 @@ static void swim_update_suspected_members(ssg_t s, double susp_timeout)
     LL_FOREACH_SAFE(*suspect_list_p, iter, tmp)
     {
         susp_dur = now - iter->susp_start;
-        if(susp_dur >= (susp_timeout / 1000))
+        if(susp_dur >= (susp_timeout / 1000.0))
         {
             /* if this member has exceeded its allowable suspicion timeout,
              * we mark it as dead
              */
-            swim_kill_member(s, iter->member_rank, iter->inc_nr);
+            swim_kill_member(s, iter->member_rank,
+                swim_ctx->member_inc_nrs[iter->member_rank]);
         }
     }
 

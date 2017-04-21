@@ -54,7 +54,7 @@ struct ssg_view
 struct ssg
 {
     margo_instance_id mid;
-    ssg_view_t view; // TODO: we probably need to protect access to this structure at very least
+    ssg_view_t view;
 #if USE_SWIM_FD
     swim_context_t *swim_ctx;
 #endif
