@@ -313,8 +313,7 @@ void swim_apply_membership_updates(
                     if(updates[i].inc_nr == swim_ctx->member_inc_nrs[self_id])
                     {
                         swim_ctx->member_inc_nrs[self_id]++;
-                        SSG_DEBUG(s, "self SUSPECT received," \
-                            "new incarnation number is %d\n",
+                        SSG_DEBUG(s, "self SUSPECT received, new inc_nr is %d\n",
                             swim_ctx->member_inc_nrs[self_id]);
                     }
                 }
