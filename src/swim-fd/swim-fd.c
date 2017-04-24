@@ -325,9 +325,13 @@ void swim_apply_membership_updates(
             case SWIM_MEMBER_DEAD:
                 if(updates[i].id == self_id)
                 {
+                    /* if we get an update that we are dead, just shut down */
                     assert(updates[i].inc_nr <= swim_ctx->member_inc_nrs[self_id]);
                     swim_ctx->member_inc_nrs[self_id] = updates[i].inc_nr;
-                    /* if we get an update that we are dead, just shut down */
+
+                    SSG_DEBUG(s, "self confirmed DEAD in inc_nr %d\n",
+                        swim_ctx->member_inc_nrs[self_id]);
+
                     swim_finalize(swim_ctx);
                 }
                 else
