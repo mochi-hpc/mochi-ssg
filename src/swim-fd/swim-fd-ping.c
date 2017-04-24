@@ -17,6 +17,12 @@
 #include "swim-fd.h"
 #include "swim-fd-internal.h"
 
+/* NOTE these defines must be kept in sync with typedefs in
+ * swim-internal.h
+ */
+#define hg_proc_swim_member_id_t hg_proc_int64_t
+#define hg_proc_swim_member_status_t hg_proc_uint8_t
+#define hg_proc_swim_member_inc_nr_t hg_proc_uint32_t
 
 MERCURY_GEN_STRUCT_PROC(swim_member_update_t, \
     ((swim_member_id_t) (id)) \
@@ -386,13 +392,13 @@ static hg_return_t hg_proc_swim_message_t(hg_proc_t proc, void *data)
     switch(hg_proc_get_op(proc))
     {
         case HG_ENCODE:
-            hret = hg_proc_int32_t(proc, &(msg->source_id));
+            hret = hg_proc_swim_member_id_t(proc, &(msg->source_id));
             if(hret != HG_SUCCESS)
             {
                 hret = HG_PROTOCOL_ERROR;
                 return hret;
             }
-            hret = hg_proc_uint32_t(proc, &(msg->source_inc_nr));
+            hret = hg_proc_swim_member_inc_nr_t(proc, &(msg->source_inc_nr));
             if(hret != HG_SUCCESS)
             {
                 hret = HG_PROTOCOL_ERROR;
@@ -409,13 +415,13 @@ static hg_return_t hg_proc_swim_message_t(hg_proc_t proc, void *data)
             }
             break;
         case HG_DECODE:
-            hret = hg_proc_int32_t(proc, &(msg->source_id));
+            hret = hg_proc_swim_member_id_t(proc, &(msg->source_id));
             if(hret != HG_SUCCESS)
             {
                 hret = HG_PROTOCOL_ERROR;
                 return hret;
             }
-            hret = hg_proc_uint32_t(proc, &(msg->source_inc_nr));
+            hret = hg_proc_swim_member_inc_nr_t(proc, &(msg->source_inc_nr));
             if(hret != HG_SUCCESS)
             {
                 hret = HG_PROTOCOL_ERROR;
