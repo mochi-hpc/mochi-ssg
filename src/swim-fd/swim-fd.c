@@ -190,7 +190,7 @@ static void swim_tick_ult(
     /* if we don't hear back from the target after an RTT, kick off
      * a set of indirect pings to a subgroup of group members
      */
-    if(!(swim_ctx->ping_target_acked))
+    if(!(swim_ctx->ping_target_acked) && (swim_ctx->prot_subgroup_sz > 0))
     {
         /* get a random subgroup of members to send indirect pings to */
         int this_subgroup_sz = swim_get_rand_group_member_set(s,
