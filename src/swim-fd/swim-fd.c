@@ -314,7 +314,7 @@ void swim_apply_membership_updates(
                     {
                         swim_ctx->member_inc_nrs[self_id]++;
                         SSG_DEBUG(s, "self SUSPECT received," \
-                            "new incarnation number is %d",
+                            "new incarnation number is %d\n",
                             swim_ctx->member_inc_nrs[self_id]);
                     }
                 }
