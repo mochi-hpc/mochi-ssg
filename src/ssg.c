@@ -378,7 +378,7 @@ static hg_return_t ssg_lookup(ssg_t s, char **addr_strs)
         args[r].ssg = s;
         args[r].rank = r;
         args[r].addr_str = addr_strs[r];
-#if 1
+#if 0
         aret = ABT_thread_create(*margo_get_handler_pool(s->mid), &lookup_ult,
                 &args[r], ABT_THREAD_ATTR_NULL, &ults[r]);
         if (aret != ABT_SUCCESS) {
@@ -391,7 +391,7 @@ static hg_return_t ssg_lookup(ssg_t s, char **addr_strs)
     // wait on all
     for (int i = 1; i < s->view.group_size; i++) {
         int r = (s->view.self_rank + i) % s->view.group_size;
-#if 0
+#if 1
         int aret = ABT_thread_create(*margo_get_handler_pool(s->mid), &lookup_ult,
                 &args[r], ABT_THREAD_ATTR_NULL, &ults[r]);
         if (aret != ABT_SUCCESS) {
