@@ -310,13 +310,18 @@ static ssg_t ssg_init_internal(margo_instance_id mid, int self_rank,
         s = NULL;
         goto fini;
     }
-    SSG_DEBUG(s, "group lookup successful\n");
+    SSG_DEBUG(s, "group lookup successful (initial size = %d)\n", group_size);
 
 #if USE_SWIM_FD
+    /* XXX: hack to make rank 1 unresponsive */
+    int swim_active = 1;
+    if(self_rank == 1)
+        swim_active = 0;
+
     // initialize swim failure detector
     // TODO: we should probably barrier or sync somehow to avoid rpc failures
     // due to timing skew of different ranks initializing swim
-    s->swim_ctx = swim_init(s, 1);
+    s->swim_ctx = swim_init(s, swim_active);
     if (s->swim_ctx == NULL)
     {
         ssg_finalize(s);
