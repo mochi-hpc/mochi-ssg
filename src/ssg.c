@@ -350,7 +350,7 @@ static void lookup_ult(void *arg)
     l->out = margo_addr_lookup(s->mid, l->addr_str,
         &s->view.member_states[l->rank].addr);
     if(l->out != HG_SUCCESS)
-        SSG_DEBUG(s, "look up on rank %d failed [%d]\n", l->rank, l->out);
+        SSG_DEBUG(s, "look up on member %d failed [%d]\n", l->rank, l->out);
 }
 
 static hg_return_t ssg_lookup(ssg_t s, char **addr_strs)
