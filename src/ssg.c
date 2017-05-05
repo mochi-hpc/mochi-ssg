@@ -397,7 +397,7 @@ static hg_return_t ssg_lookup(ssg_t s, char **addr_strs)
     for (int i = 1; i < s->view.group_size; i++) {
         int r = (s->view.self_rank + i) % s->view.group_size;
 #if 1
-        int aret = ABT_thread_create(*margo_get_handler_pool(s->mid), &lookup_ult,
+        aret = ABT_thread_create(*margo_get_handler_pool(s->mid), &lookup_ult,
                 &args[r], ABT_THREAD_ATTR_NULL, &ults[r]);
         if (aret != ABT_SUCCESS) {
             hret = HG_OTHER_ERROR;

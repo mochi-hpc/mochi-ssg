@@ -117,7 +117,9 @@ static void swim_prot_ult(
 
     assert(s != SSG_NULL);
 
-    SSG_DEBUG(s, "swim protocol start\n");
+    SSG_DEBUG(s, "SWIM: protocol start (period_len=%.4f, susp_timeout=%d, subgroup_size=%d)\n",
+        s->swim_ctx->prot_period_len, s->swim_ctx->prot_susp_timeout,
+        s->swim_ctx->prot_subgroup_sz);
     while(!(s->swim_ctx->shutdown_flag))
     {
         /* spawn a ULT to run this tick */
@@ -131,7 +133,7 @@ static void swim_prot_ult(
         /* sleep for a protocol period length */
         margo_thread_sleep(s->mid, s->swim_ctx->prot_period_len);
     }
-    SSG_DEBUG(s, "swim protocol shutdown\n");
+    SSG_DEBUG(s, "SWIM: protocol shutdown\n");
 
     return;
 }
@@ -166,7 +168,7 @@ static void swim_tick_ult(
     if(swim_get_rand_group_member(s, &(swim_ctx->ping_target)) == 0)
     {
         /* no available members, back out */
-        SSG_DEBUG(s, "no group members available to dping\n");
+        SSG_DEBUG(s, "SWIM: no group members available to dping\n");
         return;
     }
 
@@ -199,7 +201,7 @@ static void swim_tick_ult(
         if(this_subgroup_sz == 0)
         {
             /* no available subgroup members, back out */
-            SSG_DEBUG(s, "no subgroup members available to iping\n");
+            SSG_DEBUG(s, "SWIM: no subgroup members available to iping\n");
             return;
         }
 
@@ -313,7 +315,7 @@ void swim_apply_membership_updates(
                     if(updates[i].inc_nr == swim_ctx->member_inc_nrs[self_id])
                     {
                         swim_ctx->member_inc_nrs[self_id]++;
-                        SSG_DEBUG(s, "self SUSPECT received, new inc_nr is %d\n",
+                        SSG_DEBUG(s, "SWIM: self SUSPECT received (new inc_nr=%d)\n",
                             swim_ctx->member_inc_nrs[self_id]);
                     }
                 }
@@ -329,7 +331,7 @@ void swim_apply_membership_updates(
                     assert(updates[i].inc_nr <= swim_ctx->member_inc_nrs[self_id]);
                     swim_ctx->member_inc_nrs[self_id] = updates[i].inc_nr;
 
-                    SSG_DEBUG(s, "self confirmed DEAD in inc_nr %d\n",
+                    SSG_DEBUG(s, "SWIM: self confirmed DEAD (inc_nr=%d)\n",
                         swim_ctx->member_inc_nrs[self_id]);
 
                     swim_finalize(swim_ctx);
@@ -340,7 +342,7 @@ void swim_apply_membership_updates(
                 }
                 break;
             default:
-                SSG_DEBUG(s, "Cannot apply membership update (invalid status)\n");
+                SSG_DEBUG(s, "SWIM: invalid membership status update\n");
         }
     }
 
@@ -398,7 +400,7 @@ static void swim_suspect_member(
         return;
     }
 
-    SSG_DEBUG(s, "swim member %d SUSPECT (inc_nr=%d)\n",
+    SSG_DEBUG(s, "SWIM: member %d SUSPECT (inc_nr=%d)\n",
         (int)member_id, (int)inc_nr);
 
     if(suspect_link == NULL)
@@ -447,7 +449,7 @@ static void swim_unsuspect_member(
     if(inc_nr <= swim_ctx->member_inc_nrs[member_id])
         return;
 
-    SSG_DEBUG(s, "swim member %d ALIVE (inc_nr=%d)\n",
+    SSG_DEBUG(s, "SWIM: member %d ALIVE (inc_nr=%d)\n",
         (int)member_id, (int)inc_nr);
 
     /* if member is suspected, remove from suspect list */
@@ -488,7 +490,7 @@ static void swim_kill_member(
     if(!(s->view.member_states[member_id].is_member))
         return;
 
-    SSG_DEBUG(s, "swim member %d DEAD (inc_nr=%d)\n",
+    SSG_DEBUG(s, "SWIM: member %d DEAD (inc_nr=%d)\n",
         (int)member_id, (int)inc_nr);
 
     LL_FOREACH_SAFE(*suspect_list_p, iter, tmp)

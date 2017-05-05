@@ -15,11 +15,11 @@ swim_log = sys.argv[1]
 member_info = {}
 
 # ssg debug output looks like "timestamp <member>"
-swim_dbg_pattern = re.compile('^\d+.\d+ <\d+>')
+ssg_dbg_pattern = re.compile('^\d+.\d+ <\d+>')
 
 with open(swim_log, 'rU') as f:
     for line in f:
-        if not swim_dbg_pattern.match(line):
+        if not ssg_dbg_pattern.match(line):
             continue
 
         fields = line.split(" ")
@@ -27,12 +27,10 @@ with open(swim_log, 'rU') as f:
         member = int(fields[1][1:-2])
         update = fields[2:]
 
-        # FIXME
-        if update[0] == "group" and update[1] == "lookup" and update[2] == "successful":
+        if " ".join(update[0:3]) == "group lookup successful":
             group_size = update[3][6:-2]
 
-        # FIXME
-        if update[0] != "swim" or update[1] != "member":
+        if update[0] != "SWIM:" or update[1] != "member":
             continue
         target_member = int(update[2])
         target_member_status = update[3]

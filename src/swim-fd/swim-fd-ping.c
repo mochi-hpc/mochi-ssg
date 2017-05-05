@@ -139,7 +139,7 @@ static int swim_send_dping(
     if(hret != HG_SUCCESS)
         return(ret);
 
-    SSG_DEBUG(s, "send dping req to %d\n", (int)target);
+    SSG_DEBUG(s, "SWIM: send dping req to %d\n", (int)target);
 
     /* fill the direct ping request with current membership state */
     swim_pack_message(s, &(dping_req.msg));
@@ -153,7 +153,7 @@ static int swim_send_dping(
         if(hret != HG_SUCCESS)
             return(ret);
 
-        SSG_DEBUG(s, "recv dping ack from %d\n", (int)dping_resp.msg.source_id);
+        SSG_DEBUG(s, "SWIM: recv dping ack from %d\n", (int)dping_resp.msg.source_id);
         assert(dping_resp.msg.source_id == target);
 
         /* extract target's membership state from response */
@@ -163,7 +163,7 @@ static int swim_send_dping(
     }
     else if(hret != HG_TIMEOUT)
     {
-        SSG_DEBUG(s, "dping req error from %d, err=%d\n", (int)target, hret);
+        SSG_DEBUG(s, "SWIM: dping req error from %d (err=%d)\n", (int)target, hret);
     }
 
     HG_Destroy(handle);
@@ -201,7 +201,7 @@ static void swim_dping_recv_ult(hg_handle_t handle)
     if(hret != HG_SUCCESS)
         return;
 
-    SSG_DEBUG(s, "recv dping req from %d\n", (int)dping_req.msg.source_id);
+    SSG_DEBUG(s, "SWIM: recv dping req from %d\n", (int)dping_req.msg.source_id);
 
     /* extract sender's membership state from request */
     swim_unpack_message(s, &(dping_req.msg));
@@ -209,7 +209,7 @@ static void swim_dping_recv_ult(hg_handle_t handle)
     /* fill the direct ping response with current membership state */
     swim_pack_message(s, &(dping_resp.msg));
 
-    SSG_DEBUG(s, "send dping ack to %d\n", (int)dping_req.msg.source_id);
+    SSG_DEBUG(s, "SWIM: send dping ack to %d\n", (int)dping_req.msg.source_id);
 
     /* respond to sender of the dping req */
     margo_respond(s->mid, handle, &dping_resp);
@@ -260,7 +260,7 @@ void swim_iping_send_ult(
     if(hret != HG_SUCCESS)
         return;
 
-    SSG_DEBUG(s, "send iping req to %d, target=%d\n",
+    SSG_DEBUG(s, "SWIM: send iping req to %d (target=%d)\n",
         (int)my_subgroup_member, (int)swim_ctx->ping_target);
 
     /* fill the indirect ping request with target member and current
@@ -282,7 +282,7 @@ void swim_iping_send_ult(
         if(hret != HG_SUCCESS)
             return;
 
-        SSG_DEBUG(s, "recv iping ack from %d, target=%d\n",
+        SSG_DEBUG(s, "SWIM: recv iping ack from %d (target=%d)\n",
             (int)iping_resp.msg.source_id, (int)swim_ctx->ping_target);
 
         /* extract target's membership state from response */
@@ -297,7 +297,7 @@ void swim_iping_send_ult(
     }
     else if(hret != HG_TIMEOUT)
     {
-        SSG_DEBUG(s, "iping req error from %d, err=%d, target=%d\n",
+        SSG_DEBUG(s, "SWIM: iping req error from %d (target=%d, err=%d)\n",
             (int)my_subgroup_member, hret, (int)swim_ctx->ping_target);
     }
 
@@ -335,7 +335,7 @@ static void swim_iping_recv_ult(hg_handle_t handle)
     if(hret != HG_SUCCESS)
         return;
 
-    SSG_DEBUG(s, "recv iping req from %d, target=%d\n",
+    SSG_DEBUG(s, "SWIM: recv iping req from %d (target=%d)\n",
         (int)iping_req.msg.source_id, (int)iping_req.target_id);
 
     /* extract sender's membership state from request */
@@ -350,7 +350,7 @@ static void swim_iping_recv_ult(hg_handle_t handle)
          */
         swim_pack_message(s, &(iping_resp.msg));
 
-        SSG_DEBUG(s, "send iping ack to %d, target=%d\n",
+        SSG_DEBUG(s, "SWIM: send iping ack to %d (target=%d)\n",
             (int)iping_req.msg.source_id, (int)iping_req.target_id);
 
         /* respond to sender of the iping req */
