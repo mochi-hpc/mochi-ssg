@@ -310,7 +310,7 @@ static ssg_t ssg_init_internal(margo_instance_id mid, int self_rank,
         s = NULL;
         goto fini;
     }
-    SSG_DEBUG(s, "group lookup successful (initial size = %d)\n", group_size);
+    SSG_DEBUG(s, "group lookup successful (size=%d)\n", group_size);
 
 #if USE_SWIM_FD
     /* XXX: hack to make rank 1 unresponsive */
