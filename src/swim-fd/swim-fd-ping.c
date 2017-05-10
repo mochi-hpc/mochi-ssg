@@ -188,15 +188,6 @@ static void swim_dping_recv_ult(hg_handle_t handle)
     swim_ctx = s->swim_ctx;
     assert(swim_ctx != NULL);
 
-    /* XXX: make rank 1 unresponsive */
-    //int drop = rand() % 2;
-    int drop = 1;
-    if(s->view.self_rank == 1 && drop)
-    {
-        HG_Destroy(handle);
-        return;
-    }
-
     hret = HG_Get_input(handle, &dping_req);
     if(hret != HG_SUCCESS)
         return;
@@ -323,13 +314,6 @@ static void swim_iping_recv_ult(hg_handle_t handle)
     assert(s != SSG_NULL);
     swim_ctx = s->swim_ctx;
     assert(swim_ctx != NULL);
-
-    /* XXX: make rank 1 unresponsive */
-    if(s->view.self_rank == 1)
-    {
-        HG_Destroy(handle);
-        return;
-    }
 
     hret = HG_Get_input(handle, &iping_req);
     if(hret != HG_SUCCESS)

@@ -20,10 +20,6 @@ extern "C" {
 #include "swim-fd/swim-fd.h"
 #endif
 
-// define an identifier for an unknown group rank value
-// TODO: move to SWIM? only used by the swim module so far
-#define SSG_MEMBER_RANK_UNKNOWN (-1)
-
 // debug printing macro for SSG
 #ifdef DEBUG
 #define SSG_DEBUG(__s, __fmt, ...) do { \
@@ -62,14 +58,6 @@ struct ssg
 #endif
 #ifdef DEBUG
     FILE *dbg_strm;
-#endif
-#if 0
-    hg_id_t barrier_rpc_id;
-    int barrier_id;
-    int barrier_count;
-    ABT_mutex barrier_mutex;
-    ABT_cond  barrier_cond;
-    ABT_eventual barrier_eventual;
 #endif
 };
 
