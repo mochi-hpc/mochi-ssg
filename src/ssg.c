@@ -19,12 +19,13 @@
 #include <margo.h>
 
 #include <ssg.h>
-#include "ssg-internal.h"
+//#include "ssg-internal.h"
 
 #if USE_SWIM_FD
 #include "swim-fd/swim-fd.h"
 #endif
 
+#if 0
 // internal initialization of ssg data structures
 static ssg_t ssg_init_internal(margo_instance_id mid, int self_rank,
     int group_size, hg_addr_t self_addr, char *addr_str_buf);
@@ -452,3 +453,4 @@ static char** setup_addr_str_list(int num_addrs, char * buf)
     }
     return ret;
 }
+#endif
