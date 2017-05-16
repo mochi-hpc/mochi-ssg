@@ -28,7 +28,7 @@ extern "C" {
 #define SSG_SUCCESS 0
 /* TODO: define some errors? */
 
-#define SSG_GROUP_NULL 0
+#define SSG_GROUP_ID_NULL 0
 
 /* XXX: actually define what these are */
 typedef int ssg_group_id_t;
@@ -57,17 +57,19 @@ void ssg_finalize(
 
 /**
  * Creates an SSG group from a given list of HG address strings.
- * @params[in] group_name   Name of the SSG group
- * @params[in] hg_addr_strs Array of HG address strings for each group member
- * @returns SSG group ID on success, SSG_GROUP_NULL otherwise
+ * @params[in] group_name       Name of the SSG group
+ * @params[in] group_addr_strs  Array of HG address strings for each group member
+ * @params[in] group_size       Number of group members
+ * @returns SSG group ID on success, SSG_GROUP_ID_NULL otherwise
  *
  * NOTE: The HG address string of the caller of this function must be present in
- * the list of address strings given in 'hg_addr_strs'. That is, the caller of
- * this function is required to be a member of the SSG group that is created.
+ * the list of address strings given in 'group_addr_strs'. That is, the caller
+ * of this function is required to be a member of the SSG group that is created.
  */
 ssg_group_id_t ssg_group_create(
-    const char *group_name,
-    const char * const hg_addr_strs[]);
+    const char * group_name,
+    const char * const group_addr_strs[],
+    int group_size);
 
 /**
  * Creates an SSG group from a given config file containing the HG address strings
@@ -75,25 +77,25 @@ ssg_group_id_t ssg_group_create(
  * @params[in] group_name   Name of the SSG group
  * @params[in] file_name    Name of the config file containing the corresponding
  *                          HG address strings for this group
- * @returns SSG group ID on success, SSG_GROUP_NULL otherwise
+ * @returns SSG group ID on success, SSG_GROUP_ID_NULL otherwise
  * 
  * NOTE: The HG address string of the caller of this function must be present in
  * the list of address strings given in the config file. That is, the caller of
  * this function is required to be a member of the SSG group that is created.
  */
 ssg_group_id_t ssg_group_create_config(
-    const char *group_name,
-    const char *file_name);
+    const char * group_name,
+    const char * file_name);
 
 #ifdef HAVE_MPI
 /**
  * Creates an SSG group from a given MPI communicator.
  * @params[in] group_name   Name of the SSG group
  * @params[in] comm         MPI communicator containing group members
- * @returns SSG group ID on success, SSG_GROUP_NULL otherwise
+ * @returns SSG group ID on success, SSG_GROUP_ID_NULL otherwise
  */
 ssg_group_id_t ssg_group_create_mpi(
-    const char *group_name,
+    const char * group_name,
     MPI_Comm comm);
 #endif
 

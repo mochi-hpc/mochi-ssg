@@ -12,29 +12,33 @@ extern "C" {
 
 #include <stdint.h>
 #include <inttypes.h>
+
 #include <mercury.h>
 #include <abt.h>
 #include <margo.h>
+
 #include <ssg.h>
 #if USE_SWIM_FD
 #include "swim-fd/swim-fd.h"
 #endif
 
-// debug printing macro for SSG
+/* debug printing macro for SSG */
+/* TODO: direct debug output to file? */
 #ifdef DEBUG
-#define SSG_DEBUG(__s, __fmt, ...) do { \
+#define SSG_DEBUG(__g, __fmt, ...) do { \
     double __now = ABT_get_wtime(); \
-    fprintf(__s->dbg_strm, "%.6lf <%d>: " __fmt, \
-        __now, __s->view.self_rank, ## __VA_ARGS__); \
-    fflush(__s->dbg_strm); \
+    fprintf(stdout, "%.6lf <%d>: " __fmt, \
+        __now, __g->self_rank, ## __VA_ARGS__); \
+    fflush(stdout); \
 } while(0)
 #else
-#define SSG_DEBUG(__s, __fmt, ...) do { \
+#define SSG_DEBUG(__g, __fmt, ...) do { \
 } while(0)
 #endif
 
+typedef struct ssg_group ssg_group_t;
+typedef struct ssg_group_view ssg_group_view_t;
 typedef struct ssg_member_state ssg_member_state_t;
-typedef struct ssg_view ssg_view_t;
 
 struct ssg_member_state
 {
@@ -42,22 +46,20 @@ struct ssg_member_state
     int is_member;
 };
 
-struct ssg_view
+struct ssg_group_view
 {
-    int self_rank;
     int group_size;
     ssg_member_state_t *member_states;
 };
 
-struct ssg
+struct ssg_group
 {
-    margo_instance_id mid;
-    ssg_view_t view;
+    char *name;
+    ssg_group_id_t id;
+    int self_rank;
+    ssg_group_view_t view;
 #if USE_SWIM_FD
     swim_context_t *swim_ctx;
-#endif
-#ifdef DEBUG
-    FILE *dbg_strm;
 #endif
 };
 
