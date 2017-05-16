@@ -27,8 +27,8 @@ extern "C" {
 #ifdef DEBUG
 #define SSG_DEBUG(__g, __fmt, ...) do { \
     double __now = ABT_get_wtime(); \
-    fprintf(stdout, "%.6lf <%d>: " __fmt, \
-        __now, __g->self_rank, ## __VA_ARGS__); \
+    fprintf(stdout, "%.6lf <%s:%d>: " __fmt, __now, \
+        __g->name, __g->self_rank, ## __VA_ARGS__); \
     fflush(stdout); \
 } while(0)
 #else

@@ -89,8 +89,10 @@ ssg_group_id_t ssg_group_create(
      * but it's possible that it is in the list of group address strings)
      */
     self_addr_substr = strstr(self_addr_str, "://");
-    if (self_addr_substr == NULL) goto fini;
-    self_addr_substr += 3;
+    if (self_addr_substr == NULL)
+        self_addr_substr = self_addr_str;
+    else
+        self_addr_substr += 3;
 
     /* allocate an SSG group data structure and initialize some of it */
     g = malloc(sizeof(*g));
@@ -108,8 +110,10 @@ ssg_group_id_t ssg_group_create(
     for (i = 0; i < group_size; i++)
     {
         addr_substr = strstr(group_addr_strs[i], "://");
-        if (addr_substr == NULL) goto fini;
-        addr_substr+= 3;
+        if (addr_substr == NULL)
+            addr_substr = group_addr_strs[i];
+        else
+            addr_substr += 3;
         if (strcmp(self_addr_substr, addr_substr) == 0)
         {
             /* this is my address -- my rank is the offset in the address array */
@@ -139,8 +143,7 @@ ssg_group_id_t ssg_group_create(
             group_name);
         goto fini;
     }
-    SSG_DEBUG(g, "group %s lookup successful (size=%d)\n",
-        group_name, group_size);
+    SSG_DEBUG(g, "group lookup successful (size=%d)\n", group_size);
 
 #if 0
 #if USE_SWIM_FD
@@ -159,16 +162,17 @@ ssg_group_id_t ssg_group_create(
     /* TODO: last step => add reference to this group to SSG runtime state */
 
     /* don't free these pointers on success */
-    self_addr = HG_ADDR_NULL;
+    //self_addr = HG_ADDR_NULL; /* TODO: free this in ssg_group_destroy */
     g = NULL;
 fini:
+    if (hgcl && self_addr != HG_ADDR_NULL) HG_Addr_free(hgcl, self_addr);
+    free(self_addr_str);
     if (g)
     {
         free(g->name);
         free(g->view.member_states);
         free(g);
     }
-    free(self_addr_str);
 
     return g_id;
 }
@@ -337,6 +341,8 @@ fini:
 int ssg_group_destroy(
     ssg_group_id_t group_id)
 {
+    if (group_id == SSG_GROUP_ID_NULL)
+        return SSG_SUCCESS;
 #if 0
 #if USE_SWIM_FD
     if(s->swim_ctx)
@@ -421,7 +427,7 @@ static hg_return_t ssg_group_lookup(
             break;
         }
         else if (args[r].out != HG_SUCCESS) {
-            fprintf(stderr, "Error: SSG unable to lookup HG address for rank %d" \
+            fprintf(stderr, "Error: SSG unable to lookup HG address for rank %d"
                 "(err=%d)\n", r, args[r].out);
             hret = args[r].out;
             break;
