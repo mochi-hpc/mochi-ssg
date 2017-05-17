@@ -28,36 +28,52 @@ static void usage()
 {
     fprintf(stderr,
         "Usage: "
-        "ssg-test-simple <addr> <create mode> [config file]\n"
+        "ssg-test-simple [-s <time>] <addr> <create mode> [config file]\n"
+        "\t-s <time> - time to sleep between init/finalize\n"
         "\t<create mode> - \"mpi\" (if supported) or \"conf\"\n"
         "\tif \"conf\" is the mode, then [config file] is required\n");
 }
 
-static void parse_args(int argc, char *argv[], const char **addr_str,
+static void parse_args(int argc, char *argv[], int *sleep_time, const char **addr_str,
     const char **mode, const char **conf_file)
 {
+    int ndx = 1;
+
     if (argc < 3)
     {
         usage();
         exit(1);
     }
 
-    *addr_str = argv[1];
-    *mode = argv[2];
-
-    if (strcmp(*mode, "conf") == 0)
+    if (strcmp(argv[ndx], "-s") == 0)
     {
-        if (argc != 4)
+        char *check = NULL;
+        ndx++;
+
+        *sleep_time = (int)strtol(argv[ndx++], &check, 0);
+        if(*sleep_time < 0 || (check && *check != '\0') || argc < 5)
         {
             usage();
             exit(1);
         }
-        *conf_file = argv[3];
+    }
+
+    *addr_str = argv[ndx++];
+    *mode = argv[ndx++];
+
+    if (strcmp(*mode, "conf") == 0)
+    {
+        if (ndx != (argc - 1))
+        {
+            usage();
+            exit(1);
+        }
+        *conf_file = argv[ndx];
     }
     else if (strcmp(*mode, "mpi") == 0)
     {
 #ifdef HAVE_MPI
-        if (argc != 3)
+        if (ndx != argc)
         {
             usage();
             exit(1);
@@ -82,6 +98,7 @@ int main(int argc, char *argv[])
     hg_class_t *hgcl = NULL;
     hg_context_t *hgctx = NULL;
     margo_instance_id mid = MARGO_INSTANCE_NULL;
+    int sleep_time = 0;
     const char *addr_str;
     const char *mode;
     const char *conf_file;
@@ -89,7 +106,7 @@ int main(int argc, char *argv[])
     ssg_group_id_t g_id = SSG_GROUP_ID_NULL;
     int ret;
 
-    parse_args(argc, argv, &addr_str, &mode, &conf_file);
+    parse_args(argc, argv, &sleep_time, &addr_str, &mode, &conf_file);
 
     ABT_init(argc, argv);
 
@@ -116,6 +133,8 @@ int main(int argc, char *argv[])
         g_id = ssg_group_create_mpi(group_name, MPI_COMM_WORLD);
     // XXX DIE_IF(g_id == SSG_GROUP_ID_NULL, "ssg_group_create");
 
+    if (sleep_time > 0) margo_thread_sleep(mid, sleep_time *1000.0);
+
 cleanup:
     /* cleanup */
     ssg_group_destroy(g_id);
@@ -124,7 +143,7 @@ cleanup:
     margo_finalize(mid);
 
     if(hgctx) HG_Context_destroy(hgctx);
-    if(hgcl) HG_Finalize(hgcl);
+    //if(hgcl) HG_Finalize(hgcl);
 
     if (strcmp(mode, "mpi") == 0)
         MPI_Finalize();
