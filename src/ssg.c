@@ -149,10 +149,16 @@ ssg_group_id_t ssg_group_create(
     SSG_DEBUG(g, "group lookup successful (size=%d)\n", group_size);
 
 #if USE_SWIM_FD
+    int swim_active = 1;
+#ifdef SWIM_FORCE_FAIL
+    if (g->self_rank == 1)
+        swim_active = 0;
+#endif
+
     /* initialize swim failure detector */
     // TODO: we should probably barrier or sync somehow to avoid rpc failures
     // due to timing skew of different ranks initializing swim
-    g->fd_ctx = (void *)swim_init(g, 1);
+    g->fd_ctx = (void *)swim_init(g, swim_active);
     if (g->fd_ctx == NULL) goto fini;
 #endif
 

@@ -192,6 +192,11 @@ static void swim_dping_recv_ult(hg_handle_t handle)
     swim_ctx = (swim_context_t *)g->fd_ctx;
     assert(swim_ctx != NULL);
 
+#ifdef SWIM_FORCE_FAIL
+    int drop = 1;
+    if (g->self_rank == 1 && drop) goto fini;
+#endif
+
     hret = HG_Get_input(handle, &dping_req);
     if(hret != HG_SUCCESS) goto fini;
 
@@ -320,6 +325,11 @@ static void swim_iping_recv_ult(hg_handle_t handle)
     assert(g != NULL);
     swim_ctx = (swim_context_t *)g->fd_ctx;
     assert(swim_ctx != NULL);
+
+#ifdef SWIM_FORCE_FAIL
+    int drop = 1;
+    if (g->self_rank == 1 && drop) goto fini;
+#endif
 
     hret = HG_Get_input(handle, &iping_req);
     if(hret != HG_SUCCESS) goto fini;
