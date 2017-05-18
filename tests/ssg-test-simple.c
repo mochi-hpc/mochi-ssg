@@ -131,8 +131,10 @@ int main(int argc, char *argv[])
 
     if(strcmp(mode, "conf") == 0)
         g_id = ssg_group_create_config(group_name, conf_file);
+#if HAVE_MPI
     else if(strcmp(mode, "mpi") == 0)
         g_id = ssg_group_create_mpi(group_name, MPI_COMM_WORLD);
+#endif
     // XXX DIE_IF(g_id == SSG_GROUP_ID_NULL, "ssg_group_create");
 
     if (sleep_time > 0) margo_thread_sleep(mid, sleep_time *1000.0);
