@@ -342,10 +342,10 @@ int ssg_group_destroy(
     int i;
     ssg_group_t *g = the_group;
     assert(g);
-    swim_context_t *swim_ctx = (swim_context_t *)g->fd_ctx;
-    assert(swim_ctx);
 
 #if USE_SWIM_FD
+    swim_context_t *swim_ctx = (swim_context_t *)g->fd_ctx;
+    assert(swim_ctx);
     if(swim_ctx)
         swim_finalize(swim_ctx);
 #endif
