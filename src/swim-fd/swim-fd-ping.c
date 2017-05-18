@@ -378,10 +378,8 @@ static void swim_pack_message(ssg_group_t *g, swim_message_t *msg)
     msg->source_id = g->self_rank;
     msg->source_inc_nr = swim_ctx->member_inc_nrs[g->self_rank];
 
-#if 0
     /* piggyback a set of membership states on this message */
     swim_retrieve_membership_updates(g, msg->pb_buf, SWIM_MAX_PIGGYBACK_ENTRIES);
-#endif
 
     return;
 }
@@ -394,12 +392,10 @@ static void swim_unpack_message(ssg_group_t *g, swim_message_t *msg)
     sender_update.id = msg->source_id;
     sender_update.status = SWIM_MEMBER_ALIVE;
     sender_update.inc_nr = msg->source_inc_nr;
-#if 0
     swim_apply_membership_updates(g, &sender_update, 1);
 
     /* update membership status using piggybacked membership updates */
     swim_apply_membership_updates(g, msg->pb_buf, SWIM_MAX_PIGGYBACK_ENTRIES);
-#endif
 
     return;
 }

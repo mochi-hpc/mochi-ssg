@@ -246,13 +246,12 @@ void swim_finalize(swim_context_t *swim_ctx)
  * SWIM membership update functions *
  ************************************/
 
-#if 0
 void swim_retrieve_membership_updates(
-    ssg_t s,
+    ssg_group_t *g,
     swim_member_update_t *updates,
     int update_count)
 {
-    swim_context_t *swim_ctx = s->swim_ctx;
+    swim_context_t *swim_ctx = (swim_context_t *)g->fd_ctx;
     swim_member_update_link_t *iter, *tmp;
     swim_member_update_link_t **recent_update_list_p =
         (swim_member_update_link_t **)&(swim_ctx->recent_update_list);
@@ -285,12 +284,12 @@ void swim_retrieve_membership_updates(
 }
 
 void swim_apply_membership_updates(
-    ssg_t s,
+    ssg_group_t *g,
     swim_member_update_t *updates,
     int update_count)
 {
-    swim_context_t *swim_ctx = s->swim_ctx;
-    swim_member_id_t self_id = s->view.self_rank;
+    swim_context_t *swim_ctx = (swim_context_t *)g->fd_ctx;
+    swim_member_id_t self_id = g->self_rank;
     int i;
 
     for(i = 0; i < update_count; i++)
@@ -307,7 +306,7 @@ void swim_apply_membership_updates(
                 }
                 else
                 {
-                    swim_unsuspect_member(s, updates[i].id, updates[i].inc_nr);
+                    swim_unsuspect_member(g, updates[i].id, updates[i].inc_nr);
                 }
                 break;
             case SWIM_MEMBER_SUSPECT:
@@ -320,13 +319,13 @@ void swim_apply_membership_updates(
                     if(updates[i].inc_nr == swim_ctx->member_inc_nrs[self_id])
                     {
                         swim_ctx->member_inc_nrs[self_id]++;
-                        SSG_DEBUG(s, "SWIM: self SUSPECT received (new inc_nr=%d)\n",
+                        SSG_DEBUG(g, "SWIM: self SUSPECT received (new inc_nr=%d)\n",
                             swim_ctx->member_inc_nrs[self_id]);
                     }
                 }
                 else
                 {
-                    swim_suspect_member(s, updates[i].id, updates[i].inc_nr);
+                    swim_suspect_member(g, updates[i].id, updates[i].inc_nr);
                 }
                 break;
             case SWIM_MEMBER_DEAD:
@@ -336,24 +335,23 @@ void swim_apply_membership_updates(
                     assert(updates[i].inc_nr <= swim_ctx->member_inc_nrs[self_id]);
                     swim_ctx->member_inc_nrs[self_id] = updates[i].inc_nr;
 
-                    SSG_DEBUG(s, "SWIM: self confirmed DEAD (inc_nr=%d)\n",
+                    SSG_DEBUG(g, "SWIM: self confirmed DEAD (inc_nr=%d)\n",
                         swim_ctx->member_inc_nrs[self_id]);
 
                     swim_finalize(swim_ctx);
                 }
                 else
                 {
-                    swim_kill_member(s, updates[i].id, updates[i].inc_nr);
+                    swim_kill_member(g, updates[i].id, updates[i].inc_nr);
                 }
                 break;
             default:
-                SSG_DEBUG(s, "SWIM: invalid membership status update\n");
+                SSG_DEBUG(g, "SWIM: invalid membership status update\n");
         }
     }
 
     return;
 }
-#endif
 
 /*******************************************
  * SWIM group membership utility functions *

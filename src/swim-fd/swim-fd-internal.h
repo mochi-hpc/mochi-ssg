@@ -73,7 +73,6 @@ void swim_dping_send_ult(
 void swim_iping_send_ult(
     void *t_arg);
 
-#if 0
 /* SWIM membership update function prototypes */
 void swim_retrieve_membership_updates(
     ssg_group_t *g,
@@ -83,7 +82,6 @@ void swim_apply_membership_updates(
     ssg_group_t *g,
     swim_member_update_t *updates,
     int update_count);
-#endif
 
 #ifdef __cplusplus
 }
