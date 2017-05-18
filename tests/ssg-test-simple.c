@@ -146,15 +146,19 @@ int main(int argc, char *argv[])
 
     margo_finalize(mid);
 
+#ifndef SWIM_FORCE_FAIL
     if(hgctx) HG_Context_destroy(hgctx);
     if(hgcl) HG_Finalize(hgcl);
+#endif
 
 #if HAVE_MPI
     if (strcmp(mode, "mpi") == 0)
         MPI_Finalize();
 #endif
 
+#ifndef SWIM_FORCE_FAIL
     ABT_finalize();
+#endif
 
     return 0;
 }
