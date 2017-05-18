@@ -4,7 +4,7 @@
  * See COPYRIGHT in top-level directory.
  */
 
-#include <ssg-config.h>
+#include "ssg-config.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -19,7 +19,7 @@
 #include <abt.h>
 #include <margo.h>
 
-#include <ssg.h>
+#include "ssg.h"
 #include "ssg-internal.h"
 #if USE_SWIM_FD
 #include "swim-fd/swim-fd.h"
@@ -32,7 +32,7 @@ static const char ** ssg_setup_addr_str_list(
     char * buf, int num_addrs);
 
 /* XXX: is this right? can this be a global? */
-static margo_instance_id ssg_mid = MARGO_INSTANCE_NULL;
+margo_instance_id ssg_mid = MARGO_INSTANCE_NULL;
 
 /***************************************************
  *** SSG runtime intialization/shutdown routines ***
@@ -145,24 +145,18 @@ ssg_group_id_t ssg_group_create(
     }
     SSG_DEBUG(g, "group lookup successful (size=%d)\n", group_size);
 
-#if 0
 #if USE_SWIM_FD
-    // initialize swim failure detector
+    /* initialize swim failure detector */
     // TODO: we should probably barrier or sync somehow to avoid rpc failures
     // due to timing skew of different ranks initializing swim
-    s->swim_ctx = swim_init(s, 1);
-    if (s->swim_ctx == NULL)
-    {
-        ssg_finalize(s);
-        s = NULL;
-    }
-#endif
+    g->fd_ctx = (void *)swim_init(g, 1);
+    if (g->fd_ctx == NULL) goto fini;
 #endif
 
     /* TODO: last step => add reference to this group to SSG runtime state */
 
     /* don't free these pointers on success */
-    //self_addr = HG_ADDR_NULL; /* TODO: free this in ssg_group_destroy */
+    self_addr = HG_ADDR_NULL; /* TODO: free this in ssg_group_destroy */
     g = NULL;
 fini:
     if (hgcl && self_addr != HG_ADDR_NULL) HG_Addr_free(hgcl, self_addr);

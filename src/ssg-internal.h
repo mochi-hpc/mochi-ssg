@@ -17,10 +17,7 @@ extern "C" {
 #include <abt.h>
 #include <margo.h>
 
-#include <ssg.h>
-#if USE_SWIM_FD
-#include "swim-fd/swim-fd.h"
-#endif
+#include "ssg.h"
 
 /* debug printing macro for SSG */
 /* TODO: direct debug output to file? */
@@ -58,10 +55,11 @@ struct ssg_group
     ssg_group_id_t id;
     int self_rank;
     ssg_group_view_t view;
-#if USE_SWIM_FD
-    swim_context_t *swim_ctx;
-#endif
+    void *fd_ctx; /* failure detector context (currently just SWIM) */
 };
+
+/* XXX: is this right? can this be a global? */
+extern margo_instance_id ssg_mid; 
 
 #ifdef __cplusplus
 }

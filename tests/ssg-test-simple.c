@@ -135,8 +135,8 @@ int main(int argc, char *argv[])
 
     if (sleep_time > 0) margo_thread_sleep(mid, sleep_time *1000.0);
 
-cleanup:
-    /* cleanup */
+    /** cleanup **/
+
     ssg_group_destroy(g_id);
     ssg_finalize();
 

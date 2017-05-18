@@ -12,12 +12,15 @@ extern "C" {
 
 #include <ssg.h>
 
+/* SWIM protocol parameter defaults */
 #define SWIM_DEF_PROTOCOL_PERIOD_LEN    2000.0  /* milliseconds */
 #define SWIM_DEF_SUSPECT_TIMEOUT        5       /* protocol period lengths */
 #define SWIM_DEF_SUBGROUP_SIZE          2
 #define SWIM_MAX_SUBGROUP_SIZE          5
 #define SWIM_MAX_PIGGYBACK_ENTRIES      8
 #define SWIM_MAX_PIGGYBACK_TX_COUNT     50
+
+#define SWIM_MEMBER_RANK_UNKNOWN (-1)
 
 typedef int64_t swim_member_id_t;
 typedef uint8_t swim_member_status_t;
@@ -64,21 +67,23 @@ struct swim_context
 
 /* SWIM ping function prototypes */
 void swim_register_ping_rpcs(
-    ssg_t s);
+    ssg_group_t *g);
 void swim_dping_send_ult(
     void *t_arg);
 void swim_iping_send_ult(
     void *t_arg);
 
+#if 0
 /* SWIM membership update function prototypes */
 void swim_retrieve_membership_updates(
-    ssg_t s,
+    ssg_group_t *g,
     swim_member_update_t *updates,
     int update_count);
 void swim_apply_membership_updates(
-    ssg_t s,
+    ssg_group_t *g,
     swim_member_update_t *updates,
     int update_count);
+#endif
 
 #ifdef __cplusplus
 }

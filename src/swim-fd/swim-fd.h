@@ -10,13 +10,14 @@
 extern "C" {
 #endif
 
-#include <ssg.h>
+#include "ssg.h"
+#include "ssg-internal.h"
 
 /* opaque swim context type */
 typedef struct swim_context swim_context_t;
 
 swim_context_t *swim_init(
-    ssg_t s,
+    ssg_group_t *g,
     int active);
 
 void swim_finalize(

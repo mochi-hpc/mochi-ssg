@@ -12,7 +12,10 @@
 #include <assert.h>
 #include <time.h>
 
-#include <ssg.h>
+#include <abt.h>
+#include <margo.h>
+
+#include "ssg.h"
 #include "ssg-internal.h"
 #include "swim-fd.h"
 #include "swim-fd-internal.h"
@@ -38,21 +41,23 @@ static void swim_prot_ult(
 static void swim_tick_ult(
     void *t_arg);
 
+#if 0
 /* SWIM group membership utility function prototypes */
 static void swim_suspect_member(
-    ssg_t s, swim_member_id_t member_id, swim_member_inc_nr_t inc_nr);
+    ssg_group_t *g, swim_member_id_t member_id, swim_member_inc_nr_t inc_nr);
 static void swim_unsuspect_member(
-    ssg_t s, swim_member_id_t member_id, swim_member_inc_nr_t inc_nr);
+    ssg_group_t s, swim_member_id_t member_id, swim_member_inc_nr_t inc_nr);
 static void swim_kill_member(
     ssg_t s, swim_member_id_t member_id, swim_member_inc_nr_t inc_nr);
 static void swim_update_suspected_members(
     ssg_t s, double susp_timeout);
 static void swim_add_recent_member_update(
     ssg_t s, swim_member_update_t update);
+#endif
 static int swim_get_rand_group_member(
-    ssg_t s, swim_member_id_t *member_id);
+    ssg_group_t *g, swim_member_id_t *member_id);
 static int swim_get_rand_group_member_set(
-    ssg_t s, swim_member_id_t *member_ids, int num_members,
+    ssg_group_t *g, swim_member_id_t *member_ids, int num_members,
     swim_member_id_t excluded_id);
 
 /******************************************************
@@ -60,32 +65,32 @@ static int swim_get_rand_group_member_set(
  ******************************************************/
 
 swim_context_t *swim_init(
-    ssg_t s,
+    ssg_group_t *g,
     int active)
 {
     swim_context_t *swim_ctx;
     int i, ret;
 
-    assert(s != SSG_NULL);
+    if (g == NULL) return NULL;
 
     /* seed RNG with time+rank combination to avoid identical seeds */
-    srand(time(NULL) + s->view.self_rank);
+    srand(time(NULL) + g->self_rank);
 
     /* allocate structure for storing swim context */
     swim_ctx = malloc(sizeof(*swim_ctx));
-    assert(swim_ctx);
+    if (!swim_ctx) return NULL;
     memset(swim_ctx, 0, sizeof(*swim_ctx));
 
     /* initialize swim context */
-    swim_ctx->prot_pool = *margo_get_handler_pool(s->mid);
-    swim_ctx->ping_target = SSG_MEMBER_RANK_UNKNOWN;
+    swim_ctx->prot_pool = *margo_get_handler_pool(ssg_mid);
+    swim_ctx->ping_target = SWIM_MEMBER_RANK_UNKNOWN;
     for(i = 0; i < SWIM_MAX_SUBGROUP_SIZE; i++)
-        swim_ctx->subgroup_members[i] = SSG_MEMBER_RANK_UNKNOWN;
+        swim_ctx->subgroup_members[i] = SWIM_MEMBER_RANK_UNKNOWN;
 
-    swim_ctx->member_inc_nrs = malloc(s->view.group_size *
+    swim_ctx->member_inc_nrs = malloc(g->view.group_size *
         sizeof(*(swim_ctx->member_inc_nrs)));
     assert(swim_ctx->member_inc_nrs);
-    memset(swim_ctx->member_inc_nrs, 0, s->view.group_size *
+    memset(swim_ctx->member_inc_nrs, 0, g->view.group_size *
         sizeof(*(swim_ctx->member_inc_nrs)));
 
     /* set protocol parameters */
@@ -93,11 +98,11 @@ swim_context_t *swim_init(
     swim_ctx->prot_susp_timeout = SWIM_DEF_SUSPECT_TIMEOUT;
     swim_ctx->prot_subgroup_sz = SWIM_DEF_SUBGROUP_SIZE;
 
-    swim_register_ping_rpcs(s);
+    swim_register_ping_rpcs(g);
 
     if(active)
     {
-        ret = ABT_thread_create(swim_ctx->prot_pool, swim_prot_ult, s,
+        ret = ABT_thread_create(swim_ctx->prot_pool, swim_prot_ult, g,
             ABT_THREAD_ATTR_NULL, &(swim_ctx->prot_thread));
         if(ret != ABT_SUCCESS)
         {
@@ -113,17 +118,18 @@ static void swim_prot_ult(
     void *t_arg)
 {
     int ret;
-    ssg_t s = (ssg_t)t_arg;
+    ssg_group_t *g = (ssg_group_t *)t_arg;
+    swim_context_t *swim_ctx = (swim_context_t *)g->fd_ctx;
 
-    assert(s != SSG_NULL);
+    assert(g != NULL);
 
-    SSG_DEBUG(s, "SWIM: protocol start (period_len=%.4f, susp_timeout=%d, subgroup_size=%d)\n",
-        s->swim_ctx->prot_period_len, s->swim_ctx->prot_susp_timeout,
-        s->swim_ctx->prot_subgroup_sz);
-    while(!(s->swim_ctx->shutdown_flag))
+    SSG_DEBUG(g, "SWIM: protocol start (period_len=%.4f, susp_timeout=%d, subgroup_size=%d)\n",
+        swim_ctx->prot_period_len, swim_ctx->prot_susp_timeout,
+        swim_ctx->prot_subgroup_sz);
+    while(!(swim_ctx->shutdown_flag))
     {
         /* spawn a ULT to run this tick */
-        ret = ABT_thread_create(s->swim_ctx->prot_pool, swim_tick_ult, s,
+        ret = ABT_thread_create(swim_ctx->prot_pool, swim_tick_ult, g,
             ABT_THREAD_ATTR_NULL, NULL);
         if(ret != ABT_SUCCESS)
         {
@@ -131,9 +137,9 @@ static void swim_prot_ult(
         }
 
         /* sleep for a protocol period length */
-        margo_thread_sleep(s->mid, s->swim_ctx->prot_period_len);
+        margo_thread_sleep(ssg_mid, swim_ctx->prot_period_len);
     }
-    SSG_DEBUG(s, "SWIM: protocol shutdown\n");
+    SSG_DEBUG(g, "SWIM: protocol shutdown\n");
 
     return;
 }
@@ -141,15 +147,16 @@ static void swim_prot_ult(
 static void swim_tick_ult(
     void *t_arg)
 {
+    ssg_group_t *g = (ssg_group_t *)t_arg;
+    swim_context_t *swim_ctx;
     int i;
     int ret;
-    swim_context_t *swim_ctx;
-    ssg_t s = (ssg_t)t_arg;
 
-    assert(s != SSG_NULL);
-    swim_ctx = s->swim_ctx;
+    assert(g != NULL);
+    swim_ctx = (swim_context_t *)g->fd_ctx;
     assert(swim_ctx != NULL);
 
+#if 0
     /* update status of any suspected members */
     swim_update_suspected_members(s, swim_ctx->prot_susp_timeout *
         swim_ctx->prot_period_len);
@@ -157,18 +164,19 @@ static void swim_tick_ult(
     /* check whether the ping target from the previous protocol tick
      * ever successfully acked a (direct/indirect) ping request
      */
-    if((swim_ctx->ping_target != SSG_MEMBER_RANK_UNKNOWN) &&
+    if((swim_ctx->ping_target != SWIM_MEMBER_RANK_UNKNOWN) &&
         !(swim_ctx->ping_target_acked))
     {
         /* no response from direct/indirect pings, suspect this member */
         swim_suspect_member(s, swim_ctx->ping_target, swim_ctx->ping_target_inc_nr);
     }
+#endif
 
     /* pick a random member from view and ping */
-    if(swim_get_rand_group_member(s, &(swim_ctx->ping_target)) == 0)
+    if(swim_get_rand_group_member(g, &(swim_ctx->ping_target)) == 0)
     {
         /* no available members, back out */
-        SSG_DEBUG(s, "SWIM: no group members available to dping\n");
+        SSG_DEBUG(g, "SWIM: no group members available to dping\n");
         return;
     }
 
@@ -178,7 +186,7 @@ static void swim_tick_ult(
     /* kick off dping request ULT */
     swim_ctx->ping_target_inc_nr = swim_ctx->member_inc_nrs[swim_ctx->ping_target];
     swim_ctx->ping_target_acked = 0;
-    ret = ABT_thread_create(swim_ctx->prot_pool, swim_dping_send_ult, s,
+    ret = ABT_thread_create(swim_ctx->prot_pool, swim_dping_send_ult, g,
         ABT_THREAD_ATTR_NULL, NULL);
     if(ret != ABT_SUCCESS)
     {
@@ -187,7 +195,7 @@ static void swim_tick_ult(
     }
 
     /* sleep for an RTT and wait for an ack for this dping req */
-    margo_thread_sleep(s->mid, swim_ctx->dping_timeout);
+    margo_thread_sleep(ssg_mid, swim_ctx->dping_timeout);
 
     /* if we don't hear back from the target after an RTT, kick off
      * a set of indirect pings to a subgroup of group members
@@ -195,19 +203,19 @@ static void swim_tick_ult(
     if(!(swim_ctx->ping_target_acked) && (swim_ctx->prot_subgroup_sz > 0))
     {
         /* get a random subgroup of members to send indirect pings to */
-        int this_subgroup_sz = swim_get_rand_group_member_set(s,
+        int this_subgroup_sz = swim_get_rand_group_member_set(g,
             swim_ctx->subgroup_members, swim_ctx->prot_subgroup_sz,
             swim_ctx->ping_target);
         if(this_subgroup_sz == 0)
         {
             /* no available subgroup members, back out */
-            SSG_DEBUG(s, "SWIM: no subgroup members available to iping\n");
+            SSG_DEBUG(g, "SWIM: no subgroup members available to iping\n");
             return;
         }
 
         for(i = 0; i < this_subgroup_sz; i++)
         {
-            ret = ABT_thread_create(swim_ctx->prot_pool, swim_iping_send_ult, s,
+            ret = ABT_thread_create(swim_ctx->prot_pool, swim_iping_send_ult, g,
                 ABT_THREAD_ATTR_NULL, NULL);
             if(ret != ABT_SUCCESS)
             {
@@ -242,6 +250,7 @@ void swim_finalize(swim_context_t *swim_ctx)
  * SWIM membership update functions *
  ************************************/
 
+#if 0
 void swim_retrieve_membership_updates(
     ssg_t s,
     swim_member_update_t *updates,
@@ -273,7 +282,7 @@ void swim_retrieve_membership_updates(
     /* invalidate remaining updates */
     for(; i < update_count; i++)
     {
-        updates[i].id = SSG_MEMBER_RANK_UNKNOWN;
+        updates[i].id = SWIM_MEMBER_RANK_UNKNOWN;
     }
 
     return;
@@ -290,7 +299,7 @@ void swim_apply_membership_updates(
 
     for(i = 0; i < update_count; i++)
     {
-        if(updates[i].id == SSG_MEMBER_RANK_UNKNOWN)
+        if(updates[i].id == SWIM_MEMBER_RANK_UNKNOWN)
             break;
 
         switch(updates[i].status)
@@ -348,12 +357,13 @@ void swim_apply_membership_updates(
 
     return;
 }
-
+#endif
 
 /*******************************************
  * SWIM group membership utility functions *
  *******************************************/
 
+#if 0
 static void swim_suspect_member(
     ssg_t s, swim_member_id_t member_id, swim_member_inc_nr_t inc_nr)
 {
@@ -581,28 +591,29 @@ static void swim_add_recent_member_update(
 
     return;
 }
+#endif
 
 static int swim_get_rand_group_member(
-    ssg_t s, swim_member_id_t *member_id)
+    ssg_group_t *g, swim_member_id_t *member_id)
 {
-    int ret = swim_get_rand_group_member_set(s, member_id, 1,
-        SSG_MEMBER_RANK_UNKNOWN);
+    int ret = swim_get_rand_group_member_set(g, member_id, 1,
+        SWIM_MEMBER_RANK_UNKNOWN);
 
     return(ret);
 }
 
 static int swim_get_rand_group_member_set(
-    ssg_t s, swim_member_id_t *member_ids, int num_members,
+    ssg_group_t *g, swim_member_id_t *member_ids, int num_members,
     swim_member_id_t excluded_id)
 {
     int i, rand_ndx = 0;
     swim_member_id_t rand_member;
-    int avail_members = s->view.group_size - 1;
+    int avail_members = g->view.group_size - 1;
 
     if(num_members == 0)
         return(0);
 
-    if(excluded_id != SSG_MEMBER_RANK_UNKNOWN)
+    if(excluded_id != SWIM_MEMBER_RANK_UNKNOWN)
         avail_members--;
 
     /* TODO: what data structure could we use to avoid looping to look
@@ -610,11 +621,11 @@ static int swim_get_rand_group_member_set(
      */
     do
     {
-        rand_member = rand() % s->view.group_size;
-        if(rand_member == s->view.self_rank || rand_member == excluded_id)
+        rand_member = rand() % g->view.group_size;
+        if(rand_member == g->self_rank || rand_member == excluded_id)
             continue;
 
-        if(!(s->view.member_states[rand_member].is_member))
+        if(!(g->view.member_states[rand_member].is_member))
         {
             avail_members--;
             continue;
