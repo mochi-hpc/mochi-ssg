@@ -143,7 +143,7 @@ int main(int argc, char *argv[])
     margo_finalize(mid);
 
     if(hgctx) HG_Context_destroy(hgctx);
-    //if(hgcl) HG_Finalize(hgcl);
+    if(hgcl) HG_Finalize(hgcl);
 
     if (strcmp(mode, "mpi") == 0)
         MPI_Finalize();

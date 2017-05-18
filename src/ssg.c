@@ -34,6 +34,9 @@ static const char ** ssg_setup_addr_str_list(
 /* XXX: is this right? can this be a global? */
 margo_instance_id ssg_mid = MARGO_INSTANCE_NULL;
 
+/* XXX: fix this */
+ssg_group_t *the_group = NULL;
+
 /***************************************************
  *** SSG runtime intialization/shutdown routines ***
  ***************************************************/
@@ -154,9 +157,10 @@ ssg_group_id_t ssg_group_create(
 #endif
 
     /* TODO: last step => add reference to this group to SSG runtime state */
+    the_group = g;
 
     /* don't free these pointers on success */
-    self_addr = HG_ADDR_NULL; /* TODO: free this in ssg_group_destroy */
+    self_addr = HG_ADDR_NULL;
     g = NULL;
 fini:
     if (hgcl && self_addr != HG_ADDR_NULL) HG_Addr_free(hgcl, self_addr);
@@ -335,20 +339,24 @@ fini:
 int ssg_group_destroy(
     ssg_group_id_t group_id)
 {
-    if (group_id == SSG_GROUP_ID_NULL)
-        return SSG_SUCCESS;
-#if 0
+    int i;
+    ssg_group_t *g = the_group;
+    assert(g);
+    swim_context_t *swim_ctx = (swim_context_t *)g->fd_ctx;
+    assert(swim_ctx);
+
 #if USE_SWIM_FD
-    if(s->swim_ctx)
-        swim_finalize(s->swim_ctx);
+    if(swim_ctx)
+        swim_finalize(swim_ctx);
 #endif
-    for (int i = 0; i < s->view.group_size; i++) {
-        if (s->view.member_states[i].addr != HG_ADDR_NULL)
-            HG_Addr_free(margo_get_class(s->mid), s->view.member_states[i].addr);
+
+    for (i = 0; i < g->view.group_size; i++) {
+        if (g->view.member_states[i].addr != HG_ADDR_NULL)
+            HG_Addr_free(margo_get_class(ssg_mid), g->view.member_states[i].addr);
     }
-    free(s->view.member_states);
-    free(s);
-#endif
+    free(g->view.member_states);
+    free(g);
+
     return SSG_SUCCESS;
 }
 
