@@ -360,6 +360,28 @@ int ssg_group_destroy(
     return SSG_SUCCESS;
 }
 
+#if 0
+/*** SSG group membership view access routines */
+
+int ssg_get_group_rank(const ssg_t s)
+{
+    return s->view.self_rank;
+}
+
+int ssg_get_group_size(const ssg_t s)
+{
+    return s->view.group_size;
+}
+
+hg_addr_t ssg_get_addr(const ssg_t s, int rank)
+{
+    if (rank >= 0 && rank < s->view.group_size)
+        return s->view.member_states[rank].addr;
+    else
+        return HG_ADDR_NULL;
+}
+#endif
+
 /***************************
  *** SSG helper routines ***
  ***************************/
@@ -474,26 +496,3 @@ static const char ** ssg_setup_addr_str_list(
     }
     return ret;
 }
-
-
-#if 0
-/*** SSG group membership view access routines */
-
-int ssg_get_group_rank(const ssg_t s)
-{
-    return s->view.self_rank;
-}
-
-int ssg_get_group_size(const ssg_t s)
-{
-    return s->view.group_size;
-}
-
-hg_addr_t ssg_get_addr(const ssg_t s, int rank)
-{
-    if (rank >= 0 && rank < s->view.group_size)
-        return s->view.member_states[rank].addr;
-    else
-        return HG_ADDR_NULL;
-}
-#endif

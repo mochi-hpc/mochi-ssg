@@ -41,19 +41,17 @@ static void swim_prot_ult(
 static void swim_tick_ult(
     void *t_arg);
 
-#if 0
 /* SWIM group membership utility function prototypes */
 static void swim_suspect_member(
     ssg_group_t *g, swim_member_id_t member_id, swim_member_inc_nr_t inc_nr);
 static void swim_unsuspect_member(
-    ssg_group_t s, swim_member_id_t member_id, swim_member_inc_nr_t inc_nr);
+    ssg_group_t *g, swim_member_id_t member_id, swim_member_inc_nr_t inc_nr);
 static void swim_kill_member(
-    ssg_t s, swim_member_id_t member_id, swim_member_inc_nr_t inc_nr);
+    ssg_group_t *g, swim_member_id_t member_id, swim_member_inc_nr_t inc_nr);
 static void swim_update_suspected_members(
-    ssg_t s, double susp_timeout);
+    ssg_group_t *g, double susp_timeout);
 static void swim_add_recent_member_update(
-    ssg_t s, swim_member_update_t update);
-#endif
+    ssg_group_t *g, swim_member_update_t update);
 static int swim_get_rand_group_member(
     ssg_group_t *g, swim_member_id_t *member_id);
 static int swim_get_rand_group_member_set(
@@ -156,9 +154,8 @@ static void swim_tick_ult(
     swim_ctx = (swim_context_t *)g->fd_ctx;
     assert(swim_ctx != NULL);
 
-#if 0
     /* update status of any suspected members */
-    swim_update_suspected_members(s, swim_ctx->prot_susp_timeout *
+    swim_update_suspected_members(g, swim_ctx->prot_susp_timeout *
         swim_ctx->prot_period_len);
 
     /* check whether the ping target from the previous protocol tick
@@ -168,9 +165,8 @@ static void swim_tick_ult(
         !(swim_ctx->ping_target_acked))
     {
         /* no response from direct/indirect pings, suspect this member */
-        swim_suspect_member(s, swim_ctx->ping_target, swim_ctx->ping_target_inc_nr);
+        swim_suspect_member(g, swim_ctx->ping_target, swim_ctx->ping_target_inc_nr);
     }
-#endif
 
     /* pick a random member from view and ping */
     if(swim_get_rand_group_member(g, &(swim_ctx->ping_target)) == 0)
@@ -363,11 +359,10 @@ void swim_apply_membership_updates(
  * SWIM group membership utility functions *
  *******************************************/
 
-#if 0
 static void swim_suspect_member(
-    ssg_t s, swim_member_id_t member_id, swim_member_inc_nr_t inc_nr)
+    ssg_group_t *g, swim_member_id_t member_id, swim_member_inc_nr_t inc_nr)
 {
-    swim_context_t *swim_ctx = s->swim_ctx;
+    swim_context_t *swim_ctx = (swim_context_t *)g->fd_ctx;
     swim_suspect_member_link_t *iter, *tmp;
     swim_suspect_member_link_t *suspect_link = NULL;
     swim_suspect_member_link_t **suspect_list_p =
@@ -375,7 +370,7 @@ static void swim_suspect_member(
     swim_member_update_t update;
 
     /* ignore updates for dead members */
-    if(!(s->view.member_states[member_id].is_member))
+    if(!(g->view.member_states[member_id].is_member))
         return;
 
     /* determine if this member is already suspected */
@@ -406,11 +401,11 @@ static void swim_suspect_member(
     /* if there is no suspicion timeout, just kill the member */
     if(swim_ctx->prot_susp_timeout == 0)
     {
-        swim_kill_member(s, member_id, inc_nr);
+        swim_kill_member(g, member_id, inc_nr);
         return;
     }
 
-    SSG_DEBUG(s, "SWIM: member %d SUSPECT (inc_nr=%d)\n",
+    SSG_DEBUG(g, "SWIM: member %d SUSPECT (inc_nr=%d)\n",
         (int)member_id, (int)inc_nr);
 
     if(suspect_link == NULL)
@@ -437,29 +432,29 @@ static void swim_suspect_member(
     update.id = member_id;
     update.status = SWIM_MEMBER_SUSPECT;
     update.inc_nr = inc_nr;
-    swim_add_recent_member_update(s, update);
+    swim_add_recent_member_update(g, update);
 
     return;
 }
 
 static void swim_unsuspect_member(
-    ssg_t s, swim_member_id_t member_id, swim_member_inc_nr_t inc_nr)
+    ssg_group_t *g, swim_member_id_t member_id, swim_member_inc_nr_t inc_nr)
 {
-    swim_context_t *swim_ctx = s->swim_ctx;
+    swim_context_t *swim_ctx = (swim_context_t *)g->fd_ctx;
     swim_suspect_member_link_t *iter, *tmp;
     swim_suspect_member_link_t **suspect_list_p =
         (swim_suspect_member_link_t **)&(swim_ctx->suspect_list);
     swim_member_update_t update;
 
     /* ignore updates for dead members */
-    if(!(s->view.member_states[member_id].is_member))
+    if(!(g->view.member_states[member_id].is_member))
         return;
 
     /* ignore alive updates for incarnation numbers that aren't new */
     if(inc_nr <= swim_ctx->member_inc_nrs[member_id])
         return;
 
-    SSG_DEBUG(s, "SWIM: member %d ALIVE (inc_nr=%d)\n",
+    SSG_DEBUG(g, "SWIM: member %d ALIVE (inc_nr=%d)\n",
         (int)member_id, (int)inc_nr);
 
     /* if member is suspected, remove from suspect list */
@@ -482,25 +477,25 @@ static void swim_unsuspect_member(
     update.id = member_id;
     update.status = SWIM_MEMBER_ALIVE;
     update.inc_nr = inc_nr;
-    swim_add_recent_member_update(s, update);
+    swim_add_recent_member_update(g, update);
 
     return;
 }
 
 static void swim_kill_member(
-    ssg_t s, swim_member_id_t member_id, swim_member_inc_nr_t inc_nr)
+    ssg_group_t *g, swim_member_id_t member_id, swim_member_inc_nr_t inc_nr)
 {
-    swim_context_t *swim_ctx = s->swim_ctx;
+    swim_context_t *swim_ctx = (swim_context_t *)g->fd_ctx;
     swim_suspect_member_link_t *iter, *tmp;
     swim_suspect_member_link_t **suspect_list_p =
         (swim_suspect_member_link_t **)&(swim_ctx->suspect_list);
     swim_member_update_t update;
 
     /* ignore updates for dead members */
-    if(!(s->view.member_states[member_id].is_member))
+    if(!(g->view.member_states[member_id].is_member))
         return;
 
-    SSG_DEBUG(s, "SWIM: member %d DEAD (inc_nr=%d)\n",
+    SSG_DEBUG(g, "SWIM: member %d DEAD (inc_nr=%d)\n",
         (int)member_id, (int)inc_nr);
 
     LL_FOREACH_SAFE(*suspect_list_p, iter, tmp)
@@ -518,7 +513,7 @@ static void swim_kill_member(
     swim_ctx->member_inc_nrs[member_id] = inc_nr;
 
     /* TODO: some sort of callback to ssg to do something more elaborate? */
-    s->view.member_states[member_id].is_member = 0;
+    g->view.member_states[member_id].is_member = 0;
 
     /* add this update to recent update list so it will be piggybacked
      * on future protocol messages
@@ -526,15 +521,15 @@ static void swim_kill_member(
     update.id = member_id;
     update.status = SWIM_MEMBER_DEAD;
     update.inc_nr = inc_nr;
-    swim_add_recent_member_update(s, update);
+    swim_add_recent_member_update(g, update);
 
     return;
 }
 
 static void swim_update_suspected_members(
-    ssg_t s, double susp_timeout)
+    ssg_group_t *g, double susp_timeout)
 {
-    swim_context_t *swim_ctx = s->swim_ctx;
+    swim_context_t *swim_ctx = (swim_context_t *)g->fd_ctx;
     double now = ABT_get_wtime();
     double susp_dur;
     swim_suspect_member_link_t *iter, *tmp;
@@ -549,7 +544,7 @@ static void swim_update_suspected_members(
             /* if this member has exceeded its allowable suspicion timeout,
              * we mark it as dead
              */
-            swim_kill_member(s, iter->member_id,
+            swim_kill_member(g, iter->member_id,
                 swim_ctx->member_inc_nrs[iter->member_id]);
         }
     }
@@ -558,9 +553,9 @@ static void swim_update_suspected_members(
 }
 
 static void swim_add_recent_member_update(
-    ssg_t s, swim_member_update_t update)
+    ssg_group_t *g, swim_member_update_t update)
 {
-    swim_context_t *swim_ctx = s->swim_ctx;
+    swim_context_t *swim_ctx = (swim_context_t *)g->fd_ctx;
     swim_member_update_link_t *iter, *tmp;
     swim_member_update_link_t *update_link = NULL;
     swim_member_update_link_t **recent_update_list_p =
@@ -591,7 +586,6 @@ static void swim_add_recent_member_update(
 
     return;
 }
-#endif
 
 static int swim_get_rand_group_member(
     ssg_group_t *g, swim_member_id_t *member_id)
