@@ -26,12 +26,20 @@ extern "C" {
 
 /* SSG return codes */
 #define SSG_SUCCESS 0
-/* TODO: define some errors? */
+#define SSG_ERROR (-1)
 
-#define SSG_GROUP_ID_NULL 0
-
-/* XXX: actually define what these are */
-typedef int ssg_group_id_t;
+/* SSG group identifier datatype */
+/* TODO: this shouldn't be visible ... we can't use a typical
+ * opaque pointer since we want to be able to xmit these to
+ * other processes.
+ */
+#define SSG_GROUP_ID_MAX_ADDR_LEN 64
+typedef struct ssg_group_id
+{
+    uint64_t magic_nr;
+    uint64_t name_hash;
+    char addr_str[SSG_GROUP_ID_MAX_ADDR_LEN];
+} ssg_group_id_t;
 
 /***************************************************
  *** SSG runtime intialization/shutdown routines ***
@@ -39,6 +47,7 @@ typedef int ssg_group_id_t;
 
 /**
  * Initializes the SSG runtime environment.
+ *
  * @param[in] mid Corresponding Margo instance identifier
  * @returns SSG_SUCCESS on success, SSG error code otherwise
  */
@@ -47,8 +56,10 @@ int ssg_init(
 
 /**
  * Finalizes the SSG runtime environment.
+ *
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
  */
-void ssg_finalize(
+int ssg_finalize(
     void);
 
 /*************************************
@@ -57,54 +68,86 @@ void ssg_finalize(
 
 /**
  * Creates an SSG group from a given list of HG address strings.
- * @params[in] group_name       Name of the SSG group
- * @params[in] group_addr_strs  Array of HG address strings for each group member
- * @params[in] group_size       Number of group members
- * @returns SSG group ID on success, SSG_GROUP_ID_NULL otherwise
+ *
+ * @param[in]  group_name       Name of the SSG group
+ * @param[in]  group_addr_strs  Array of HG address strings for each group member
+ * @param[in]  group_size       Number of group members
+ * @param[out] group_id         Pointer to output SSG group ID
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
  *
  * NOTE: The HG address string of the caller of this function must be present in
  * the list of address strings given in 'group_addr_strs'. That is, the caller
  * of this function is required to be a member of the SSG group that is created.
  */
-ssg_group_id_t ssg_group_create(
+int ssg_group_create(
     const char * group_name,
     const char * const group_addr_strs[],
-    int group_size);
+    int group_size,
+    ssg_group_id_t * group_id);
 
 /**
  * Creates an SSG group from a given config file containing the HG address strings
  * of all group members.
- * @params[in] group_name   Name of the SSG group
- * @params[in] file_name    Name of the config file containing the corresponding
+ *
+ * @param[in]  group_name   Name of the SSG group
+ * @param[in]  file_name    Name of the config file containing the corresponding
  *                          HG address strings for this group
- * @returns SSG group ID on success, SSG_GROUP_ID_NULL otherwise
+ * @param[out] group_id     Pointer to output SSG group ID
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
  * 
  * NOTE: The HG address string of the caller of this function must be present in
  * the list of address strings given in the config file. That is, the caller of
  * this function is required to be a member of the SSG group that is created.
  */
-ssg_group_id_t ssg_group_create_config(
+int ssg_group_create_config(
     const char * group_name,
-    const char * file_name);
+    const char * file_name,
+    ssg_group_id_t * group_id);
 
 #ifdef HAVE_MPI
 /**
  * Creates an SSG group from a given MPI communicator.
- * @params[in] group_name   Name of the SSG group
- * @params[in] comm         MPI communicator containing group members
- * @returns SSG group ID on success, SSG_GROUP_ID_NULL otherwise
+ *
+ * @param[in]  group_name   Name of the SSG group
+ * @param[in]  comm         MPI communicator containing group members
+ * @param[out] group_id     Pointer to output SSG group ID
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
  */
-ssg_group_id_t ssg_group_create_mpi(
+int ssg_group_create_mpi(
     const char * group_name,
-    MPI_Comm comm);
+    MPI_Comm comm,
+    ssg_group_id_t * group_id);
 #endif
 
 /**
  * Destroys data structures associated with a given SSG group ID.
- * @params[in] group_id SSG group ID
+ *
+ * @param[in] group_id SSG group ID
  * @returns SSG_SUCCESS on success, SSG error code otherwise
  */
 int ssg_group_destroy(
+    ssg_group_id_t group_id);
+
+/**
+ * Attaches a client to an SSG group.
+ *
+ * @param[in] group_id SSG group ID
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
+ *
+ * NOTE: The "client" cannot be a member of the group -- attachment is merely
+ * a way of making the membership view of an existing SSG group available to
+ * non-group members.
+ */
+int ssg_group_attach(
+    ssg_group_id_t group_id);
+
+/**
+ * Detaches a client from an SSG group.
+ *
+ * @param[in] group_id SSG group ID
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
+ */
+int ssg_group_detach(
     ssg_group_id_t group_id);
 
 #if 0
