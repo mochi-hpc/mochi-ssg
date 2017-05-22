@@ -33,6 +33,11 @@ extern "C" {
 } while(0)
 #endif
 
+extern void hashlittle2(const void *key, size_t length, uint32_t *pc, uint32_t *pb);
+#define ssg_hashlittle2 hashlittle2
+
+#define SSG_MAGIC_NR 17321588
+
 typedef struct ssg_group ssg_group_t;
 typedef struct ssg_group_view ssg_group_view_t;
 typedef struct ssg_member_state ssg_member_state_t;
