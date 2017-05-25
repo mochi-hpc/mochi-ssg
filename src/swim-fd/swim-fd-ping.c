@@ -67,8 +67,8 @@ static void swim_unpack_message(
 DECLARE_MARGO_RPC_HANDLER(swim_dping_recv_ult)
 DECLARE_MARGO_RPC_HANDLER(swim_iping_recv_ult)
 
-static hg_id_t dping_rpc_id;
-static hg_id_t iping_rpc_id;
+static hg_id_t swim_dping_rpc_id;
+static hg_id_t swim_iping_rpc_id;
 
 void swim_register_ping_rpcs(
     ssg_group_t *g)
@@ -76,15 +76,15 @@ void swim_register_ping_rpcs(
     hg_class_t *hg_cls = margo_get_class(ssg_mid);
 
     /* register RPC handlers for SWIM pings */
-    dping_rpc_id = MERCURY_REGISTER(hg_cls, "swim_dping", swim_dping_req_t,
+    swim_dping_rpc_id = MERCURY_REGISTER(hg_cls, "swim_dping", swim_dping_req_t,
         swim_dping_resp_t, swim_dping_recv_ult_handler);
-    iping_rpc_id = MERCURY_REGISTER(hg_cls, "swim_iping", swim_iping_req_t,
+    swim_iping_rpc_id = MERCURY_REGISTER(hg_cls, "swim_iping", swim_iping_req_t,
         swim_iping_resp_t, swim_iping_recv_ult_handler);
 
     /* register swim context data structure with each RPC type */
     /* TODO: this won't work */
-    HG_Register_data(hg_cls, dping_rpc_id, g, NULL);
-    HG_Register_data(hg_cls, iping_rpc_id, g, NULL);
+    HG_Register_data(hg_cls, swim_dping_rpc_id, g, NULL);
+    HG_Register_data(hg_cls, swim_iping_rpc_id, g, NULL);
 
     return;
 }
@@ -138,7 +138,7 @@ static int swim_send_dping(
     if(target_addr == HG_ADDR_NULL)
         return(ret);
 
-    hret = HG_Create(margo_get_context(ssg_mid), target_addr, dping_rpc_id,
+    hret = HG_Create(margo_get_context(ssg_mid), target_addr, swim_dping_rpc_id,
         &handle);
     if(hret != HG_SUCCESS)
         return(ret);
@@ -187,7 +187,7 @@ static void swim_dping_recv_ult(hg_handle_t handle)
     /* get ssg & swim state */
     info = HG_Get_info(handle);
     if(info == NULL) goto fini;
-    g = (ssg_group_t *)HG_Registered_data(info->hg_class, dping_rpc_id);
+    g = (ssg_group_t *)HG_Registered_data(info->hg_class, swim_dping_rpc_id);
     assert(g != NULL);
     swim_ctx = (swim_context_t *)g->fd_ctx;
     assert(swim_ctx != NULL);
@@ -256,7 +256,7 @@ void swim_iping_send_ult(
     if(target_addr == HG_ADDR_NULL)
         return;
 
-    hret = HG_Create(margo_get_context(ssg_mid), target_addr, iping_rpc_id,
+    hret = HG_Create(margo_get_context(ssg_mid), target_addr, swim_iping_rpc_id,
         &handle);
     if(hret != HG_SUCCESS)
         return;
@@ -321,7 +321,7 @@ static void swim_iping_recv_ult(hg_handle_t handle)
     /* get the swim state */
     info = HG_Get_info(handle);
     if(info == NULL) goto fini;
-    g = (ssg_group_t *)HG_Registered_data(info->hg_class, dping_rpc_id);
+    g = (ssg_group_t *)HG_Registered_data(info->hg_class, swim_dping_rpc_id);
     assert(g != NULL);
     swim_ctx = (swim_context_t *)g->fd_ctx;
     assert(swim_ctx != NULL);
