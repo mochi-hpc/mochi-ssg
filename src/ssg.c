@@ -40,6 +40,10 @@ margo_instance_id ssg_mid = MARGO_INSTANCE_NULL;
 /* XXX: fix this */
 ssg_group_t *the_group = NULL;
 
+DECLARE_MARGO_RPC_HANDLER(ssg_attach_recv_ult)
+
+static hg_id_t ssg_attach_rpc_id;
+
 /***************************************************
  *** SSG runtime intialization/shutdown routines ***
  ***************************************************/
@@ -47,6 +51,12 @@ ssg_group_t *the_group = NULL;
 int ssg_init(
     margo_instance_id mid)
 {
+    hg_class_t *hg_cls = margo_get_class(mid);
+
+    /* register HG RPCs for SSG */
+    ssg_attach_rpc_id = MERCURY_REGISTER(hg_cls, "ssg_attach", void, void,
+        ssg_attach_recv_ult_handler);
+
     ssg_mid = mid;
 
     return SSG_SUCCESS;
@@ -383,6 +393,32 @@ int ssg_group_destroy(
 int ssg_group_attach(
     ssg_group_id_t group_id)
 {
+    hg_class_t *hgcl = NULL;
+    hg_addr_t srvr_addr = HG_ADDR_NULL;
+    hg_handle_t handle = HG_HANDLE_NULL;
+    hg_return_t hret;
+
+    hgcl = margo_get_class(ssg_mid);
+    if (!hgcl) goto fini;
+
+    /* lookup the address of the given group's leader server */
+    hret = margo_addr_lookup(ssg_mid, group_id.addr_str, &srvr_addr);
+    if (hret != HG_SUCCESS) goto fini;
+
+    hret = HG_Create(margo_get_context(ssg_mid), srvr_addr, ssg_attach_rpc_id,
+        &handle);
+    if (hret != HG_SUCCESS) goto fini;
+
+    /* XXX: send a request to the leader addr to attach to the group */
+    hret = margo_forward(ssg_mid, handle, NULL);
+    if (hret != HG_SUCCESS) goto fini;
+
+    /* XXX: store the obtained view locally to refer to */
+
+    /* TODO: hold on to leader addr so we don't have to look it up again? */
+fini:
+    if (hgcl && srvr_addr != HG_ADDR_NULL) HG_Addr_free(hgcl, srvr_addr);
+    if (handle != HG_HANDLE_NULL) HG_Destroy(handle);
 
     return SSG_SUCCESS;
 }
@@ -524,6 +560,13 @@ static void ssg_lookup_ult(
         &g->view.member_states[l->rank].addr);
     return;
 }
+
+static void ssg_attach_recv_ult(hg_handle_t handle)
+{
+    HG_Destroy(handle);
+    return;
+}
+DEFINE_MARGO_RPC_HANDLER(ssg_attach_recv_ult)
 
 static void ssg_generate_group_id(
     const char * name, const char * leader_addr_str,
