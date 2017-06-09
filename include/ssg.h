@@ -17,16 +17,18 @@
 extern "C" {
 #endif
 
-#include <mercury.h>
-#include <margo.h>
-
 #ifdef HAVE_MPI
 #include <mpi.h>
 #endif
 
+#include <mercury.h>
+#include <margo.h>
+
 /* SSG return codes */
 #define SSG_SUCCESS 0
 #define SSG_ERROR (-1)
+
+typedef uint64_t ssg_member_id_t;
 
 /* SSG group identifier datatype */
 /* TODO: this shouldn't be visible ... we can't use a typical
@@ -150,18 +152,38 @@ int ssg_group_attach(
 int ssg_group_detach(
     ssg_group_id_t group_id);
 
-#if 0
-/*** SSG group membership view access routines */
+/*********************************
+ *** SSG group access routines ***
+ *********************************/
 
-// get my rank in the group
-int ssg_get_group_rank(const ssg_t s);
+/**
+ * Obtains the caller's group rank in an SSG group.
+ *
+ * @param[in] group_id SSG group ID
+ * @returns caller's group rank on success, SSG_RANK_UNKNOWN otherwise
+ */
+ssg_member_id_t ssg_get_group_self_id(
+    ssg_group_id_t group_id);
 
-// get the size of the group
-int ssg_get_group_size(const ssg_t s);
+/**
+ * Obtains the size of an SSG group.
+ *
+ * @param[in] group_id SSG group ID
+ * @returns size of the group on success, 0 otherwise
+ */
+int ssg_get_group_size(
+    ssg_group_id_t group_id);
 
-// get the HG address for the group member at the given rank
-hg_addr_t ssg_get_addr(const ssg_t s, int rank);
-#endif
+/**
+ * Obtains the HG address of a given rank in an SSG group.
+ *
+ * @param[in] group_id  SSG group ID
+ * @param[in] rank      SSG group rank 
+ * @returns HG address of given group rank on success, HG_ADDR_NULL otherwise
+ */
+hg_addr_t ssg_get_addr(
+    ssg_group_id_t group_id,
+    ssg_member_id_t member_id);
 
 #ifdef __cplusplus
 }

@@ -24,8 +24,8 @@ extern "C" {
 #ifdef DEBUG
 #define SSG_DEBUG(__g, __fmt, ...) do { \
     double __now = ABT_get_wtime(); \
-    fprintf(stdout, "%.6lf <%s:%d>: " __fmt, __now, \
-        __g->name, __g->self_rank, ## __VA_ARGS__); \
+    fprintf(stdout, "%.6lf <%s:%"PRIu64">: " __fmt, __now, \
+        __g->group_name, __g->self_id, ## __VA_ARGS__); \
     fflush(stdout); \
 } while(0)
 #else
@@ -39,7 +39,7 @@ extern void hashlittle2(const void *key, size_t length, uint32_t *pc, uint32_t *
 #define SSG_MAGIC_NR 17321588
 
 typedef struct ssg_group ssg_group_t;
-typedef struct ssg_group_view ssg_group_view_t;
+typedef struct ssg_view ssg_view_t;
 typedef struct ssg_member_state ssg_member_state_t;
 
 struct ssg_member_state
@@ -48,18 +48,18 @@ struct ssg_member_state
     int is_member;
 };
 
-struct ssg_group_view
+struct ssg_view
 {
-    int group_size;
+    int size;
     ssg_member_state_t *member_states;
 };
 
 struct ssg_group
 {
-    char *name;
-    ssg_group_id_t id;
-    int self_rank;
-    ssg_group_view_t view;
+    char *group_name;
+    ssg_group_id_t group_id;
+    ssg_member_id_t self_id;
+    ssg_view_t group_view;
     void *fd_ctx; /* failure detector context (currently just SWIM) */
 };
 
