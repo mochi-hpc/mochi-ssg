@@ -8,7 +8,6 @@
 
 // lookup integrated into margo
 
-#include <mpi.h>
 #include <margo.h>
 
 #include "ssg.h"
