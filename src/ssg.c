@@ -494,29 +494,18 @@ static hg_return_t ssg_group_lookup(
         args[r].g = g;
         args[r].rank = r;
         args[r].addr_str = addr_strs[r];
-#if 0
         aret = ABT_thread_create(*margo_get_handler_pool(ssg_mid), &ssg_lookup_ult,
                 &args[r], ABT_THREAD_ATTR_NULL, &ults[r]);
         if (aret != ABT_SUCCESS) {
             hret = HG_OTHER_ERROR;
             goto fini;
         }
-#endif
     }
 
     /* wait on all */
     for (i = 1; i < g->view.group_size; i++)
     {
         r = (g->self_rank + i) % g->view.group_size;
-#if 1
-        aret = ABT_thread_create(*margo_get_handler_pool(ssg_mid), &ssg_lookup_ult,
-                &args[r], ABT_THREAD_ATTR_NULL, &ults[r]);
-        if (aret != ABT_SUCCESS)
-        {
-            hret = HG_OTHER_ERROR;
-            goto fini;
-        }
-#endif
         aret = ABT_thread_join(ults[r]);
         ABT_thread_free(&ults[r]);
         ults[r] = ABT_THREAD_NULL; // in case of cascading failure from join
