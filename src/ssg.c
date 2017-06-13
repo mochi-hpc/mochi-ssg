@@ -14,7 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-#ifdef HAVE_MPI
+#ifdef SSG_HAVE_MPI
 #include <mpi.h>
 #endif
 
@@ -23,6 +23,9 @@
 #include <margo.h>
 
 #include "ssg.h"
+#ifdef SSG_HAVE_MPI
+#include "ssg-mpi.h"
+#endif
 #include "ssg-internal.h"
 #if USE_SWIM_FD
 #include "swim-fd/swim-fd.h"
@@ -328,7 +331,7 @@ fini:
     return sret;
 }
 
-#ifdef HAVE_MPI
+#ifdef SSG_HAVE_MPI
 int ssg_group_create_mpi(
     const char * group_name,
     MPI_Comm comm,

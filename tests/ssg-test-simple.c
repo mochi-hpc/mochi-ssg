@@ -9,7 +9,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
-#if HAVE_MPI
+#ifdef SSG_HAVE_MPI
 #include <mpi.h>
 #endif
 
@@ -17,7 +17,7 @@
 #include <mercury.h>
 #include <abt.h>
 #include <ssg.h>
-#if HAVE_MPI
+#ifdef SSG_HAVE_MPI
 #include <ssg-mpi.h>
 #endif
 
@@ -78,7 +78,7 @@ static void parse_args(int argc, char *argv[], int *sleep_time, const char **add
     }
     else if (strcmp(*mode, "mpi") == 0)
     {
-#ifdef HAVE_MPI
+#ifdef SSG_HAVE_MPI
         if (ndx != argc)
         {
             usage();
@@ -118,7 +118,7 @@ int main(int argc, char *argv[])
 
     ABT_init(argc, argv);
 
-#if HAVE_MPI
+#ifdef SSG_HAVE_MPI
     if (strcmp(mode, "mpi") == 0)
         MPI_Init(&argc, &argv);
 #endif
@@ -139,7 +139,7 @@ int main(int argc, char *argv[])
 
     if(strcmp(mode, "conf") == 0)
         sret = ssg_group_create_config(group_name, conf_file, &g_id);
-#if HAVE_MPI
+#ifdef SSG_HAVE_MPI
     else if(strcmp(mode, "mpi") == 0)
         sret = ssg_group_create_mpi(group_name, MPI_COMM_WORLD, &g_id);
 #endif
@@ -166,7 +166,7 @@ int main(int argc, char *argv[])
     if(hgctx) HG_Context_destroy(hgctx);
     if(hgcl) HG_Finalize(hgcl);
 
-#if HAVE_MPI
+#ifdef SSG_HAVE_MPI
     if (strcmp(mode, "mpi") == 0)
         MPI_Finalize();
 #endif

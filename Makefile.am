@@ -15,7 +15,7 @@ EXTRA_DIST =
 BUILT_SOURCES =
 src_libssg_la_SOURCES =
 include_HEADERS = include/ssg.h
-if HAVE_MPI
+if SSG_HAVE_MPI
 include_HEADERS += include/ssg-mpi.h
 endif 
 noinst_HEADERS = ssg-config.h
