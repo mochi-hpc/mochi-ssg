@@ -16,8 +16,7 @@ MAINTAINERCLEANFILES =
 EXTRA_DIST =
 BUILT_SOURCES =
 src_libssg_la_SOURCES =
-include_HEADERS = include/ssg.h
-noinst_HEADERS += ssg-config.h
+include_HEADERS = include/ssg.h ssg-config.h
 lib_LTLIBRARIES += src/libssg.la
 
 EXTRA_DIST += prepare.sh

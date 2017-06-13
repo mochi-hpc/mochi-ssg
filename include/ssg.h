@@ -17,7 +17,9 @@
 extern "C" {
 #endif
 
-#ifdef HAVE_MPI
+#include <ssg-config.h>
+
+#ifdef SSG_HAVE_MPI
 #include <mpi.h>
 #endif
 
@@ -106,7 +108,7 @@ int ssg_group_create_config(
     const char * file_name,
     ssg_group_id_t * group_id);
 
-#ifdef HAVE_MPI
+#ifdef SSG_HAVE_MPI
 /**
  * Creates an SSG group from a given MPI communicator.
  *
