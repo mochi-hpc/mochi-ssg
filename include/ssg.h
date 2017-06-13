@@ -6,6 +6,9 @@
 
 #pragma once
 
+#include <mercury.h>
+#include <margo.h>
+
 /**
  * Scalable Service Groups (SSG) interface
  * 
@@ -16,9 +19,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <mercury.h>
-#include <margo.h>
 
 /* SSG return codes */
 #define SSG_SUCCESS 0
