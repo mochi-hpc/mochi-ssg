@@ -26,7 +26,7 @@ extern "C" {
 
 /* SSG return codes */
 #define SSG_SUCCESS 0
-#define SSG_ERROR (-1)
+#define SSG_FAILURE (-1)
 
 typedef uint64_t ssg_member_id_t;
 

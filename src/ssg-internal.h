@@ -18,6 +18,9 @@ extern "C" {
 #include <margo.h>
 
 #include "ssg.h"
+#include "uthash.h"
+
+#define SSG_MAGIC_NR 17321588
 
 /* debug printing macro for SSG */
 /* TODO: direct debug output to file? */
@@ -33,14 +36,13 @@ extern "C" {
 } while(0)
 #endif
 
-extern void hashlittle2(const void *key, size_t length, uint32_t *pc, uint32_t *pb);
 #define ssg_hashlittle2 hashlittle2
-
-#define SSG_MAGIC_NR 17321588
+extern void hashlittle2(const void *key, size_t length, uint32_t *pc, uint32_t *pb);
 
 typedef struct ssg_group ssg_group_t;
 typedef struct ssg_view ssg_view_t;
 typedef struct ssg_member_state ssg_member_state_t;
+typedef struct ssg_instance ssg_instance_t;
 
 struct ssg_member_state
 {
@@ -61,10 +63,17 @@ struct ssg_group
     ssg_member_id_t self_id;
     ssg_view_t group_view;
     void *fd_ctx; /* failure detector context (currently just SWIM) */
+    UT_hash_handle hh;
+};
+
+struct ssg_instance
+{
+    margo_instance_id mid;
+    ssg_group_t *group_table;
 };
 
 /* XXX: is this right? can this be a global? */
-extern margo_instance_id ssg_mid; 
+extern ssg_instance_t *ssg_inst; 
 
 #ifdef __cplusplus
 }
