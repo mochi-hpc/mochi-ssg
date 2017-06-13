@@ -461,7 +461,6 @@ fini:
 int ssg_group_detach(
     ssg_group_id_t group_id)
 {
-
     return SSG_SUCCESS;
 }
 
@@ -512,7 +511,7 @@ hg_addr_t ssg_get_addr(
     if (!g)
         return HG_ADDR_NULL;
 
-    return g->group_view.member_states[g->self_id].addr;
+    return g->group_view.member_states[member_id].addr;
 }
 
 /************************************
