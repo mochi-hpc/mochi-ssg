@@ -35,7 +35,7 @@ pkgconfig_DATA = maint/ssg.pc
 include Make.rules
 
 include $(top_srcdir)/src/Makefile.subdir
-if USE_SWIM_FD
+if SSG_USE_SWIM_FD
 include $(top_srcdir)/src/swim-fd/Makefile.subdir
 endif
 

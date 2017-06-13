@@ -70,12 +70,12 @@ CFLAGS="$MARGO_CFLAGS $CFLAGS"
 AC_ARG_ENABLE([swim-fd],
     [  --enable-swim-fd        enable SWIM failure detection (default: disabled)],
     [if test "x$enable_swim_fd" = "xyes" ; then
-        AC_DEFINE(USE_SWIM_FD, 1, Define to 1 if the SWIM failure detector should be used)
+        AC_DEFINE(SSG_USE_SWIM_FD, 1, Define to 1 if the SWIM failure detector should be used)
     elif test "x$enableval" != "xno" ; then
         AC_MSG_ERROR(bad value ${enable_swim_fd} for --enable-swim-fd)
     fi],)
 
-AM_CONDITIONAL([USE_SWIM_FD], [test "x${enable_swim_fd}" = xyes])
+AM_CONDITIONAL([SSG_USE_SWIM_FD], [test "x${enable_swim_fd}" = xyes])
 
 AC_CONFIG_FILES([Makefile maint/ssg.pc])
 AC_OUTPUT

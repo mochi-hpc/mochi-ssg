@@ -27,7 +27,7 @@
 #include "ssg-mpi.h"
 #endif
 #include "ssg-internal.h"
-#if USE_SWIM_FD
+#ifdef SSG_USE_SWIM_FD
 #include "swim-fd/swim-fd.h"
 #endif
 #include "uthash.h"
@@ -206,7 +206,7 @@ int ssg_group_create(
     }
     SSG_DEBUG(g, "group lookup successful (size=%d)\n", group_size);
 
-#if USE_SWIM_FD
+#ifdef SSG_USE_SWIM_FD
     int swim_active = 1;
 #ifdef SWIM_FORCE_FAIL
     if (g->self_rank == 1)
@@ -527,7 +527,7 @@ static int ssg_group_destroy_internal(ssg_group_t *g)
 
     /* TODO: send a leave message to the group ? */
 
-#if USE_SWIM_FD
+#ifdef SSG_USE_SWIM_FD
     /* free up failure detector state */
     if(g->fd_ctx)
         swim_finalize(g->fd_ctx);
