@@ -469,24 +469,50 @@ int ssg_group_detach(
  *** SSG group access routines ***
  *********************************/
 
-ssg_member_id_t ssg_get_group_rank(
+ssg_member_id_t ssg_get_group_self_id(
     ssg_group_id_t group_id)
 {
-    return 0;
+    ssg_group_t *g;
+
+    if (!ssg_inst)
+        return SSG_MEMBER_ID_INVALID;
+
+    HASH_FIND(hh, ssg_inst->group_table, &group_id.name_hash, sizeof(uint64_t), g);
+    if (!g)
+        return SSG_MEMBER_ID_INVALID;
+
+    return g->self_id;
 }
 
 int ssg_get_group_size(
     ssg_group_id_t group_id)
 {
-    return 0;
+    ssg_group_t *g;
+
+    if (!ssg_inst)
+        return 0;
+
+    HASH_FIND(hh, ssg_inst->group_table, &group_id.name_hash, sizeof(uint64_t), g);
+    if (!g)
+        return 0;
+
+    return g->group_view.size;
 }
 
 hg_addr_t ssg_get_addr(
     ssg_group_id_t group_id,
     ssg_member_id_t member_id)
 {
-    //if (rank >= 0 && rank < s->view.group_size)
-    return HG_ADDR_NULL;
+    ssg_group_t *g;
+
+    if (!ssg_inst)
+        return HG_ADDR_NULL;
+
+    HASH_FIND(hh, ssg_inst->group_table, &group_id.name_hash, sizeof(uint64_t), g);
+    if (!g)
+        return HG_ADDR_NULL;
+
+    return g->group_view.member_states[g->self_id].addr;
 }
 
 /************************************
