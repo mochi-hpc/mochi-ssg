@@ -17,10 +17,6 @@
 extern "C" {
 #endif
 
-#ifdef HAVE_MPI
-#include <mpi.h>
-#endif
-
 #include <mercury.h>
 #include <margo.h>
 
@@ -106,21 +102,6 @@ int ssg_group_create_config(
     const char * group_name,
     const char * file_name,
     ssg_group_id_t * group_id);
-
-#ifdef HAVE_MPI
-/**
- * Creates an SSG group from a given MPI communicator.
- *
- * @param[in]  group_name   Name of the SSG group
- * @param[in]  comm         MPI communicator containing group members
- * @param[out] group_id     Pointer to output SSG group ID
- * @returns SSG_SUCCESS on success, SSG error code otherwise
- */
-int ssg_group_create_mpi(
-    const char * group_name,
-    MPI_Comm comm,
-    ssg_group_id_t * group_id);
-#endif
 
 /**
  * Destroys data structures associated with a given SSG group ID.

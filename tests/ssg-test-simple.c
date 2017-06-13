@@ -17,6 +17,9 @@
 #include <mercury.h>
 #include <abt.h>
 #include <ssg.h>
+#if HAVE_MPI
+#include <ssg-mpi.h>
+#endif
 
 #define DIE_IF(cond_expr, err_fmt, ...) \
     do { \

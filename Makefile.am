@@ -5,8 +5,6 @@ bin_PROGRAMS =
 bin_SCRIPTS =
 noinst_LTLIBRARIES =
 noinst_PROGRAMS =
-lib_LTLIBRARIES =
-noinst_HEADERS =
 TESTS =
 XFAIL_TESTS = 
 check_PROGRAMS =
@@ -17,8 +15,11 @@ EXTRA_DIST =
 BUILT_SOURCES =
 src_libssg_la_SOURCES =
 include_HEADERS = include/ssg.h
-noinst_HEADERS += ssg-config.h
-lib_LTLIBRARIES += src/libssg.la
+if HAVE_MPI
+include_HEADERS += include/ssg-mpi.h
+endif 
+noinst_HEADERS = ssg-config.h
+lib_LTLIBRARIES = src/libssg.la
 
 EXTRA_DIST += prepare.sh
 
