@@ -24,6 +24,7 @@ extern "C" {
 
 /* debug printing macro for SSG */
 /* TODO: direct debug output to file? */
+/* TODO: how do we debug attachers? */
 #ifdef DEBUG
 #define SSG_DEBUG(__g, __fmt, ...) do { \
     double __now = ABT_get_wtime(); \
@@ -36,8 +37,7 @@ extern "C" {
 } while(0)
 #endif
 
-#define ssg_hashlittle2 hashlittle2
-extern void hashlittle2(const void *key, size_t length, uint32_t *pc, uint32_t *pb);
+/* SSG internal dataypes */
 
 typedef struct ssg_group ssg_group_t;
 typedef struct ssg_view ssg_view_t;
@@ -71,6 +71,19 @@ struct ssg_instance
     margo_instance_id mid;
     ssg_group_t *group_table;
 };
+
+/* SSG internal function prototypes */
+
+#define ssg_hashlittle2 hashlittle2
+extern void hashlittle2(const void *key, size_t length, uint32_t *pc, uint32_t *pb);
+
+void ssg_register_rpcs(
+    void);
+hg_return_t ssg_group_lookup(
+    ssg_group_t * g,
+    const char * const addr_strs[]);
+hg_return_t ssg_group_attach_send(
+    const char *member_addr_str);
 
 /* XXX: is this right? can this be a global? */
 extern ssg_instance_t *ssg_inst; 

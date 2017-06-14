@@ -1,4 +1,5 @@
 src_libssg_la_SOURCES += \
  src/ssg-internal.h \
  src/ssg.c \
+ src/ssg-rpc.c \
  src/lookup3.c
