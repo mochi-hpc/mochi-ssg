@@ -6,6 +6,9 @@
 
 #pragma once
 
+#include <mpi.h>
+#include <ssg.h>
+
 /**
  * Scalable Service Groups (SSG) interface
  *
@@ -15,9 +18,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <mpi.h>
-#include <ssg.h>
 
 /**
  * Creates an SSG group from a given MPI communicator.
