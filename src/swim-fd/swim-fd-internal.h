@@ -6,11 +6,11 @@
 
 #pragma once
 
+#include <ssg.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <ssg.h>
 
 /* SWIM protocol parameter defaults */
 #define SWIM_DEF_PROTOCOL_PERIOD_LEN    2000.0  /* milliseconds */

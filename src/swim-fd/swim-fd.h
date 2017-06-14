@@ -6,12 +6,12 @@
 
 #pragma once
 
+#include "ssg.h"
+#include "ssg-internal.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "ssg.h"
-#include "ssg-internal.h"
 
 /* opaque swim context type */
 typedef struct swim_context swim_context_t;

@@ -6,10 +6,6 @@
 
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stdint.h>
 #include <inttypes.h>
 
@@ -19,6 +15,10 @@ extern "C" {
 
 #include "ssg.h"
 #include "uthash.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define SSG_MAGIC_NR 17321588
 
