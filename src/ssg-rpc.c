@@ -164,6 +164,8 @@ hg_return_t ssg_group_attach_send(const char *member_addr_str)
     hret = margo_forward(ssg_inst->mid, handle, NULL);
     if (hret != HG_SUCCESS) goto fini;
 
+    /* XXX: store the obtained view locally to refer to */
+
     /* TODO: hold on to leader addr so we don't have to look it up again? */
 fini:
     if (hgcl && member_addr != HG_ADDR_NULL) HG_Addr_free(hgcl, member_addr);
@@ -174,9 +176,6 @@ fini:
 
 static void ssg_group_attach_recv_ult(hg_handle_t handle)
 {
-    /* XXX: store the obtained view locally to refer to */
-
-
     HG_Destroy(handle);
     return;
 }
