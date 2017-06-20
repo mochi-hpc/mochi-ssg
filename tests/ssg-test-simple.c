@@ -138,12 +138,12 @@ int main(int argc, char *argv[])
     DIE_IF(sret != SSG_SUCCESS, "ssg_init");
 
     if(strcmp(mode, "conf") == 0)
-        sret = ssg_group_create_config(group_name, conf_file, &g_id);
+        g_id = ssg_group_create_config(group_name, conf_file);
 #ifdef SSG_HAVE_MPI
     else if(strcmp(mode, "mpi") == 0)
-        sret = ssg_group_create_mpi(group_name, MPI_COMM_WORLD, &g_id);
+        g_id = ssg_group_create_mpi(group_name, MPI_COMM_WORLD);
 #endif
-    DIE_IF(sret != SSG_SUCCESS, "ssg_group_create");
+    DIE_IF(g_id == SSG_GROUP_ID_NULL, "ssg_group_create");
 
     /* sleep to give all group members a chance to create the group */
     if (sleep_time > 0) margo_thread_sleep(mid, sleep_time * 1000.0);

@@ -62,13 +62,6 @@ MERCURY_GEN_PROC(ssg_group_descriptor_t, \
     ((uint64_t) (name_hash)) \
     ((hg_string_t) (addr_str)));
 
-struct ssg_group_descriptor
-{
-    uint64_t magic_nr;
-    uint64_t name_hash;
-    char *addr_str;
-};
-
 struct ssg_group
 {
     char *group_name;

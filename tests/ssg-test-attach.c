@@ -136,8 +136,8 @@ int main(int argc, char *argv[])
 
     if (!is_attacher)
     {
-        sret = ssg_group_create_mpi(group_name, ssg_comm, &g_id);
-        DIE_IF(sret != SSG_SUCCESS, "ssg_group_create");
+        g_id = ssg_group_create_mpi(group_name, ssg_comm);
+        DIE_IF(g_id == SSG_GROUP_ID_NULL, "ssg_group_create");
 
         if (my_world_rank == 1)
             MPI_Send(&g_id, sizeof(g_id), MPI_BYTE, 0, 0, MPI_COMM_WORLD);
