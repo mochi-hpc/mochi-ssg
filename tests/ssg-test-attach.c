@@ -10,12 +10,17 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#ifdef SSG_HAVE_MPI
 #include <mpi.h>
+#endif
 
 #include <margo.h>
 #include <mercury.h>
 #include <abt.h>
 #include <ssg.h>
+#ifdef SSG_HAVE_MPI
+#include <ssg-mpi.h>
+#endif
 
 #define DIE_IF(cond_expr, err_fmt, ...) \
     do { \
@@ -30,13 +35,18 @@ static void usage()
 {
     fprintf(stderr,
         "Usage: "
-        "ssg-test-simple [-s <time>] <addr> \n"
-        "\t-s <time> - time to sleep after SSG group creation\n");
+        "ssg-test-attach [-s <time>] <addr> \n"
+        "\t-s <time> - time to sleep between SSG group operations\n");
 }
 
 static void parse_args(int argc, char *argv[], int *sleep_time, const char **addr_str)
 {
     int ndx = 1;
+
+#ifndef SSG_HAVE_MPI
+    fprintf(stderr, "Error: ssg-test-attach currently requries MPI support\n");
+    exit(1);
+#endif
 
     if (argc < 2)
     {
@@ -71,16 +81,15 @@ int main(int argc, char *argv[])
     const char *addr_str;
     const char *group_name = "simple_group";
     ssg_group_id_t g_id;
-    int my_world_rank;
-    int my_ssg_rank;
-    int color;
-    MPI_Comm ssg_comm;
+    int is_attacher = 0;
     int sret;
 
     parse_args(argc, argv, &sleep_time, &addr_str);
 
     ABT_init(argc, argv);
+#ifdef SSG_HAVE_MPI
     MPI_Init(&argc, &argv);
+#endif
 
     /* init HG */
     hgcl = HG_Init(addr_str, HG_TRUE);
@@ -96,39 +105,66 @@ int main(int argc, char *argv[])
     sret = ssg_init(mid);
     DIE_IF(sret != SSG_SUCCESS, "ssg_init");
 
+#ifdef SSG_HAVE_MPI
+    int my_world_rank;
+    int world_size;
+    int color;
+    MPI_Comm ssg_comm;
+
     /* create a communicator for the SSG group  */
     /* NOTE: rank 0 will not be in the group and will instead attach
      * as a client -- ranks 0:n-1 then represent the SSG group
      */
+    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+    if (world_size < 2)
+    {
+        fprintf(stderr, "Error: MPI_COMM_WORLD must contain at least 2 processes\n");
+        exit(1);
+    }
+
     MPI_Comm_rank(MPI_COMM_WORLD, &my_world_rank);
     if (my_world_rank == 0)
+    {
+        is_attacher = 1;
         color = MPI_UNDEFINED;
+    }
     else
+    {
         color = 0;
+    }
     MPI_Comm_split(MPI_COMM_WORLD, color, my_world_rank, &ssg_comm);
 
-    if (my_world_rank != 0)
+    if (!is_attacher)
     {
         sret = ssg_group_create_mpi(group_name, ssg_comm, &g_id);
         DIE_IF(sret != SSG_SUCCESS, "ssg_group_create");
+
+        if (my_world_rank == 1)
+            MPI_Send(&g_id, sizeof(g_id), MPI_BYTE, 0, 0, MPI_COMM_WORLD);
     }
+    else
+    {
+        MPI_Recv(&g_id, sizeof(g_id), MPI_BYTE, 1, 0, MPI_COMM_WORLD,
+            MPI_STATUS_IGNORE);
+    }
+#endif
 
     /* for now, just sleep to give all procs an opportunity to create the group */
     /* XXX: we could replace this with a barrier eventually */
     if (sleep_time > 0) margo_thread_sleep(mid, sleep_time * 1000.0);
 
-    /* XXX: cheat to get the group id from a member using MPI */
-
-
     /* attach client process to SSG server group */
-    if (my_world_rank == 0)
+    if (is_attacher)
     {
         sret = ssg_group_attach(g_id);
         DIE_IF(sret != SSG_SUCCESS, "ssg_group_attach");
     }
 
+    /* XXX: for now, just sleep to give the attacher a chance to attach */
+    if (sleep_time > 0) margo_thread_sleep(mid, sleep_time * 1000.0);
+
     /** cleanup **/
-    if (my_world_rank == 0)
+    if (is_attacher)
     {
         ssg_group_detach(g_id);
     }
@@ -143,7 +179,9 @@ int main(int argc, char *argv[])
     if(hgctx) HG_Context_destroy(hgctx);
     if(hgcl) HG_Finalize(hgcl);
 
+#ifdef SSG_HAVE_MPI
     MPI_Finalize();
+#endif
     ABT_finalize();
 
     return 0;

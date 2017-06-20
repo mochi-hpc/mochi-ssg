@@ -24,21 +24,13 @@ extern "C" {
 #define SSG_SUCCESS 0
 #define SSG_FAILURE (-1)
 
-#define SSG_MEMBER_ID_INVALID UINT64_MAX
 typedef uint64_t ssg_member_id_t;
+#define SSG_MEMBER_ID_NULL UINT64_MAX
 
-/* SSG group identifier datatype */
-/* TODO: this shouldn't be visible ... we can't use a typical
- * opaque pointer since we want to be able to xmit these to
- * other processes.
- */
-#define SSG_GROUP_ID_MAX_ADDR_LEN 64
-typedef struct ssg_group_id
-{
-    uint64_t magic_nr;
-    uint64_t name_hash;
-    char addr_str[SSG_GROUP_ID_MAX_ADDR_LEN];
-} ssg_group_id_t;
+/* opaque SSG group identifier type */
+struct ssg_group_descriptor;
+typedef struct ssg_group_descriptor *ssg_group_id_t;
+#define SSG_GROUP_ID_NULL ((ssg_group_id_t)NULL)
 
 /***************************************************
  *** SSG runtime intialization/shutdown routines ***
@@ -71,18 +63,16 @@ int ssg_finalize(
  * @param[in]  group_name       Name of the SSG group
  * @param[in]  group_addr_strs  Array of HG address strings for each group member
  * @param[in]  group_size       Number of group members
- * @param[out] group_id         Pointer to output SSG group ID
- * @returns SSG_SUCCESS on success, SSG error code otherwise
+ * @returns SSG group identifier on success, SSG_GROUP_ID_NULL otherwise
  *
  * NOTE: The HG address string of the caller of this function must be present in
  * the list of address strings given in 'group_addr_strs'. That is, the caller
  * of this function is required to be a member of the SSG group that is created.
  */
-int ssg_group_create(
+ssg_group_id_t ssg_group_create(
     const char * group_name,
     const char * const group_addr_strs[],
-    int group_size,
-    ssg_group_id_t * group_id);
+    int group_size);
 
 /**
  * Creates an SSG group from a given config file containing the HG address strings
@@ -92,16 +82,15 @@ int ssg_group_create(
  * @param[in]  file_name    Name of the config file containing the corresponding
  *                          HG address strings for this group
  * @param[out] group_id     Pointer to output SSG group ID
- * @returns SSG_SUCCESS on success, SSG error code otherwise
+ * @returns SSG group identifier on success, SSG_GROUP_ID_NULL otherwise
  * 
  * NOTE: The HG address string of the caller of this function must be present in
  * the list of address strings given in the config file. That is, the caller of
  * this function is required to be a member of the SSG group that is created.
  */
-int ssg_group_create_config(
+ssg_group_id_t ssg_group_create_config(
     const char * group_name,
-    const char * file_name,
-    ssg_group_id_t * group_id);
+    const char * file_name);
 
 /**
  * Destroys data structures associated with a given SSG group ID.
@@ -142,7 +131,7 @@ int ssg_group_detach(
  * Obtains the caller's member ID in the given SSG group.
  *
  * @param[in] group_id SSG group ID
- * @returns caller's group ID on success, SSG_MEMBER_ID_INVALID otherwise
+ * @returns caller's group ID on success, SSG_MEMBER_ID_NULL otherwise
  */
 ssg_member_id_t ssg_get_group_self_id(
     ssg_group_id_t group_id);

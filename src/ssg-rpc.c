@@ -15,9 +15,12 @@
 #include "ssg.h"
 #include "ssg-internal.h"
 
-/* SSG RPCS handlers */
+/* SSG RPCS handler prototypes */
 static void ssg_lookup_ult(void * arg);
 DECLARE_MARGO_RPC_HANDLER(ssg_group_attach_recv_ult)
+
+/* SSG RPC (de)serialization routine prototypes */
+static hg_return_t hg_proc_ssg_group_id_t(hg_proc_t proc, void *data);
 
 /* SSG RPC ids */
 static hg_id_t ssg_group_attach_rpc_id;
@@ -34,8 +37,8 @@ void ssg_register_rpcs()
     if (!hgcl) return;
 
     /* register HG RPCs for SSG */
-    ssg_group_attach_rpc_id = MERCURY_REGISTER(hgcl, "ssg_attach", void, void,
-        ssg_group_attach_recv_ult_handler);
+    ssg_group_attach_rpc_id = MERCURY_REGISTER(hgcl, "ssg_group_attach",
+        ssg_group_descriptor_t, void, ssg_group_attach_recv_ult_handler);
 
     return;
 }
@@ -58,7 +61,7 @@ hg_return_t ssg_group_lookup(
 {
     ABT_thread *ults;
     struct lookup_ult_args *args;
-    int i, r;
+    unsigned int i, r;
     int aret;
     hg_return_t hret = HG_SUCCESS;
 
@@ -142,7 +145,7 @@ static void ssg_lookup_ult(
  *
  *
  */
-hg_return_t ssg_group_attach_send(const char *member_addr_str)
+hg_return_t ssg_group_attach_send(ssg_group_descriptor_t * group_descriptor)
 {
     hg_class_t *hgcl = NULL;
     hg_addr_t member_addr = HG_ADDR_NULL;
@@ -153,7 +156,8 @@ hg_return_t ssg_group_attach_send(const char *member_addr_str)
     if (!hgcl) goto fini;
 
     /* lookup the address of the given group member */
-    hret = margo_addr_lookup(ssg_inst->mid, member_addr_str, &member_addr);
+    hret = margo_addr_lookup(ssg_inst->mid, group_descriptor->addr_str,
+        &member_addr);
     if (hret != HG_SUCCESS) goto fini;
 
     hret = HG_Create(margo_get_context(ssg_inst->mid), member_addr,
@@ -161,10 +165,8 @@ hg_return_t ssg_group_attach_send(const char *member_addr_str)
     if (hret != HG_SUCCESS) goto fini;
 
     /* send an attach request to the given group member address */
-    hret = margo_forward(ssg_inst->mid, handle, NULL);
+    hret = margo_forward(ssg_inst->mid, handle, group_descriptor);
     if (hret != HG_SUCCESS) goto fini;
-
-    /* XXX: store the obtained view locally to refer to */
 
     /* TODO: hold on to leader addr so we don't have to look it up again? */
 fini:
@@ -176,7 +178,55 @@ fini:
 
 static void ssg_group_attach_recv_ult(hg_handle_t handle)
 {
+    ssg_group_t *g = NULL;
+    ssg_group_descriptor_t group_descriptor;
+    hg_return_t hret;
+
+    /* TODO: how to handle errors */
+    if (!ssg_inst) goto fini;
+
+    hret = HG_Get_input(handle, &group_descriptor);
+    if (hret != HG_SUCCESS) goto fini;
+
+    /* look for the given group in my local table of groups */
+    HASH_FIND(hh, ssg_inst->group_table, &group_descriptor.name_hash,
+        sizeof(uint64_t), g);
+    if (!g)
+    {
+        HG_Free_input(handle, &group_descriptor);
+        goto fini;
+    }
+
+    margo_respond(ssg_inst->mid, handle, NULL);
+
+    HG_Free_input(handle, &group_descriptor);
+
+fini:
     HG_Destroy(handle);
     return;
 }
 DEFINE_MARGO_RPC_HANDLER(ssg_group_attach_recv_ult)
+
+/* SSG RPC (de)serialization routines */
+
+#if 0
+static hg_return_t hg_proc_ssg_group_id_t(hg_proc_t proc, void *data)
+{
+    ssg_group_descriptor_t *group_descriptor = (ssg_group_descriptor_t *)data;
+    hg_return_t hret = HG_PROTOCOL_ERROR;
+
+    switch(hg_proc_get_op(proc))
+    {
+        case HG_ENCODE:
+            break;
+        case HG_DECODE:
+            break;
+        case HG_FREE:
+            break;
+        default:
+            break;
+    }
+
+    return hret;
+}
+#endif

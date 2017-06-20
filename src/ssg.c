@@ -33,9 +33,8 @@
 #include "uthash.h"
 
 /* SSG helper routine prototypes */
-static void ssg_generate_group_id(
-    const char * name, const char * leader_addr_str,
-    ssg_group_id_t *group_id);
+static ssg_group_descriptor_t * ssg_generate_group_descriptor(
+    const char * name, const char * leader_addr_str);
 static const char ** ssg_setup_addr_str_list(
     char * buf, int num_addrs);
 static int ssg_group_destroy_internal(
@@ -90,11 +89,10 @@ int ssg_finalize()
  *** SSG group management routines ***
  *************************************/
 
-int ssg_group_create(
+ssg_group_id_t ssg_group_create(
     const char * group_name,
     const char * const group_addr_strs[],
-    int group_size,
-    ssg_group_id_t * group_id)
+    int group_size)
 {
     hg_class_t *hgcl = NULL;
     hg_addr_t self_addr = HG_ADDR_NULL;
@@ -103,10 +101,10 @@ int ssg_group_create(
     const char *self_addr_substr = NULL;
     const char *addr_substr = NULL;
     int i;
+    ssg_group_descriptor_t *group_descriptor = NULL;
     ssg_group_t *g = NULL;
-    ssg_group_id_t new_gid;
     hg_return_t hret;
-    int sret = SSG_FAILURE;
+    ssg_group_id_t group_id = SSG_GROUP_ID_NULL;
 
     if (!ssg_inst) goto fini;
 
@@ -114,10 +112,12 @@ int ssg_group_create(
     if (!hgcl) goto fini;
 
     /* generate a unique ID for this group  */
-    ssg_generate_group_id(group_name, group_addr_strs[0], &new_gid);
+    group_descriptor = ssg_generate_group_descriptor(group_name, group_addr_strs[0]);
+    if (group_descriptor == NULL) goto fini;
 
-    /* make sure we aren't re-adding an existing group */
-    HASH_FIND(hh, ssg_inst->group_table, &new_gid.name_hash, sizeof(uint64_t), g);
+    /* make sure we aren't re-creating an existing group */
+    HASH_FIND(hh, ssg_inst->group_table, &group_descriptor->name_hash,
+        sizeof(uint64_t), g);
     if (g) goto fini;
 
     /* allocate an SSG group data structure and initialize some of it */
@@ -126,7 +126,7 @@ int ssg_group_create(
     memset(g, 0, sizeof(*g));
     g->group_name = strdup(group_name);
     if (!g->group_name) goto fini;
-    memcpy(&g->group_id, &new_gid, sizeof(new_gid));
+    g->group_descriptor = group_descriptor;
     // TODO? g->self_id = -1;
     g->group_view.size = group_size;
     g->group_view.member_states = malloc(
@@ -194,7 +194,6 @@ int ssg_group_create(
             group_name);
         goto fini;
     }
-    SSG_DEBUG(g, "group lookup successful (size=%d)\n", group_size);
 
 #ifdef SSG_USE_SWIM_FD
     int swim_active = 1;
@@ -211,18 +210,24 @@ int ssg_group_create(
 #endif
 
     /* add this group reference to our group table */
-    HASH_ADD(hh, ssg_inst->group_table, group_id.name_hash, sizeof(uint64_t), g);
+    HASH_ADD(hh, ssg_inst->group_table, group_descriptor->name_hash,
+        sizeof(uint64_t), g);
 
-    /* everything successful -- set the output for this call */
-    memcpy(group_id, &new_gid, sizeof(new_gid));
-    sret = SSG_SUCCESS;
+    /* everything successful -- set the output group identifier, which is just
+     * an opaque pointer to the group descriptor structure
+     */
+    group_id = (ssg_group_id_t)group_descriptor;
+
+    SSG_DEBUG(g, "group create successful (size=%d)\n", group_size);
 
     /* don't free these pointers on success */
+    group_descriptor = NULL;
     self_addr = HG_ADDR_NULL;
     g = NULL;
 fini:
     if (hgcl && self_addr != HG_ADDR_NULL) HG_Addr_free(hgcl, self_addr);
     free(self_addr_str);
+    free(group_descriptor);
     if (g)
     {
         free(g->group_name);
@@ -230,13 +235,12 @@ fini:
         free(g);
     }
 
-    return sret;
+    return group_id;
 }
 
-int ssg_group_create_config(
+ssg_group_id_t ssg_group_create_config(
     const char * group_name,
-    const char * file_name,
-    ssg_group_id_t * group_id)
+    const char * file_name)
 {
     int fd;
     struct stat st;
@@ -247,7 +251,7 @@ int ssg_group_create_config(
     int addr_buf_len = 0, num_addrs = 0;
     int ret;
     const char **addr_strs = NULL;
-    int sret = SSG_FAILURE;
+    ssg_group_id_t group_id = SSG_GROUP_ID_NULL;
 
     /* open config file for reading */
     fd = open(file_name, O_RDONLY);
@@ -309,7 +313,7 @@ int ssg_group_create_config(
     if (!addr_strs) goto fini;
 
     /* invoke the generic group create routine using our list of addrs */
-    sret = ssg_group_create(group_name, addr_strs, num_addrs, group_id);
+    group_id = ssg_group_create(group_name, addr_strs, num_addrs);
 
 fini:
     /* cleanup before returning */
@@ -318,14 +322,13 @@ fini:
     free(addr_buf);
     free(addr_strs);
 
-    return sret;
+    return group_id;
 }
 
 #ifdef SSG_HAVE_MPI
-int ssg_group_create_mpi(
+ssg_group_id_t ssg_group_create_mpi(
     const char * group_name,
-    MPI_Comm comm,
-    ssg_group_id_t * group_id)
+    MPI_Comm comm)
 {
     hg_class_t *hgcl = NULL;
     hg_addr_t self_addr = HG_ADDR_NULL;
@@ -338,7 +341,7 @@ int ssg_group_create_mpi(
     int comm_size = 0, comm_rank = 0;
     const char **addr_strs = NULL;
     hg_return_t hret;
-    int sret = SSG_FAILURE;
+    ssg_group_id_t group_id = SSG_GROUP_ID_NULL;
 
     if (!ssg_inst) goto fini;
 
@@ -384,7 +387,7 @@ int ssg_group_create_mpi(
     if (!addr_strs) goto fini;
 
     /* invoke the generic group create routine using our list of addrs */
-    sret = ssg_group_create(group_name, addr_strs, comm_size, group_id);
+    group_id = ssg_group_create(group_name, addr_strs, comm_size);
 
 fini:
     /* cleanup before returning */
@@ -395,21 +398,23 @@ fini:
     free(self_addr_str);
     free(addr_strs);
 
-    return sret;
+    return group_id;
 }
 #endif
 
 int ssg_group_destroy(
     ssg_group_id_t group_id)
 {
+    ssg_group_descriptor_t *group_descriptor = (ssg_group_descriptor_t *)group_id;
     ssg_group_t *g;
     int sret;
 
-    if (!ssg_inst)
+    if (!ssg_inst || group_id == SSG_GROUP_ID_NULL)
         return SSG_FAILURE;
 
     /* find the group structure and destroy it */
-    HASH_FIND(hh, ssg_inst->group_table, &group_id.name_hash, sizeof(uint64_t), g);
+    HASH_FIND(hh, ssg_inst->group_table, &group_descriptor->name_hash,
+        sizeof(uint64_t), g);
     HASH_DELETE(hh, ssg_inst->group_table, g);
     sret = ssg_group_destroy_internal(g);
 
@@ -419,13 +424,13 @@ int ssg_group_destroy(
 int ssg_group_attach(
     ssg_group_id_t group_id)
 {
+    ssg_group_descriptor_t *group_descriptor = (ssg_group_descriptor_t *)group_id;
     hg_return_t hret;
 
-    if (!ssg_inst)
+    if (!ssg_inst || group_id == SSG_GROUP_ID_NULL)
         return SSG_FAILURE;
 
-    /* XXX: for now just send to the 1 member addr in the group id */
-    hret = ssg_group_attach_send(group_id.addr_str);
+    hret = ssg_group_attach_send(group_descriptor);
     if (hret != HG_SUCCESS)
         return SSG_FAILURE;
 
@@ -445,14 +450,16 @@ int ssg_group_detach(
 ssg_member_id_t ssg_get_group_self_id(
     ssg_group_id_t group_id)
 {
+    ssg_group_descriptor_t *group_descriptor = (ssg_group_descriptor_t *)group_id;
     ssg_group_t *g;
 
-    if (!ssg_inst)
-        return SSG_MEMBER_ID_INVALID;
+    if (!ssg_inst || group_id == SSG_GROUP_ID_NULL)
+        return SSG_MEMBER_ID_NULL;
 
-    HASH_FIND(hh, ssg_inst->group_table, &group_id.name_hash, sizeof(uint64_t), g);
+    HASH_FIND(hh, ssg_inst->group_table, &group_descriptor->name_hash,
+        sizeof(uint64_t), g);
     if (!g)
-        return SSG_MEMBER_ID_INVALID;
+        return SSG_MEMBER_ID_NULL;
 
     return g->self_id;
 }
@@ -460,12 +467,14 @@ ssg_member_id_t ssg_get_group_self_id(
 int ssg_get_group_size(
     ssg_group_id_t group_id)
 {
+    ssg_group_descriptor_t *group_descriptor = (ssg_group_descriptor_t *)group_id;
     ssg_group_t *g;
 
-    if (!ssg_inst)
+    if (!ssg_inst || group_id == SSG_GROUP_ID_NULL)
         return 0;
 
-    HASH_FIND(hh, ssg_inst->group_table, &group_id.name_hash, sizeof(uint64_t), g);
+    HASH_FIND(hh, ssg_inst->group_table, &group_descriptor->name_hash,
+        sizeof(uint64_t), g);
     if (!g)
         return 0;
 
@@ -476,12 +485,14 @@ hg_addr_t ssg_get_addr(
     ssg_group_id_t group_id,
     ssg_member_id_t member_id)
 {
+    ssg_group_descriptor_t *group_descriptor = (ssg_group_descriptor_t *)group_id;
     ssg_group_t *g;
 
-    if (!ssg_inst)
+    if (!ssg_inst || group_id == SSG_GROUP_ID_NULL)
         return HG_ADDR_NULL;
 
-    HASH_FIND(hh, ssg_inst->group_table, &group_id.name_hash, sizeof(uint64_t), g);
+    HASH_FIND(hh, ssg_inst->group_table, &group_descriptor->name_hash,
+        sizeof(uint64_t), g);
     if (!g)
         return HG_ADDR_NULL;
 
@@ -492,20 +503,28 @@ hg_addr_t ssg_get_addr(
  *** SSG internal helper routines ***
  ************************************/
 
-static void ssg_generate_group_id(
-    const char * name, const char * leader_addr_str,
-    ssg_group_id_t *group_id)
+static ssg_group_descriptor_t * ssg_generate_group_descriptor(
+    const char * name, const char * leader_addr_str)
 {
+    ssg_group_descriptor_t *group_descriptor;
     uint32_t upper, lower;
+
+    group_descriptor = malloc(sizeof(*group_descriptor));
+    if (!group_descriptor) return NULL;
 
     /* hash the group name to obtain an 64-bit unique ID */
     ssg_hashlittle2(name, strlen(name), &lower, &upper);
 
-    group_id->magic_nr = SSG_MAGIC_NR;
-    group_id->name_hash = lower + (((uint64_t)upper)<<32);
-    strcpy(group_id->addr_str, leader_addr_str);
+    group_descriptor->magic_nr = SSG_MAGIC_NR;
+    group_descriptor->name_hash = lower + (((uint64_t)upper)<<32);
+    group_descriptor->addr_str = strdup(leader_addr_str);
+    if (!group_descriptor->addr_str)
+    {
+        free(group_descriptor);
+        return NULL;
+    }
 
-    return;
+    return group_descriptor;
 }
 
 static const char ** ssg_setup_addr_str_list(
@@ -525,7 +544,7 @@ static const char ** ssg_setup_addr_str_list(
 
 static int ssg_group_destroy_internal(ssg_group_t *g)
 {
-    int i;
+    unsigned int i;
 
     /* TODO: send a leave message to the group ? */
 

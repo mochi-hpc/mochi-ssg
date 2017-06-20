@@ -24,13 +24,11 @@ extern "C" {
  *
  * @param[in]  group_name   Name of the SSG group
  * @param[in]  comm         MPI communicator containing group members
- * @param[out] group_id     Pointer to output SSG group ID
- * @returns SSG_SUCCESS on success, SSG error code otherwise
+ * @returns SSG group identifier on success, SSG_GROUP_ID_NULL otherwise
  */
-int ssg_group_create_mpi(
+ssg_group_id_t ssg_group_create_mpi(
     const char * group_name,
-    MPI_Comm comm,
-    ssg_group_id_t * group_id);
+    MPI_Comm comm);
 
 #ifdef __cplusplus
 }

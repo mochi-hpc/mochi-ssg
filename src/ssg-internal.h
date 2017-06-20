@@ -10,6 +10,7 @@
 #include <inttypes.h>
 
 #include <mercury.h>
+#include <mercury_proc_string.h>
 #include <abt.h>
 #include <margo.h>
 
@@ -39,9 +40,9 @@ extern "C" {
 
 /* SSG internal dataypes */
 
-typedef struct ssg_group ssg_group_t;
-typedef struct ssg_view ssg_view_t;
 typedef struct ssg_member_state ssg_member_state_t;
+typedef struct ssg_view ssg_view_t;
+typedef struct ssg_group ssg_group_t;
 typedef struct ssg_instance ssg_instance_t;
 
 struct ssg_member_state
@@ -52,16 +53,28 @@ struct ssg_member_state
 
 struct ssg_view
 {
-    int size;
+    uint32_t size;
     ssg_member_state_t *member_states;
+};
+
+MERCURY_GEN_PROC(ssg_group_descriptor_t, \
+    ((uint64_t) (magic_nr)) \
+    ((uint64_t) (name_hash)) \
+    ((hg_string_t) (addr_str)));
+
+struct ssg_group_descriptor
+{
+    uint64_t magic_nr;
+    uint64_t name_hash;
+    char *addr_str;
 };
 
 struct ssg_group
 {
     char *group_name;
-    ssg_group_id_t group_id;
-    ssg_member_id_t self_id;
+    ssg_group_descriptor_t *group_descriptor;
     ssg_view_t group_view;
+    ssg_member_id_t self_id;
     void *fd_ctx; /* failure detector context (currently just SWIM) */
     UT_hash_handle hh;
 };
@@ -83,7 +96,7 @@ hg_return_t ssg_group_lookup(
     ssg_group_t * g,
     const char * const addr_strs[]);
 hg_return_t ssg_group_attach_send(
-    const char *member_addr_str);
+    ssg_group_descriptor_t *group_descriptor);
 
 /* XXX: is this right? can this be a global? */
 extern ssg_instance_t *ssg_inst; 
