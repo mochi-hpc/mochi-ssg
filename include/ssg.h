@@ -25,10 +25,9 @@ extern "C" {
 #define SSG_FAILURE (-1)
 
 typedef uint64_t ssg_member_id_t;
-#define SSG_MEMBER_ID_NULL UINT64_MAX
+#define SSG_MEMBER_ID_INVALID UINT64_MAX
 
 /* opaque SSG group identifier type */
-struct ssg_group_descriptor;
 typedef struct ssg_group_descriptor *ssg_group_id_t;
 #define SSG_GROUP_ID_NULL ((ssg_group_id_t)NULL)
 
@@ -134,7 +133,7 @@ int ssg_group_detach(
  * Obtains the caller's member ID in the given SSG group.
  *
  * @param[in] group_id SSG group ID
- * @returns caller's group ID on success, SSG_MEMBER_ID_NULL otherwise
+ * @returns caller's group ID on success, SSG_MEMBER_ID_INVALID otherwise
  */
 ssg_member_id_t ssg_get_group_self_id(
     ssg_group_id_t group_id);

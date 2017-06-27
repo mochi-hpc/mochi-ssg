@@ -16,12 +16,12 @@ extern "C" {
 /* opaque swim context type */
 typedef struct swim_context swim_context_t;
 
-swim_context_t *swim_init(
-    ssg_group_t *g,
+swim_context_t * swim_init(
+    ssg_group_t * g,
     int active);
 
 void swim_finalize(
-    swim_context_t *swim_ctx);
+    swim_context_t * swim_ctx);
 
 #ifdef __cplusplus
 }

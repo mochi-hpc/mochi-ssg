@@ -178,7 +178,7 @@ ssg_group_id_t ssg_group_create(
     sret = ssg_group_view_create(group_addr_strs, self_addr_str, group_size,
         &g->view, &g->self_id);
     if (sret != SSG_SUCCESS) goto fini;
-    if (g->self_id == SSG_MEMBER_ID_NULL)
+    if (g->self_id == SSG_MEMBER_ID_INVALID)
     {
         /* if unable to resolve my rank within the group, error out */
         fprintf(stderr, "Error: SSG unable to resolve rank in group %s\n",
@@ -535,19 +535,19 @@ ssg_member_id_t ssg_get_group_self_id(
     ssg_group_t *g;
 
     if (!ssg_inst || group_id == SSG_GROUP_ID_NULL)
-        return SSG_MEMBER_ID_NULL;
+        return SSG_MEMBER_ID_INVALID;
 
     if (group_descriptor->owner_status != SSG_OWNER_IS_MEMBER)
     {
         fprintf(stderr, "Error: SSG can only obtain a self ID from a group the" \
             " caller is a member of\n");
-        return SSG_MEMBER_ID_NULL;
+        return SSG_MEMBER_ID_INVALID;
     }
 
     HASH_FIND(hh, ssg_inst->group_table, &group_descriptor->name_hash,
         sizeof(uint64_t), g);
     if (!g)
-        return SSG_MEMBER_ID_NULL;
+        return SSG_MEMBER_ID_INVALID;
 
     return g->self_id;
 }
@@ -827,7 +827,7 @@ static int ssg_group_view_create(
         else
             self_addr_substr += 3;
 
-        *self_id = SSG_MEMBER_ID_NULL;
+        *self_id = SSG_MEMBER_ID_INVALID;
     }
 
     /* kickoff ULTs to lookup the address of each group member */

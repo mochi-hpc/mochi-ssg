@@ -19,15 +19,15 @@
 #include "swim-fd.h"
 #include "swim-fd-internal.h"
 
-/* NOTE these defines must be kept in sync with typedefs in
- * swim-internal.h
+/* NOTE these defines must be kept in sync with defs in
+ * ssg.h & swim-internal.h
  */
-#define hg_proc_swim_member_id_t hg_proc_int64_t
+#define hg_proc_ssg_member_id_t hg_proc_int64_t
 #define hg_proc_swim_member_status_t hg_proc_uint8_t
 #define hg_proc_swim_member_inc_nr_t hg_proc_uint32_t
 
 MERCURY_GEN_STRUCT_PROC(swim_member_update_t, \
-    ((swim_member_id_t) (id)) \
+    ((ssg_member_id_t) (id)) \
     ((swim_member_status_t) (status)) \
     ((swim_member_inc_nr_t) (inc_nr)));
 
@@ -36,7 +36,7 @@ MERCURY_GEN_STRUCT_PROC(swim_member_update_t, \
  */
 typedef struct swim_message_s
 {
-    swim_member_id_t source_id;
+    ssg_member_id_t source_id;
     swim_member_inc_nr_t source_inc_nr;
     swim_member_update_t pb_buf[SWIM_MAX_PIGGYBACK_ENTRIES]; //TODO: can we do dynamic array instead?
 } swim_message_t;
@@ -52,7 +52,7 @@ MERCURY_GEN_PROC(swim_dping_resp_t, \
     ((swim_message_t) (msg)));
 
 MERCURY_GEN_PROC(swim_iping_req_t, \
-    ((swim_member_id_t) (target_id)) \
+    ((ssg_member_id_t) (target_id)) \
     ((swim_message_t) (msg)));
 
 MERCURY_GEN_PROC(swim_iping_resp_t, \
@@ -73,7 +73,7 @@ static hg_id_t swim_iping_rpc_id;
 void swim_register_ping_rpcs(
     ssg_group_t *g)
 {
-    hg_class_t *hg_cls = margo_get_class(ssg_mid);
+    hg_class_t *hg_cls = margo_get_class(ssg_inst->mid);
 
     /* register RPC handlers for SWIM pings */
     swim_dping_rpc_id = MERCURY_REGISTER(hg_cls, "swim_dping", swim_dping_req_t,
@@ -82,7 +82,7 @@ void swim_register_ping_rpcs(
         swim_iping_resp_t, swim_iping_recv_ult_handler);
 
     /* register swim context data structure with each RPC type */
-    /* TODO: this won't work */
+    /* XXX: this won't work for multiple groups ... */
     HG_Register_data(hg_cls, swim_dping_rpc_id, g, NULL);
     HG_Register_data(hg_cls, swim_iping_rpc_id, g, NULL);
 
@@ -94,14 +94,14 @@ void swim_register_ping_rpcs(
  ********************************/
 
 static int swim_send_dping(
-    ssg_group_t *g, swim_member_id_t target);
+    ssg_group_t *g, ssg_member_id_t target);
 
 void swim_dping_send_ult(
     void *t_arg)
 {
     ssg_group_t *g = (ssg_group_t *)t_arg;
     swim_context_t *swim_ctx;
-    swim_member_id_t target;
+    ssg_member_id_t target;
     int ret;
 
     assert(g != NULL);
@@ -124,7 +124,7 @@ void swim_dping_send_ult(
 }
 
 static int swim_send_dping(
-    ssg_group_t *g, swim_member_id_t target)
+    ssg_group_t *g, ssg_member_id_t target)
 {
     swim_context_t *swim_ctx = (swim_context_t *)g->fd_ctx;
     hg_addr_t target_addr = HG_ADDR_NULL;
@@ -138,7 +138,7 @@ static int swim_send_dping(
     if(target_addr == HG_ADDR_NULL)
         return(ret);
 
-    hret = HG_Create(margo_get_context(ssg_mid), target_addr, swim_dping_rpc_id,
+    hret = HG_Create(margo_get_context(ssg_inst->mid), target_addr, swim_dping_rpc_id,
         &handle);
     if(hret != HG_SUCCESS)
         return(ret);
@@ -149,7 +149,7 @@ static int swim_send_dping(
     swim_pack_message(g, &(dping_req.msg));
 
     /* send a direct ping that expires at the end of the protocol period */
-    hret = margo_forward_timed(ssg_mid, handle, &dping_req,
+    hret = margo_forward_timed(ssg_inst->mid, handle, &dping_req,
         swim_ctx->prot_period_len);
     if (hret == HG_SUCCESS)
     {
@@ -194,7 +194,7 @@ static void swim_dping_recv_ult(hg_handle_t handle)
 
 #ifdef SWIM_FORCE_FAIL
     int drop = 1;
-    if (g->self_rank == 1 && drop) goto fini;
+    if (g->self_id == 1 && drop) goto fini;
 #endif
 
     hret = HG_Get_input(handle, &dping_req);
@@ -211,7 +211,7 @@ static void swim_dping_recv_ult(hg_handle_t handle)
     SSG_DEBUG(g, "SWIM: send dping ack to %d\n", (int)dping_req.msg.source_id);
 
     /* respond to sender of the dping req */
-    margo_respond(ssg_mid, handle, &dping_resp);
+    margo_respond(ssg_inst->mid, handle, &dping_resp);
 
     HG_Free_input(handle, &dping_req);
 fini:
@@ -230,7 +230,7 @@ void swim_iping_send_ult(
     ssg_group_t *g = (ssg_group_t *)t_arg;
     swim_context_t *swim_ctx;
     int i;
-    swim_member_id_t my_subgroup_member = SWIM_MEMBER_RANK_UNKNOWN;
+    ssg_member_id_t my_subgroup_member = SSG_MEMBER_ID_INVALID;
     hg_addr_t target_addr = HG_ADDR_NULL;
     hg_handle_t handle;
     swim_iping_req_t iping_req;
@@ -243,20 +243,20 @@ void swim_iping_send_ult(
 
     for(i = 0; i < swim_ctx->prot_subgroup_sz; i++)
     {
-        if(swim_ctx->subgroup_members[i] != SWIM_MEMBER_RANK_UNKNOWN)
+        if(swim_ctx->subgroup_members[i] != SSG_MEMBER_ID_INVALID)
         {
             my_subgroup_member = swim_ctx->subgroup_members[i];
-            swim_ctx->subgroup_members[i] = SWIM_MEMBER_RANK_UNKNOWN;
+            swim_ctx->subgroup_members[i] = SSG_MEMBER_ID_INVALID;
             break;
         }
     }
-    assert(my_subgroup_member != SWIM_MEMBER_RANK_UNKNOWN);
+    assert(my_subgroup_member != SSG_MEMBER_ID_INVALID);
 
     target_addr = g->view.member_states[my_subgroup_member].addr;
     if(target_addr == HG_ADDR_NULL)
         return;
 
-    hret = HG_Create(margo_get_context(ssg_mid), target_addr, swim_iping_rpc_id,
+    hret = HG_Create(margo_get_context(ssg_inst->mid), target_addr, swim_iping_rpc_id,
         &handle);
     if(hret != HG_SUCCESS)
         return;
@@ -275,7 +275,7 @@ void swim_iping_send_ult(
      * the dping timeout, which should cause this iping to timeout
      * right at the end of the current protocol period.
      */
-    hret = margo_forward_timed(ssg_mid, handle, &iping_req,
+    hret = margo_forward_timed(ssg_inst->mid, handle, &iping_req,
         (swim_ctx->prot_period_len - swim_ctx->dping_timeout));
     if (hret == HG_SUCCESS)
     {
@@ -328,7 +328,7 @@ static void swim_iping_recv_ult(hg_handle_t handle)
 
 #ifdef SWIM_FORCE_FAIL
     int drop = 1;
-    if (g->self_rank == 1 && drop) goto fini;
+    if (g->self_id == 1 && drop) goto fini;
 #endif
 
     hret = HG_Get_input(handle, &iping_req);
@@ -353,7 +353,7 @@ static void swim_iping_recv_ult(hg_handle_t handle)
             (int)iping_req.msg.source_id, (int)iping_req.target_id);
 
         /* respond to sender of the iping req */
-        margo_respond(ssg_mid, handle, &iping_resp);
+        margo_respond(ssg_inst->mid, handle, &iping_resp);
     }
 
     HG_Free_input(handle, &iping_req);
@@ -375,8 +375,8 @@ static void swim_pack_message(ssg_group_t *g, swim_message_t *msg)
     memset(msg, 0, sizeof(*msg));
 
     /* fill in self information */
-    msg->source_id = g->self_rank;
-    msg->source_inc_nr = swim_ctx->member_inc_nrs[g->self_rank];
+    msg->source_id = g->self_id;
+    msg->source_inc_nr = swim_ctx->member_inc_nrs[g->self_id];
 
     /* piggyback a set of membership states on this message */
     swim_retrieve_membership_updates(g, msg->pb_buf, SWIM_MAX_PIGGYBACK_ENTRIES);
@@ -410,7 +410,7 @@ static hg_return_t hg_proc_swim_message_t(hg_proc_t proc, void *data)
     switch(hg_proc_get_op(proc))
     {
         case HG_ENCODE:
-            hret = hg_proc_swim_member_id_t(proc, &(msg->source_id));
+            hret = hg_proc_ssg_member_id_t(proc, &(msg->source_id));
             if(hret != HG_SUCCESS)
             {
                 hret = HG_PROTOCOL_ERROR;
@@ -433,7 +433,7 @@ static hg_return_t hg_proc_swim_message_t(hg_proc_t proc, void *data)
             }
             break;
         case HG_DECODE:
-            hret = hg_proc_swim_member_id_t(proc, &(msg->source_id));
+            hret = hg_proc_ssg_member_id_t(proc, &(msg->source_id));
             if(hret != HG_SUCCESS)
             {
                 hret = HG_PROTOCOL_ERROR;

@@ -150,7 +150,7 @@ int main(int argc, char *argv[])
 
     /* get my group id and the size of the group */
     my_id = ssg_get_group_self_id(g_id);
-    DIE_IF(my_id == SSG_MEMBER_ID_NULL, "ssg_get_group_self_id");
+    DIE_IF(my_id == SSG_MEMBER_ID_INVALID, "ssg_get_group_self_id");
     group_size = ssg_get_group_size(g_id);
     DIE_IF(group_size == 0, "ssg_get_group_size");
     printf("group member %d of %d successfully created group\n",
