@@ -241,6 +241,7 @@ static void group_id_forward_recv_ult(hg_handle_t handle)
 {
     const struct hg_info *info;
     struct group_id_forward_context *group_id_forward_ctx;
+    ssg_group_id_t tmp_g_id;
     hg_return_t hret;
 
     info = HG_Get_info(handle);
@@ -249,12 +250,14 @@ static void group_id_forward_recv_ult(hg_handle_t handle)
         info->hg_class, info->id);
     DIE_IF(group_id_forward_ctx == NULL, "HG_Registered_data");
 
-    hret = HG_Get_input(handle, group_id_forward_ctx->g_id_p);
+    hret = HG_Get_input(handle, &tmp_g_id);
     DIE_IF(hret != HG_SUCCESS, "HG_Get_input");
+
+    *(group_id_forward_ctx->g_id_p) = ssg_group_id_dup(tmp_g_id);
 
     margo_respond(group_id_forward_ctx->mid, handle, NULL);
 
-    HG_Free_input(handle, group_id_forward_ctx->g_id_p);
+    HG_Free_input(handle, &tmp_g_id);
     HG_Destroy(handle);
     return;
 }

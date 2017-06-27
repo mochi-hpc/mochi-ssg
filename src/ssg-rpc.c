@@ -316,21 +316,15 @@ hg_return_t hg_proc_ssg_group_id_t(
                 hret = HG_NOMEM_ERROR;
                 return hret;
             }
+            memset(*group_descriptor, 0, sizeof(**group_descriptor));
             hret = hg_proc_ssg_group_descriptor_t(proc, *group_descriptor);
             if (hret != HG_SUCCESS)
             {
                 hret = HG_PROTOCOL_ERROR;
                 return hret;
             }
-            /* make sure to invalidate the group descriptor owner status -- this
-             * will be set later when the owner attempts to join or attach the group
-             */
-            (*group_descriptor)->owner_status = SSG_OWNER_IS_UNASSOCIATED;
-
             break;
         case HG_FREE:
-            /* XXX XXX XXX */
-#if 0
             hret = hg_proc_ssg_group_descriptor_t(proc, *group_descriptor);
             if (hret != HG_SUCCESS)
             {
@@ -338,7 +332,6 @@ hg_return_t hg_proc_ssg_group_id_t(
                 return hret;
             }
             free(*group_descriptor);
-#endif
             hret = HG_SUCCESS;
             break;
         default:
