@@ -40,42 +40,61 @@ extern "C" {
 
 /* SSG internal dataypes */
 
-typedef struct ssg_member_state ssg_member_state_t;
-typedef struct ssg_view ssg_view_t;
-typedef struct ssg_group ssg_group_t;
-typedef struct ssg_instance ssg_instance_t;
-
-struct ssg_member_state
+typedef struct ssg_member_state
 {
+    char *addr_str;
     hg_addr_t addr;
-    int is_member;
-};
+    uint8_t is_member;
+} ssg_member_state_t;
 
-struct ssg_view
+/* TODO: these really need to be ref-counted, else I don't think
+ * duplicated references can be kept in sync...
+ */
+/* TODO: associate a version number with a descriptor */
+typedef struct ssg_group_descriptor
+{
+    uint64_t magic_nr;
+    uint64_t name_hash;
+    char *addr_str;
+    uint8_t owner_status;
+} ssg_group_descriptor_t;
+
+typedef struct ssg_group_view
 {
     uint32_t size;
     ssg_member_state_t *member_states;
-};
+} ssg_group_view_t;
 
-MERCURY_GEN_PROC(ssg_group_descriptor_t, \
-    ((uint64_t) (magic_nr)) \
-    ((uint64_t) (name_hash)) \
-    ((hg_string_t) (addr_str)));
-
-struct ssg_group
+typedef struct ssg_group
 {
-    char *group_name;
-    ssg_group_descriptor_t *group_descriptor;
-    ssg_view_t group_view;
+    char *name;
+    ssg_group_descriptor_t *descriptor;
     ssg_member_id_t self_id;
+    ssg_group_view_t view;
     void *fd_ctx; /* failure detector context (currently just SWIM) */
     UT_hash_handle hh;
-};
+} ssg_group_t;
 
-struct ssg_instance
+typedef struct ssg_attached_group
+{
+    char *name;
+    ssg_group_descriptor_t *descriptor;
+    ssg_group_view_t view;
+    UT_hash_handle hh;
+} ssg_attached_group_t;
+
+typedef struct ssg_instance
 {
     margo_instance_id mid;
     ssg_group_t *group_table;
+    ssg_attached_group_t *attached_group_table;
+} ssg_instance_t;
+
+enum ssg_group_descriptor_owner_status
+{
+    SSG_OWNER_IS_UNASSOCIATED = 0,
+    SSG_OWNER_IS_MEMBER,
+    SSG_OWNER_IS_ATTACHER
 };
 
 /* SSG internal function prototypes */
@@ -85,11 +104,11 @@ extern void hashlittle2(const void *key, size_t length, uint32_t *pc, uint32_t *
 
 void ssg_register_rpcs(
     void);
-hg_return_t ssg_group_lookup(
-    ssg_group_t * g,
-    const char * const addr_strs[]);
-hg_return_t ssg_group_attach_send(
-    ssg_group_descriptor_t *group_descriptor);
+int ssg_group_attach_send(
+    ssg_group_descriptor_t * group_descriptor,
+    char ** group_name,
+    int * group_size, 
+    void ** view_buf);
 
 /* XXX: is this right? can this be a global? */
 extern ssg_instance_t *ssg_inst; 

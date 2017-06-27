@@ -10,7 +10,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <assert.h>
-#include <time.h>
 
 #include <abt.h>
 #include <margo.h>
@@ -70,9 +69,6 @@ swim_context_t *swim_init(
     int i, ret;
 
     if (g == NULL) return NULL;
-
-    /* seed RNG with time+rank combination to avoid identical seeds */
-    srand(time(NULL) + g->self_rank);
 
     /* allocate structure for storing swim context */
     swim_ctx = malloc(sizeof(*swim_ctx));

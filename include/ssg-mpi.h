@@ -22,8 +22,8 @@ extern "C" {
 /**
  * Creates an SSG group from a given MPI communicator.
  *
- * @param[in]  group_name   Name of the SSG group
- * @param[in]  comm         MPI communicator containing group members
+ * @param[in] group_name    Name of the SSG group
+ * @param[in] comm          MPI communicator containing group members
  * @returns SSG group identifier on success, SSG_GROUP_ID_NULL otherwise
  */
 ssg_group_id_t ssg_group_create_mpi(

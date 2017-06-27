@@ -32,6 +32,9 @@ struct ssg_group_descriptor;
 typedef struct ssg_group_descriptor *ssg_group_id_t;
 #define SSG_GROUP_ID_NULL ((ssg_group_id_t)NULL)
 
+/* HG proc routine prototype for ssg_group_id_t */
+hg_return_t hg_proc_ssg_group_id_t(hg_proc_t proc, void *data);
+
 /***************************************************
  *** SSG runtime intialization/shutdown routines ***
  ***************************************************/
@@ -60,9 +63,9 @@ int ssg_finalize(
 /**
  * Creates an SSG group from a given list of HG address strings.
  *
- * @param[in]  group_name       Name of the SSG group
- * @param[in]  group_addr_strs  Array of HG address strings for each group member
- * @param[in]  group_size       Number of group members
+ * @param[in] group_name        Name of the SSG group
+ * @param[in] group_addr_strs   Array of HG address strings for each group member
+ * @param[in] group_size        Number of group members
  * @returns SSG group identifier on success, SSG_GROUP_ID_NULL otherwise
  *
  * NOTE: The HG address string of the caller of this function must be present in
@@ -78,11 +81,11 @@ ssg_group_id_t ssg_group_create(
  * Creates an SSG group from a given config file containing the HG address strings
  * of all group members.
  *
- * @param[in]  group_name   Name of the SSG group
- * @param[in]  file_name    Name of the config file containing the corresponding
+ * @param[in] group_name    Name of the SSG group
+ * @param[in] file_name     Name of the config file containing the corresponding
  *                          HG address strings for this group
- * @param[out] group_id     Pointer to output SSG group ID
  * @returns SSG group identifier on success, SSG_GROUP_ID_NULL otherwise
+ *
  * 
  * NOTE: The HG address string of the caller of this function must be present in
  * the list of address strings given in the config file. That is, the caller of
@@ -155,6 +158,29 @@ int ssg_get_group_size(
 hg_addr_t ssg_get_addr(
     ssg_group_id_t group_id,
     ssg_member_id_t member_id);
+
+/**
+ * Duplicates the given SSG group identifier.
+ *
+ * @param[in] group_id SSG group ID
+ * @returns SSG group identifier on success, SSG_GROUP_ID_NULL otherwise
+ */
+ssg_group_id_t ssg_group_id_dup(
+    ssg_group_id_t group_id);
+
+/** Frees the given SSG group identifier.
+ *
+ * @param[in] group_id SSG group ID
+ */
+void ssg_group_id_free(
+    ssg_group_id_t group_id);
+
+/** Dumps details of caller's membership in a given group to stdout.
+ *
+ * @param[in] group_id SSG group ID
+ */
+void ssg_group_dump(
+    ssg_group_id_t group_id);
 
 #ifdef __cplusplus
 }
