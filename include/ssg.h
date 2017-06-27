@@ -31,7 +31,8 @@ typedef uint64_t ssg_member_id_t;
 typedef struct ssg_group_descriptor *ssg_group_id_t;
 #define SSG_GROUP_ID_NULL ((ssg_group_id_t)NULL)
 
-/* HG proc routine prototype for ssg_group_id_t */
+/* HG proc routine prototypes for SSG types */
+#define hg_proc_ssg_member_id_t hg_proc_int64_t
 hg_return_t hg_proc_ssg_group_id_t(hg_proc_t proc, void *data);
 
 /***************************************************

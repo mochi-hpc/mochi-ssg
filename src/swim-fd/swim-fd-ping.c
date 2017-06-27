@@ -22,7 +22,6 @@
 /* NOTE these defines must be kept in sync with defs in
  * ssg.h & swim-internal.h
  */
-#define hg_proc_ssg_member_id_t hg_proc_int64_t
 #define hg_proc_swim_member_status_t hg_proc_uint8_t
 #define hg_proc_swim_member_inc_nr_t hg_proc_uint32_t
 
