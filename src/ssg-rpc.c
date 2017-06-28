@@ -42,7 +42,7 @@ DECLARE_MARGO_RPC_HANDLER(ssg_group_attach_recv_ult)
 static int ssg_group_view_serialize(
     ssg_group_view_t *view, void **buf, hg_size_t *buf_size);
 
-/* SSG RPC ids */
+/* SSG RPC IDs */
 static hg_id_t ssg_group_attach_rpc_id;
 
 /* ssg_register_rpcs
@@ -323,15 +323,18 @@ hg_return_t hg_proc_ssg_group_id_t(
                 hret = HG_PROTOCOL_ERROR;
                 return hret;
             }
+            (*group_descriptor)->ref_count = 1;
             break;
         case HG_FREE:
-            hret = hg_proc_ssg_group_descriptor_t(proc, *group_descriptor);
-            if (hret != HG_SUCCESS)
+            if((*group_descriptor)->ref_count == 1)
             {
-                hret = HG_PROTOCOL_ERROR;
-                return hret;
+                free((*group_descriptor)->addr_str);
+                free(*group_descriptor);
             }
-            free(*group_descriptor);
+            else
+            {
+                (*group_descriptor)->ref_count--;
+            }
             hret = HG_SUCCESS;
             break;
         default:

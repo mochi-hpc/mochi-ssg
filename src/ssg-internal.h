@@ -47,21 +47,19 @@ typedef struct ssg_member_state
     uint8_t is_member;
 } ssg_member_state_t;
 
-/* TODO: these really need to be ref-counted, else I don't think
- * duplicated references can be kept in sync...
- */
 /* TODO: associate a version number with a descriptor */
 typedef struct ssg_group_descriptor
 {
     uint64_t magic_nr;
     uint64_t name_hash;
     char *addr_str;
-    uint8_t owner_status;
+    int owner_status;
+    int ref_count;
 } ssg_group_descriptor_t;
 
 typedef struct ssg_group_view
 {
-    uint32_t size;
+    unsigned int size;
     ssg_member_state_t *member_states;
 } ssg_group_view_t;
 

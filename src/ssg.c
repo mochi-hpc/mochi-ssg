@@ -479,9 +479,6 @@ int ssg_group_attach(
 
     sret = SSG_SUCCESS;
 
-    /* XXX if group descriptors are ref counted, we don't need this awkwardness */
-    group_descriptor->owner_status = SSG_OWNER_IS_ATTACHER;
-
     /* don't free on success */
     ag = NULL;
 fini:
@@ -656,6 +653,7 @@ void ssg_group_id_free(
     ssg_group_descriptor_t *descriptor = (ssg_group_descriptor_t *)group_id;
 
     ssg_group_descriptor_free(descriptor);
+    descriptor = SSG_GROUP_ID_NULL;
     return;
 }
 
@@ -710,7 +708,7 @@ void ssg_group_dump(
         printf("\trole: '%s'\n", group_role);
         if (strcmp(group_role, "member") == 0)
             printf("\tself_id: %s\n", group_self_id);
-        printf("\tsize: %"PRIu32"\n", group_view->size);
+        printf("\tsize: %d\n", group_view->size);
         printf("\tview:\n");
         for (i = 0; i < group_view->size; i++)
             printf("\t\tid: %d\taddr: %s\n", i, group_view->member_states[i].addr_str);
@@ -746,21 +744,15 @@ static ssg_group_descriptor_t * ssg_group_descriptor_create(
         return NULL;
     }
     descriptor->owner_status = SSG_OWNER_IS_MEMBER;
+    descriptor->ref_count = 0;
     return descriptor;
 }
 
 static ssg_group_descriptor_t * ssg_group_descriptor_dup(
     ssg_group_descriptor_t * descriptor)
 {
-    ssg_group_descriptor_t *dup;
-
-    dup = malloc(sizeof(*dup));
-    if(!dup) return NULL;
-    dup->magic_nr = SSG_MAGIC_NR;
-    dup->name_hash = descriptor->name_hash;
-    dup->addr_str = strdup(descriptor->addr_str);
-    dup->owner_status = descriptor->owner_status;
-    return dup;
+    descriptor->ref_count++;
+    return descriptor;
 }
 
 static void ssg_group_descriptor_free(
@@ -768,8 +760,15 @@ static void ssg_group_descriptor_free(
 {
     if (descriptor)
     {
-        free(descriptor->addr_str);
-        free(descriptor);
+        if(descriptor->ref_count == 1)
+        {
+            free(descriptor->addr_str);
+            free(descriptor);
+        }
+        else
+        {
+            descriptor->ref_count--;
+        }
     }
     return;
 }
@@ -807,6 +806,7 @@ static int ssg_group_view_create(
         free(lookup_ult_args);
         return SSG_FAILURE;
     }
+
     for (i = 0; i < group_size; i++)
     {
         view->member_states[i].addr_str = NULL;
@@ -955,6 +955,7 @@ static void ssg_group_destroy_internal(
 
     /* destroy group state */
     ssg_group_view_destroy(&g->view);
+    g->descriptor->owner_status = SSG_OWNER_IS_UNASSOCIATED;
     ssg_group_descriptor_free(g->descriptor);
     free(g->name);
     free(g);
@@ -965,7 +966,8 @@ static void ssg_group_destroy_internal(
 static void ssg_attached_group_destroy(
     ssg_attached_group_t * ag)
 {
-    ssg_group_view_destroy(&ag->view);   
+    ssg_group_view_destroy(&ag->view);
+    ag->descriptor->owner_status = SSG_OWNER_IS_UNASSOCIATED;
     ssg_group_descriptor_free(ag->descriptor);
     free(ag->name);
     free(ag);
