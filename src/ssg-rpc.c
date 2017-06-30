@@ -262,7 +262,7 @@ static int ssg_group_view_serialize(
     unsigned int i;
     hg_size_t view_size = 0;
     int tmp_size;
-    void *view_buf, *p;
+    void *view_buf, *buf_p, *str_p;
 
     *buf = NULL;
     *buf_size = 0;
@@ -270,19 +270,33 @@ static int ssg_group_view_serialize(
     /* first determine view size */
     for (i = 0; i < view->size; i++)
     {
-        view_size += (strlen(view->member_states[i].addr_str) + 1);
+        if (view->member_states[i].addr_str)
+            view_size += (strlen(view->member_states[i].addr_str) + 1);
+        else
+            view_size += 1;
     }
 
     view_buf = malloc(view_size);
     if(!view_buf)
         return SSG_FAILURE;
 
-    p = view_buf;
+    buf_p = view_buf;
     for (i = 0; i < view->size; i++)
     {
-        tmp_size = strlen(view->member_states[i].addr_str) + 1;
-        memcpy(p, view->member_states[i].addr_str, tmp_size);
-        p += tmp_size;
+        char null = '\0';
+
+        if (view->member_states[i].addr_str)
+        {
+            tmp_size = strlen(view->member_states[i].addr_str) + 1;
+            str_p = view->member_states[i].addr_str;
+        }
+        else
+        {
+            tmp_size = 1;
+            str_p = &null;
+        }
+        memcpy(buf_p, str_p, tmp_size);
+        buf_p += tmp_size;
     }
 
     *buf = view_buf;

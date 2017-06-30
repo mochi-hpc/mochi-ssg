@@ -737,11 +737,20 @@ void ssg_apply_membership_update(
     ssg_group_t *g,
     ssg_membership_update_t update)
 {
-    if (!g) return;
+    hg_class_t *hgcl = NULL;
+    
+    if(!ssg_inst || !g) return;
+
+    hgcl = margo_get_class(ssg_inst->mid);
+    if (!hgcl) return;
 
     if (update.type == SSG_MEMBER_REMOVE)
     {
+        HG_Addr_free(hgcl, g->view.member_states[update.member].addr);
+        free(g->view.member_states[update.member].addr_str);
+        g->view.member_states[update.member].addr_str = NULL;
         g->view.member_states[update.member].is_member = 0;
+        /* XXX: need to update size ... g->view.size--; */
     }
     else
     {
@@ -842,7 +851,7 @@ static int ssg_group_view_create(
     {
         view->member_states[i].addr_str = NULL;
         view->member_states[i].addr = HG_ADDR_NULL;
-        view->member_states[i].is_member = 1;
+        view->member_states[i].is_member = 0;
         lookup_ults[i] = ABT_THREAD_NULL;
     }
 
@@ -869,6 +878,8 @@ static int ssg_group_view_create(
          * up other group members in the same order
          */
         j = (r + i) % view->size;
+
+        if (group_addr_strs[j] == NULL || strlen(group_addr_strs[j]) == 0) continue;
 
         view->member_states[j].addr_str = strdup(group_addr_strs[j]);
         if (!view->member_states[j].addr_str)
@@ -926,6 +937,7 @@ static int ssg_group_view_create(
             sret = SSG_FAILURE;
             break;
         }
+        view->member_states[i].is_member = 1;
     }
 
 fini:
