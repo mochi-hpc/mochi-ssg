@@ -9,6 +9,9 @@
 #include <mercury.h>
 #include <margo.h>
 
+#include <stdint.h>
+#include <inttypes.h>
+
 /**
  * Scalable Service Groups (SSG) interface
  * 
@@ -24,12 +27,29 @@ extern "C" {
 #define SSG_SUCCESS 0
 #define SSG_FAILURE (-1)
 
+/* opaque SSG group ID type */
+typedef struct ssg_group_descriptor *ssg_group_id_t;
+#define SSG_GROUP_ID_NULL ((ssg_group_id_t)NULL)
+
+/* SSG group member ID type */
 typedef uint64_t ssg_member_id_t;
 #define SSG_MEMBER_ID_INVALID UINT64_MAX
 
-/* opaque SSG group identifier type */
-typedef struct ssg_group_descriptor *ssg_group_id_t;
-#define SSG_GROUP_ID_NULL ((ssg_group_id_t)NULL)
+/* SSG group member update types */
+enum ssg_membership_update_type
+{
+    SSG_MEMBER_ADD = 0,
+    SSG_MEMBER_REMOVE
+};
+
+typedef struct ssg_membership_update
+{
+    ssg_member_id_t member;
+    int type;
+} ssg_membership_update_t;
+
+typedef void (*ssg_membership_update_cb)(
+    ssg_membership_update_t, void *);
 
 /* HG proc routine prototypes for SSG types */
 #define hg_proc_ssg_member_id_t hg_proc_int64_t
@@ -66,6 +86,8 @@ int ssg_finalize(
  * @param[in] group_name        Name of the SSG group
  * @param[in] group_addr_strs   Array of HG address strings for each group member
  * @param[in] group_size        Number of group members
+ * @param[in] update_cb         Callback function executed on group membership changes
+ * @param[in] update_cb_dat     User data pointer passed to membership update callback
  * @returns SSG group identifier on success, SSG_GROUP_ID_NULL otherwise
  *
  * NOTE: The HG address string of the caller of this function must be present in
@@ -75,7 +97,9 @@ int ssg_finalize(
 ssg_group_id_t ssg_group_create(
     const char * group_name,
     const char * const group_addr_strs[],
-    int group_size);
+    int group_size,
+    ssg_membership_update_cb update_cb,
+    void * update_cb_dat);
 
 /**
  * Creates an SSG group from a given config file containing the HG address strings
@@ -84,6 +108,8 @@ ssg_group_id_t ssg_group_create(
  * @param[in] group_name    Name of the SSG group
  * @param[in] file_name     Name of the config file containing the corresponding
  *                          HG address strings for this group
+ * @param[in] update_cb         Callback function executed on group membership changes
+ * @param[in] update_cb_dat     User data pointer passed to membership update callback
  * @returns SSG group identifier on success, SSG_GROUP_ID_NULL otherwise
  *
  * 
@@ -93,7 +119,9 @@ ssg_group_id_t ssg_group_create(
  */
 ssg_group_id_t ssg_group_create_config(
     const char * group_name,
-    const char * file_name);
+    const char * file_name,
+    ssg_membership_update_cb update_cb,
+    void * update_cb_dat);
 
 /**
  * Destroys data structures associated with a given SSG group ID.

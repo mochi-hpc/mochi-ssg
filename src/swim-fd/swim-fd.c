@@ -492,7 +492,8 @@ static void swim_kill_member(
     swim_suspect_member_link_t *iter, *tmp;
     swim_suspect_member_link_t **suspect_list_p =
         (swim_suspect_member_link_t **)&(swim_ctx->suspect_list);
-    swim_member_update_t update;
+    swim_member_update_t swim_update;
+    ssg_membership_update_t ssg_update;
 
     /* ignore updates for dead members */
     if(!(g->view.member_states[member_id].is_member))
@@ -515,16 +516,18 @@ static void swim_kill_member(
     /* update swim membership state */
     swim_ctx->member_inc_nrs[member_id] = inc_nr;
 
-    /* TODO: some sort of callback to ssg to do something more elaborate? */
-    g->view.member_states[member_id].is_member = 0;
-
     /* add this update to recent update list so it will be piggybacked
      * on future protocol messages
      */
-    update.id = member_id;
-    update.status = SWIM_MEMBER_DEAD;
-    update.inc_nr = inc_nr;
-    swim_add_recent_member_update(g, update);
+    swim_update.id = member_id;
+    swim_update.status = SWIM_MEMBER_DEAD;
+    swim_update.inc_nr = inc_nr;
+    swim_add_recent_member_update(g, swim_update);
+
+    /* have SSG apply the membership update */
+    ssg_update.member = member_id;
+    ssg_update.type = SSG_MEMBER_REMOVE;
+    ssg_apply_membership_update(g, ssg_update);
 
     return;
 }
@@ -603,43 +606,37 @@ static int swim_get_rand_group_member_set(
     ssg_group_t *g, ssg_member_id_t *member_ids, int num_members,
     ssg_member_id_t excluded_id)
 {
-    int i, rand_ndx = 0;
-    ssg_member_id_t rand_member;
-    int avail_members = g->view.size - 1;
+    unsigned int i, j, rand_ndx = 0;
+    ssg_member_id_t r, rand_member;
 
     if(num_members == 0)
         return(0);
-
-    if(excluded_id != SSG_MEMBER_ID_INVALID)
-        avail_members--;
 
     /* TODO: what data structure could we use to avoid looping to look
      * for a set of random ranks
      */
     do
     {
-        rand_member = rand() % g->view.size;
-        if(rand_member == g->self_id || rand_member == excluded_id)
-            continue;
-
-        if(!(g->view.member_states[rand_member].is_member))
+        r = rand() % g->view.size;
+        for(i = 0; i < g->view.size; i++)
         {
-            avail_members--;
-            continue;
-        }
-
-        /* make sure there aren't duplicates */
-        for(i = 0; i < rand_ndx; i++)
-        {
-            if(rand_member == member_ids[i])
+            rand_member = (r + i) % g->view.size;
+            if(rand_member == g->self_id || rand_member == excluded_id ||
+                !(g->view.member_states[rand_member].is_member))
+                continue;
+            for(j = 0; j < rand_ndx; j++)
+            {
+                if(rand_member == member_ids[j])
+                    break;
+            }
+            if(j == rand_ndx)
                 break;
         }
-        if(i != rand_ndx)
-            continue;
+        if(i == g->view.size)
+            break;
 
         member_ids[rand_ndx++] = rand_member;
-        avail_members--;
-    } while((rand_ndx < num_members) && (avail_members > 0));
+    } while((int)rand_ndx < num_members);
 
     return(rand_ndx);
 }

@@ -44,7 +44,7 @@ typedef struct ssg_member_state
 {
     char *addr_str;
     hg_addr_t addr;
-    uint8_t is_member;
+    int is_member;
 } ssg_member_state_t;
 
 /* TODO: associate a version number with a descriptor */
@@ -70,6 +70,8 @@ typedef struct ssg_group
     ssg_member_id_t self_id;
     ssg_group_view_t view;
     void *fd_ctx; /* failure detector context (currently just SWIM) */
+    ssg_membership_update_cb update_cb;
+    void *update_cb_dat;
     UT_hash_handle hh;
 } ssg_group_t;
 
@@ -107,6 +109,9 @@ int ssg_group_attach_send(
     char ** group_name,
     int * group_size, 
     void ** view_buf);
+void ssg_apply_membership_update(
+    ssg_group_t *g,
+    ssg_membership_update_t update);
 
 /* XXX: is this right? can this be a global? */
 extern ssg_instance_t *ssg_inst; 

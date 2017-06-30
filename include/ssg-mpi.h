@@ -24,11 +24,15 @@ extern "C" {
  *
  * @param[in] group_name    Name of the SSG group
  * @param[in] comm          MPI communicator containing group members
+ * @param[in] update_cb     Callback function executed on group membership changes
+ * @param[in] update_cb_dat User data pointer passed to membership update callback
  * @returns SSG group identifier on success, SSG_GROUP_ID_NULL otherwise
  */
 ssg_group_id_t ssg_group_create_mpi(
     const char * group_name,
-    MPI_Comm comm);
+    MPI_Comm comm,
+    ssg_membership_update_cb update_cb,
+    void * update_cb_dat);
 
 #ifdef __cplusplus
 }

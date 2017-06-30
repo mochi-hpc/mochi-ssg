@@ -138,15 +138,12 @@ int main(int argc, char *argv[])
     DIE_IF(sret != SSG_SUCCESS, "ssg_init");
 
     if(strcmp(mode, "conf") == 0)
-        g_id = ssg_group_create_config(group_name, conf_file);
+        g_id = ssg_group_create_config(group_name, conf_file, NULL, NULL);
 #ifdef SSG_HAVE_MPI
     else if(strcmp(mode, "mpi") == 0)
-        g_id = ssg_group_create_mpi(group_name, MPI_COMM_WORLD);
+        g_id = ssg_group_create_mpi(group_name, MPI_COMM_WORLD, NULL, NULL);
 #endif
     DIE_IF(g_id == SSG_GROUP_ID_NULL, "ssg_group_create");
-
-    /* sleep to give all group members a chance to create the group */
-    if (sleep_time > 0) margo_thread_sleep(mid, sleep_time * 1000.0);
 
     /* get my group id and the size of the group */
     my_id = ssg_get_group_self_id(g_id);
@@ -156,22 +153,42 @@ int main(int argc, char *argv[])
     printf("group member %d of %d successfully created group\n",
         (int)my_id, group_size);
 
-    /** cleanup **/
+    /* sleep to give all group members a chance to create the group */
+    if (sleep_time > 0) margo_thread_sleep(mid, sleep_time * 1000.0);
 
+    /** cleanup **/
+#ifdef SWIM_FORCE_FAIL
+    if (my_id == 1)
+    {
+        ssg_group_destroy(g_id);
+    }
+    else
+    {
+        /* sleep to give all group members a chance to detect the failure */
+        if (sleep_time > 0) margo_thread_sleep(mid, sleep_time * 1000.0);
+
+        ssg_group_destroy(g_id);
+    }
+#else
     ssg_group_destroy(g_id);
+#endif
     ssg_finalize();
 
     margo_finalize(mid);
 
+#ifndef SWIM_FORCE_FAIL
     if(hgctx) HG_Context_destroy(hgctx);
     if(hgcl) HG_Finalize(hgcl);
+#endif
 
 #ifdef SSG_HAVE_MPI
     if (strcmp(mode, "mpi") == 0)
         MPI_Finalize();
 #endif
 
+#ifndef SWIM_FORCE_FAIL
     ABT_finalize();
+#endif
 
     return 0;
 }

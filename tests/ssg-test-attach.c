@@ -33,6 +33,7 @@
 
 
 DECLARE_MARGO_RPC_HANDLER(group_id_forward_recv_ult)
+static void group_update_cb(ssg_membership_update_t update, void * cb_dat);
 
 static void usage()
 {
@@ -160,7 +161,8 @@ int main(int argc, char *argv[])
 
     if (!is_attacher)
     {
-        g_id = ssg_group_create_mpi(group_name, ssg_comm);
+        g_id = ssg_group_create_mpi(group_name, ssg_comm, &group_update_cb,
+            &my_world_rank);
         DIE_IF(g_id == SSG_GROUP_ID_NULL, "ssg_group_create");
 
         if (my_world_rank == 1)
@@ -196,6 +198,11 @@ int main(int argc, char *argv[])
     }
 #endif
 
+#ifdef SWIM_FORCE_FAIL
+    if (my_world_rank == 2)
+        goto cleanup;
+#endif
+
     /* for now, just sleep to give all procs an opportunity to create the group */
     /* XXX: we could replace this with a barrier eventually */
     if (sleep_time > 0) margo_thread_sleep(mid, sleep_time * 1000.0);
@@ -207,13 +214,14 @@ int main(int argc, char *argv[])
         DIE_IF(sret != SSG_SUCCESS, "ssg_group_attach");
     }
 
+    /* for now, just sleep to give attacher a chance to finish attaching */
+    /* XXX: we could replace this with a barrier eventually */
+    if (sleep_time > 0) margo_thread_sleep(mid, sleep_time * 1000.0);
+
     /* have everyone dump their group state */
     ssg_group_dump(g_id);
 
-    /* XXX: for now, just sleep to give the attacher a chance to attach */
-    if (sleep_time > 0) margo_thread_sleep(mid, sleep_time * 1000.0);
-
-    /** cleanup **/
+cleanup:
     if (is_attacher)
     {
         ssg_group_detach(g_id);
@@ -226,13 +234,18 @@ int main(int argc, char *argv[])
 
     margo_finalize(mid);
 
+#ifndef SWIM_FORCE_FAIL
     if(hgctx) HG_Context_destroy(hgctx);
     if(hgcl) HG_Finalize(hgcl);
+#endif
 
 #ifdef SSG_HAVE_MPI
     MPI_Finalize();
 #endif
+
+#ifndef SWIM_FORCE_FAIL
     ABT_finalize();
+#endif
 
     return 0;
 }
@@ -262,3 +275,15 @@ static void group_id_forward_recv_ult(hg_handle_t handle)
     return;
 }
 DEFINE_MARGO_RPC_HANDLER(group_id_forward_recv_ult)
+
+static void group_update_cb(ssg_membership_update_t update, void * cb_dat)
+{
+    int my_world_rank = *(int *)cb_dat;
+
+    if (update.type == SSG_MEMBER_ADD)
+        printf("%d SSG update: ADD member %"PRIu64"\n", my_world_rank, update.member);
+    else if (update.type == SSG_MEMBER_REMOVE)
+        printf("%d SSG update: REMOVE member %"PRIu64"\n", my_world_rank, update.member);
+
+    return;
+}

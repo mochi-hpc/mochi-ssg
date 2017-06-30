@@ -126,7 +126,9 @@ int ssg_finalize()
 ssg_group_id_t ssg_group_create(
     const char * group_name,
     const char * const group_addr_strs[],
-    int group_size)
+    int group_size,
+    ssg_membership_update_cb update_cb,
+    void * update_cb_dat)
 {
     hg_class_t *hgcl = NULL;
     hg_addr_t self_addr = HG_ADDR_NULL;
@@ -173,6 +175,8 @@ ssg_group_id_t ssg_group_create(
     g->name = strdup(group_name);
     if (!g->name) goto fini;
     g->descriptor = tmp_descriptor;
+    g->update_cb = update_cb;
+    g->update_cb_dat = update_cb_dat;
 
     /* initialize the group view */
     sret = ssg_group_view_create(group_addr_strs, self_addr_str, group_size,
@@ -188,28 +192,22 @@ ssg_group_id_t ssg_group_create(
     g->view.member_states[g->self_id].addr = self_addr;
 
 #ifdef SSG_USE_SWIM_FD
-    int swim_active = 1;
-#ifdef SWIM_FORCE_FAIL
-    if (g->self_rank == 1)
-        swim_active = 0;
-#endif
-
     /* initialize swim failure detector */
     // TODO: we should probably barrier or sync somehow to avoid rpc failures
     // due to timing skew of different ranks initializing swim
-    g->fd_ctx = (void *)swim_init(g, swim_active);
+    g->fd_ctx = (void *)swim_init(g, 1);
     if (g->fd_ctx == NULL) goto fini;
 #endif
-
-    /* add this group reference to our group table */
-    HASH_ADD(hh, ssg_inst->group_table, descriptor->name_hash,
-        sizeof(uint64_t), g);
 
     /* everything successful -- set the output group identifier, which is just
      * an opaque pointer to the group descriptor structure
      */
     group_id = (ssg_group_id_t)ssg_group_descriptor_dup(g->descriptor);
     if (group_id == SSG_GROUP_ID_NULL) goto fini;
+
+    /* add this group reference to our group table */
+    HASH_ADD(hh, ssg_inst->group_table, descriptor->name_hash,
+        sizeof(uint64_t), g);
 
     SSG_DEBUG(g, "group create successful (size=%d)\n", group_size);
 
@@ -221,8 +219,8 @@ fini:
     free(self_addr_str);
     if (g)
     {
+        ssg_group_view_destroy(&g->view);
         free(g->name);
-        free(g->view.member_states);
         free(g);
     }
     if (group_id == SSG_GROUP_ID_NULL)
@@ -233,7 +231,9 @@ fini:
 
 ssg_group_id_t ssg_group_create_config(
     const char * group_name,
-    const char * file_name)
+    const char * file_name,
+    ssg_membership_update_cb update_cb,
+    void * update_cb_dat)
 {
     int fd;
     struct stat st;
@@ -306,7 +306,8 @@ ssg_group_id_t ssg_group_create_config(
     if (!addr_strs) goto fini;
 
     /* invoke the generic group create routine using our list of addrs */
-    group_id = ssg_group_create(group_name, addr_strs, num_addrs);
+    group_id = ssg_group_create(group_name, addr_strs, num_addrs,
+        update_cb, update_cb_dat);
 
 fini:
     /* cleanup before returning */
@@ -321,7 +322,9 @@ fini:
 #ifdef SSG_HAVE_MPI
 ssg_group_id_t ssg_group_create_mpi(
     const char * group_name,
-    MPI_Comm comm)
+    MPI_Comm comm,
+    ssg_membership_update_cb update_cb,
+    void * update_cb_dat)
 {
     hg_class_t *hgcl = NULL;
     hg_addr_t self_addr = HG_ADDR_NULL;
@@ -380,7 +383,8 @@ ssg_group_id_t ssg_group_create_mpi(
     if (!addr_strs) goto fini;
 
     /* invoke the generic group create routine using our list of addrs */
-    group_id = ssg_group_create(group_name, addr_strs, comm_size);
+    group_id = ssg_group_create(group_name, addr_strs, comm_size,
+        update_cb, update_cb_dat);
 
 fini:
     /* cleanup before returning */
@@ -486,9 +490,10 @@ fini:
     free(addr_strs);
     if (ag)
     {
-        ssg_group_descriptor_free(ag->descriptor);
+        ssg_group_view_destroy(&ag->view);
         free(ag->name);
         free(ag);
+        ssg_group_descriptor_free(ag->descriptor);
     }
 
     return sret;
@@ -711,7 +716,11 @@ void ssg_group_dump(
         printf("\tsize: %d\n", group_view->size);
         printf("\tview:\n");
         for (i = 0; i < group_view->size; i++)
-            printf("\t\tid: %d\taddr: %s\n", i, group_view->member_states[i].addr_str);
+        {
+            if (group_view->member_states[i].is_member)
+                printf("\t\tid: %d\taddr: %s\n", i,
+                    group_view->member_states[i].addr_str);
+        }
     }
     else
         fprintf(stderr, "Error: SSG unable to find group view associated" \
@@ -723,6 +732,28 @@ void ssg_group_dump(
 /************************************
  *** SSG internal helper routines ***
  ************************************/
+
+void ssg_apply_membership_update(
+    ssg_group_t *g,
+    ssg_membership_update_t update)
+{
+    if (!g) return;
+
+    if (update.type == SSG_MEMBER_REMOVE)
+    {
+        g->view.member_states[update.member].is_member = 0;
+    }
+    else
+    {
+        assert(0); /* XXX: dynamic group joins aren't possible yet */
+    }
+
+    /* execute user-supplied membership update callback, if given */
+    if (g->update_cb)
+        g->update_cb(update, g->update_cb_dat);
+
+    return;
+}
 
 static ssg_group_descriptor_t * ssg_group_descriptor_create(
     const char * name, const char * leader_addr_str)
@@ -921,6 +952,7 @@ static void ssg_group_lookup_ult(
 {
     struct ssg_group_lookup_ult_args *l = arg;
 
+    /* XXX: should be a timeout here? */
     l->out = margo_addr_lookup(ssg_inst->mid, l->member_state->addr_str,
         &l->member_state->addr);
     return;
@@ -951,7 +983,6 @@ static void ssg_group_destroy_internal(
     if(g->fd_ctx)
         swim_finalize(g->fd_ctx);
 #endif
-
 
     /* destroy group state */
     ssg_group_view_destroy(&g->view);
