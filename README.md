@@ -13,11 +13,12 @@ following group bootstrapping methods:
 - config file-based bootstrap
 - generic bootstrap method using an array of Mercury address strings
 
-Process groups are referenced by unique group identifiers
+Process groups are referenced using unique group identifiers
 which encode Mercury address information that can be used to connect
 with a representative member of the group. These identifiers may be
-transmitted to other processes so they can access the corresponding
-group membership view.
+transmitted to other processes so they can join the group or attach to
+the group (_attachment_ provides non-group members a way to access a
+group's view). 
 
 Optionally, SSG can be configured to use the [SWIM failure detection and
 group membership protocol](http://www.cs.cornell.edu/~asdas/research/dsn02-SWIM.pdf)
