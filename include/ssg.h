@@ -12,7 +12,7 @@
 #include <stdint.h>
 #include <inttypes.h>
 
-/**
+/** @file ssg.h
  * Scalable Service Groups (SSG) interface
  * 
  * An interface for creating and managing process groups using

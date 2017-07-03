@@ -1,18 +1,58 @@
-SSG is a Simple, Static Grouping mechanism for Mercury. It provides
-mechanisms for bootstrapping a set of pre-existing mercury processes. So
-far, we have the following:
+# SSG (Scalable Service Groups)
 
-- MPI bootstrap
-- config-file bootstrap
+SSG is a group membership microservice based on the Mercury RPC system.
+It provides mechanisms for bootstrapping sets of Mercury processes into
+logical groups and for managing the membership of these process groups
+over time. At a high-level, each group collectively maintains a _group view_,
+which is just a mapping from group member identifiers to Mercury address
+information. The inital group membership view is specified completely
+when the group is bootstrapped (created). Currently, SSG offers the
+following group bootstrapping methods:
 
-Serializers for the ssg data structure are also provided (untested so far).
+- MPI communicator-based bootstrap
+- config file-based bootstrap
+- generic bootstrap method using an array of Mercury address strings
 
-# Building
+Process groups are referenced by unique group identifiers
+which encode Mercury address information that can be used to connect
+with a representative member of the group. These identifiers may be
+transmitted to other processes so they can access the corresponding
+group membership view.
+
+Optionally, SSG can be configured to use the [SWIM failure detection and
+group membership protocol](http://www.cs.cornell.edu/~asdas/research/dsn02-SWIM.pdf)
+internally to detect and respond to group member failures. SWIM uses a
+randomized probing mechanism to detect faulty group members and uses an
+efficient gossip protocol to dissmeninate group membership changes to other
+group members. SSG propagates group membership view updates back to the SSG
+user using a callback interface.
+
+__NOTE__: SSG does not currently support group members dynamically leaving
+or joining a group, though this should be supported in the near future.
+This means that, for now, SSG groups are immutable after creation.
+When using SWIM, this means members can be marked as faulty, but they
+cannot be fully evicted from the group view yet.
+
+__NOTE__: SSG does not currently allow for user-specified group member
+identifiers, and instead assigns identifiers as dense ranks into the
+list of address strings specified at group creation time. That is,
+the group member with the first address string in the list is rank 0,
+and so on.
+
+## Dependencies
+
+* mercury (git clone --recurse-submodules https://github.com/mercury-hpc/mercury.git)
+* argobots (git clone https://github.com/pmodels/argobots.git)
+* margo (git clone https://xgitlab.cels.anl.gov/sds/margo.git)
+* abt-snoozer (git clone https://xgitlab.cels.anl.gov/sds/abt-snoozer)
+* libev (e.g libev-dev package on Ubuntu or Debian)
+
+## Building
 
 (if configuring for the first time)
 ./prepare.sh
 
-./configure [standard options] PKG\_CONFIG\_PATH=/path/to/mercury/pkgconfig
+./configure [standard options] PKG\_CONFIG\_PATH=/path/to/pkgconfig/files
 
 make
 
@@ -22,18 +62,3 @@ MPI support is by default optionally included. If you wish to compile with MPI
 support, set CC=mpicc (or equivalent) in configure. If you wish to disable MPI
 entirely, use --disable-mpi (you can also force MPI inclusion through
 --enable-mpi).
-
-# Documentation
-
-The example is the best documentation so far. Check out examples/ssg-example.c
-(and the other files) for usage. The example program initializes ssg, pings
-peer servers as defined by their ssg rank, and shuts down via a chain
-communication.
-
-# Running examples
-
-cd to your build directory and run:
-
-$top\_level\_dir/examples/run-example-\*.sh
-
-See the script contents for how these translate to example execution.

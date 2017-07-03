@@ -9,7 +9,7 @@
 #include <mpi.h>
 #include <ssg.h>
 
-/**
+/** @file ssg-mpi.h
  * Scalable Service Groups (SSG) interface
  *
  * An SSG group create routine based on MPI communicators.
