@@ -1,0 +1,12 @@
+#!/bin/bash
+#COBALT -n 2
+#COBALT -M carns@mcs.anl.gov
+#COBALT -t 5
+#COBALT --mode script
+#COBALT -A radix-io
+#COBALT -q ibleaf3-debug
+#COBALT --env CCI_CONFIG=/home/carns/working/install-cooley/etc/cci.conf:LD_LIBRARY_PATH=/home/carns/tmp/mochi-regression-install/lib
+
+# NOTE: remmeber to uncomment some stuff in ~/.bashrc for library paths
+
+mpirun -f $COBALT_NODEFILE -n 2 ./margo-p2p-latency -i 100000 -n verbs://
