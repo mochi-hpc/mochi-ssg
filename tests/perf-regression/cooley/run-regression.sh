@@ -122,3 +122,4 @@ mailx -s "margo-p2p-latency (cooley)" sds-commits@mcs.anl.gov < combined.$JOBID.
 
 cd /tmp
 rm -rf $SANDBOX
+rm -rf $PREFIX
