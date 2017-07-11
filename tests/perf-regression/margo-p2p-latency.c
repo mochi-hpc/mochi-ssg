@@ -51,6 +51,8 @@ int main(int argc, char **argv)
     int rank;
     hg_bool_t flag;
     double *measurement_array;
+    int namelen;
+    char processor_name[MPI_MAX_PROCESSOR_NAME];
 
     ABT_init(argc, argv);
     MPI_Init(&argc, &argv);
@@ -63,6 +65,9 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Get_processor_name(processor_name,&namelen);
+    printf("Process %d of %d is on %s\n",
+	rank, nranks, processor_name);
 
     parse_args(argc, argv, &g_opts);
 
