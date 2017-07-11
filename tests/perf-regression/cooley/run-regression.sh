@@ -27,9 +27,9 @@ git clone https://github.com/CCI/cci.git
 git clone https://github.com/mercury-hpc/mercury.git
 wget http://dist.schmorp.de/libev/libev-4.24.tar.gz
 tar -xvzf libev-4.24.tar.gz
-git clone git@xgitlab.cels.anl.gov:sds/abt-snoozer.git
-git clone git@xgitlab.cels.anl.gov:sds/margo.git
-git clone git@xgitlab.cels.anl.gov:sds/ssg.git
+git clone https://xgitlab.cels.anl.gov/sds/abt-snoozer.git
+git clone https://xgitlab.cels.anl.gov/sds/margo.git
+git clone https://xgitlab.cels.anl.gov/sds/ssg.git
 
 # argobots
 echo "=== BUILDING ARGOBOTS ==="
