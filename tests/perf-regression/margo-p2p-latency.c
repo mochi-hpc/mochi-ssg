@@ -270,8 +270,6 @@ static int run_benchmark(int iterations, hg_id_t id, ssg_member_id_t target,
         measurement_array[i] = tm2-tm1;
     }
 
-    /* TODO: free addr? */
-
     HG_Destroy(handle);
 
     return(0);
