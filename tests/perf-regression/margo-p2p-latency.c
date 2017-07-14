@@ -150,6 +150,7 @@ int main(int argc, char **argv)
 
         ABT_eventual_wait(rpcs_serviced_eventual, NULL);
         assert(rpcs_serviced == g_opts.iterations);
+        sleep(3);
     }
 
     ssg_group_destroy(gid);
