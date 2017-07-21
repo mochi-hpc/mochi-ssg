@@ -157,7 +157,12 @@ int main(int argc, char **argv)
     ssg_finalize();
     margo_finalize(mid);
     HG_Context_destroy(hg_context);
+/* TODO: debug this further later; HG_Finalize() always hangs at this point
+ * when using CCI/verbs right now.
+ */
+#if 0
     HG_Finalize(hg_class);
+#endif
     MPI_Finalize();
     ABT_finalize();
 
