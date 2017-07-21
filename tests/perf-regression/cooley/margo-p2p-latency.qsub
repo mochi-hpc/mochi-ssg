@@ -1,6 +1,5 @@
 #!/bin/bash
 #COBALT -n 2
-#COBALT -M carns@mcs.anl.gov
 #COBALT -t 5
 #COBALT --mode script
 #COBALT -A radix-io
