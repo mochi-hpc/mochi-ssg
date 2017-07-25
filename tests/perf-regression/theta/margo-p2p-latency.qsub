@@ -1,0 +1,8 @@
+#!/bin/bash
+#COBALT -n 2
+#COBALT -t 10
+#COBALT --mode script
+#COBALT -A radix-io
+#COBALT -q debug-flat-quad
+
+aprun -n 2 -N 1 ./margo-p2p-latency -i 100000 -n ofi://
