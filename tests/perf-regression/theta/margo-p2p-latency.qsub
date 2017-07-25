@@ -4,5 +4,6 @@
 #COBALT --mode script
 #COBALT -A radix-io
 #COBALT -q debug-flat-quad
+#COBALT -M carns@mcs.anl.gov
 
-aprun -n 2 -N 1 ./margo-p2p-latency -i 100000 -n ofi://
+aprun -n 2 -N 1 ./margo-p2p-latency -i 100000 -n ofi+gni://ipogif0:5000
