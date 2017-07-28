@@ -97,7 +97,6 @@ make install
 # ssg
 echo "=== BUILDING SSG ==="
 cd $SANDBOX/ssg
-git checkout dev-margo-p2p-latency
 libtoolize
 ./prepare.sh
 mkdir build
