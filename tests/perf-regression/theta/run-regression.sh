@@ -15,7 +15,7 @@ JOBDIR=~/tmp/mochi-regression-job-$$
 module swap PrgEnv-intel PrgEnv-gnu
 module load boost/gnu
 
-export CC=gcc
+export CC=cc
 export CFLAGS="-O3 -I$BOOST_ROOT/include"
 export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:$PKG_CONFIG_PATH"
 export CRAYPE_LINK_TYPE=dynamic
@@ -43,7 +43,7 @@ cd $SANDBOX/argobots
 ./autogen.sh
 mkdir build
 cd build
-../configure --prefix=$PREFIX --enable-perf-opt
+../configure --prefix=$PREFIX --enable-perf-opt --host=x86_64-linux 
 make -j 3
 make install
  
@@ -53,7 +53,7 @@ cd $SANDBOX/libfabric
 ./autogen.sh
 mkdir build
 cd build
-../configure --prefix=$PREFIX --enable-ugni-static --disable-rxd --disable-rxm --disable-udp --disable-usnic --disable-verbs --disable-sockets
+../configure --prefix=$PREFIX --enable-gni --disable-rxd --disable-rxm --disable-udp --disable-usnic --disable-verbs --disable-sockets --host=x86_64-linux 
 make -j 3
 make install
 
@@ -72,7 +72,7 @@ echo "=== BUILDING LIBEV ==="
 cd $SANDBOX/libev-4.24
 mkdir build
 cd build
-../configure --prefix=$PREFIX
+../configure --prefix=$PREFIX --host=x86_64-linux 
 make -j 3
 make install
 
@@ -82,7 +82,7 @@ cd $SANDBOX/abt-snoozer
 ./prepare.sh
 mkdir build
 cd build
-../configure --prefix=$PREFIX 
+../configure --prefix=$PREFIX  --host=x86_64-linux
 make -j 3
 make install
 
@@ -92,7 +92,7 @@ cd $SANDBOX/margo
 ./prepare.sh
 mkdir build
 cd build
-../configure --prefix=$PREFIX 
+../configure --prefix=$PREFIX  --host=x86_64-linux
 make -j 3
 make install
 
@@ -102,16 +102,16 @@ cd $SANDBOX/ssg
 ./prepare.sh
 mkdir build
 cd build
-../configure --prefix=$PREFIX --host=x86_64 CC=cc 
+../configure --prefix=$PREFIX --host=x86_64-linux 
 make -j 3
 make install
 make tests
 
 # set up job to run
 echo "=== SUBMITTING AND WAITING FOR JOB ==="
-cp $SANDBOX/ssg/build/tests/perf-regression/margo-p2p-latency $JOBDIR
+cp $SANDBOX/ssg/build/tests/perf-regression/.libs/margo-p2p-latency $JOBDIR
 cd $JOBDIR
-JOBID=`qsub --env LD_LIBRARY_PATH=$PREFIX/lib ./margo-p2p-latency.qsub`
+JOBID=`qsub ./margo-p2p-latency.qsub`
 cqwait $JOBID
 
 echo "=== JOB DONE, COLLECTING AND SENDING RESULTS ==="
@@ -121,5 +121,6 @@ dos2unix combined.$JOBID.txt
 mailx -s "margo-p2p-latency (theta, ofi/gni)" sds-commits@lists.mcs.anl.gov < combined.$JOBID.txt
 
 cd /tmp
-rm -rf $SANDBOX
-rm -rf $PREFIX
+# TODO: temporary while debugging
+#rm -rf $SANDBOX
+#rm -rf $PREFIX
