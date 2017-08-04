@@ -121,6 +121,5 @@ dos2unix combined.$JOBID.txt
 mailx -s "margo-p2p-latency (theta, ofi/gni)" sds-commits@lists.mcs.anl.gov < combined.$JOBID.txt
 
 cd /tmp
-# TODO: temporary while debugging
-#rm -rf $SANDBOX
-#rm -rf $PREFIX
+rm -rf $SANDBOX
+rm -rf $PREFIX
