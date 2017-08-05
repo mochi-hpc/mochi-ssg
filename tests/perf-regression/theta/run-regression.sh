@@ -29,6 +29,7 @@ cp margo-p2p-latency.qsub $JOBDIR
 
 cd $SANDBOX
 git clone https://github.com/ofiwg/libfabric.git
+git clone git://git.mcs.anl.gov/bmi
 git clone https://github.com/pmodels/argobots.git
 git clone https://github.com/mercury-hpc/mercury.git
 wget http://dist.schmorp.de/libev/libev-4.24.tar.gz
@@ -57,12 +58,22 @@ cd build
 make -j 3
 make install
 
+# BMI
+echo "=== BUILDING BMI ==="
+cd $SANDBOX/bmi
+./prepare
+mkdir build
+cd build
+../configure --prefix=$PREFIX --enable-shared --host=x86_64-linux 
+make -j 3
+make install
+
 # mercury
 echo "=== BUILDING MERCURY ==="
 cd $SANDBOX/mercury
 mkdir build
 cd build
-cmake -DNA_USE_OFI:BOOL=ON -DMERCURY_USE_BOOST_PP:BOOL=ON -DCMAKE_INSTALL_PREFIX=/$PREFIX -DMERCURY_USE_CHECKSUMS:BOOL=OFF -DBUILD_SHARED_LIBS:BOOL=ON -DMERCURY_USE_SELF_FORWARD:BOOL=ON -DNA_USE_SM:BOOL=ON ../
+cmake -DNA_USE_BMI:BOOL=ON -DBMI_INCLUDE_DIR:PATH=$PREFIX/include -DBMI_LIBRARY:FILEPATH=$PREFIX/lib/libbmi.so -DNA_USE_OFI:BOOL=ON -DMERCURY_USE_BOOST_PP:BOOL=ON -DCMAKE_INSTALL_PREFIX=/$PREFIX -DMERCURY_USE_CHECKSUMS:BOOL=OFF -DBUILD_SHARED_LIBS:BOOL=ON -DMERCURY_USE_SELF_FORWARD:BOOL=ON -DNA_USE_SM:BOOL=ON ../
 make -j 3
 make install
 

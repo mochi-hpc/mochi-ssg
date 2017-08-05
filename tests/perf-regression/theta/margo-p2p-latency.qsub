@@ -7,3 +7,4 @@
 #COBALT -M carns@mcs.anl.gov
 
 aprun -n 2 -N 1 ./margo-p2p-latency -i 100000 -n ofi+gni://ipogif0:5000
+aprun -n 2 -N 1 ./margo-p2p-latency -i 100000 -n bmi+tcp://5000
