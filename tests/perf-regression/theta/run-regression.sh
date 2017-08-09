@@ -31,7 +31,7 @@ cd $SANDBOX
 git clone https://github.com/ofiwg/libfabric.git
 git clone git://git.mcs.anl.gov/bmi
 git clone https://github.com/pmodels/argobots.git
-git clone https://github.com/mercury-hpc/mercury.git
+git clone https://github.com/carns/mercury.git
 wget http://dist.schmorp.de/libev/libev-4.24.tar.gz
 tar -xvzf libev-4.24.tar.gz
 git clone https://xgitlab.cels.anl.gov/sds/abt-snoozer.git
@@ -71,6 +71,7 @@ make install
 # mercury
 echo "=== BUILDING MERCURY ==="
 cd $SANDBOX/mercury
+git checkout dev-bmi-addr-resolution
 mkdir build
 cd build
 cmake -DNA_USE_BMI:BOOL=ON -DBMI_INCLUDE_DIR:PATH=$PREFIX/include -DBMI_LIBRARY:FILEPATH=$PREFIX/lib/libbmi.so -DNA_USE_OFI:BOOL=ON -DMERCURY_USE_BOOST_PP:BOOL=ON -DCMAKE_INSTALL_PREFIX=/$PREFIX -DMERCURY_USE_CHECKSUMS:BOOL=OFF -DBUILD_SHARED_LIBS:BOOL=ON -DMERCURY_USE_SELF_FORWARD:BOOL=ON -DNA_USE_SM:BOOL=ON ../
@@ -131,5 +132,8 @@ dos2unix combined.$JOBID.txt
 mailx -s "margo-p2p-latency (theta, ofi/gni)" sds-commits@lists.mcs.anl.gov < combined.$JOBID.txt
 
 cd /tmp
+#echo sandbox: $SANDBOX
+#echo prefix: $PREFIX
+#echo jobdir: $JOBDIR
 rm -rf $SANDBOX
 rm -rf $PREFIX
