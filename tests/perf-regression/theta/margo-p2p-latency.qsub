@@ -6,9 +6,20 @@
 #COBALT -q debug-flat-quad
 #COBALT -M carns@mcs.anl.gov
 
-echo "OFI/GNI:"
+echo "Margo OFI/GNI (round trip):"
 aprun -n 2 -N 1 ./margo-p2p-latency -i 100000 -n ofi+gni://ipogif0:5000
-echo "BMI/TCP:"
+echo "Margo BMI/TCP (round trip):"
 aprun -n 2 -N 1 ./margo-p2p-latency -i 100000 -n bmi+tcp://
-echo "OFI/TCP (disabled because it hangs as of 8/10/2017):"
+echo "WARNING: Margo OFI/TCP (disabled because it hangs as of 8/10/2017):"
 # aprun -n 2 -N 1 ./margo-p2p-latency -i 100000 -n ofi+tcp://ipogif0:5000
+
+# figure out nodes and hostnames for use with fi_
+declare -a nodes=($(python /lus/theta-fs0/home/pershey/harness_workspace/bin/run_on_all_nids.py));
+server_hostname=$(printf "nid%05d\n" ${nodes[0]})
+
+echo "fi_pingpong OFI/GNI (one way, double the usec/xfer for round trip):"
+aprun -n 1 -N 1 -L ${nodes[0]} -b -p carns-test ./fi_pingpong -p gni -S 1 -I 10000 > $COBALT_JOBID.fi_pingpong_server.log &
+aprun -n 1 -N 1 -L ${nodes[1]} -b -p carns-test ./fi_pingpong -p gni -S 1 -I 10000 $server_hostname > $COBALT_JOBID.fi_pingpong_client.log &
+
+wait
+cat $COBALT_JOBID.fi_pingpong_client.log

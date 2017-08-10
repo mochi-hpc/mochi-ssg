@@ -121,6 +121,7 @@ make tests
 # set up job to run
 echo "=== SUBMITTING AND WAITING FOR JOB ==="
 cp $SANDBOX/ssg/build/tests/perf-regression/.libs/margo-p2p-latency $JOBDIR
+cp $PREFIX/bin/fi_pingpong $JOBDIR
 cd $JOBDIR
 JOBID=`qsub ./margo-p2p-latency.qsub`
 cqwait $JOBID
