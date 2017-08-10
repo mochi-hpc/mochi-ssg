@@ -54,7 +54,7 @@ cd $SANDBOX/libfabric
 ./autogen.sh
 mkdir build
 cd build
-../configure --prefix=$PREFIX --enable-gni --disable-rxd --disable-rxm --disable-udp --disable-usnic --disable-verbs --disable-sockets --host=x86_64-linux 
+../configure --prefix=$PREFIX --enable-gni --enable-sockets --disable-rxd --disable-rxm --disable-udp --disable-usnic --disable-verbs --host=x86_64-linux 
 make -j 3
 make install
 
@@ -129,11 +129,11 @@ echo "=== JOB DONE, COLLECTING AND SENDING RESULTS ==="
 # gather output, strip out funny characters, mail
 cat $JOBID.* > combined.$JOBID.txt
 dos2unix combined.$JOBID.txt
-mailx -s "margo-p2p-latency (theta, ofi/gni)" sds-commits@lists.mcs.anl.gov < combined.$JOBID.txt
+mailx -s "margo-p2p-latency (theta)" sds-commits@lists.mcs.anl.gov < combined.$JOBID.txt
 
 cd /tmp
-#echo sandbox: $SANDBOX
-#echo prefix: $PREFIX
-#echo jobdir: $JOBDIR
+echo sandbox: $SANDBOX
+echo prefix: $PREFIX
+echo jobdir: $JOBDIR
 rm -rf $SANDBOX
 rm -rf $PREFIX
