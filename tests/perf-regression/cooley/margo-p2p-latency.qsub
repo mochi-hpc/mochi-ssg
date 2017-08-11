@@ -8,4 +8,7 @@
 
 # NOTE: remmeber to uncomment some stuff in ~/.bashrc for library paths
 
+echo "Margo CCI/VERBS (round trip):"
 mpirun -f $COBALT_NODEFILE -n 2 ./margo-p2p-latency -i 100000 -n verbs://
+echo "Margo CCI/VERBS (round trip) with diagnostics:"
+mpirun -f $COBALT_NODEFILE -n 2 ./margo-p2p-latency -i 100000 -n verbs:// -d $COBALT_JOBID.diag
