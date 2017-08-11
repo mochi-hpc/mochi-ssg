@@ -21,6 +21,7 @@
 struct options
 {
     int iterations;
+    char* diag_file_name;
     char* na_transport;
 };
 
@@ -99,6 +100,9 @@ int main(int argc, char **argv)
     mid = margo_init(0, 0, hg_context);
     assert(mid);
 
+    if(g_opts.diag_file_name)
+        margo_diag_start(mid);
+
     MARGO_REGISTER(
         mid, 
         "noop_rpc", 
@@ -155,6 +159,10 @@ int main(int argc, char **argv)
 
     ssg_group_destroy(gid);
     ssg_finalize();
+
+    if(g_opts.diag_file_name)
+        margo_diag_dump(mid, g_opts.diag_file_name, 1);
+
     margo_finalize(mid);
     HG_Context_destroy(hg_context);
 /* TODO: debug this further later; HG_Finalize() always hangs at this point
@@ -176,10 +184,18 @@ static void parse_args(int argc, char **argv, struct options *opts)
 
     memset(opts, 0, sizeof(*opts));
 
-    while((opt = getopt(argc, argv, "n:i:")) != -1)
+    while((opt = getopt(argc, argv, "n:i:d:")) != -1)
     {
         switch(opt)
         {
+            case 'd':
+                opts->diag_file_name = strdup(optarg);
+                if(!opts->diag_file_name)
+                {
+                    perror("strdup");
+                    exit(EXIT_FAILURE);
+                }
+                break;
             case 'i':
                 ret = sscanf(optarg, "%d", &opts->iterations);
                 if(ret != 1)
