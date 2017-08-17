@@ -8,6 +8,8 @@
 
 # NOTE: remmeber to uncomment some stuff in ~/.bashrc for library paths
 
+echo "MPI (one way, double the latency for round trip):"
+mpirun -f $COBALT_NODEFILE -n 2 ./osu_latency
 echo "Margo CCI/VERBS (round trip):"
 mpirun -f $COBALT_NODEFILE -n 2 ./margo-p2p-latency -i 100000 -n verbs://
 echo "Margo CCI/VERBS (round trip) with diagnostics:"

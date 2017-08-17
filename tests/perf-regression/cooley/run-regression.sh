@@ -30,6 +30,17 @@ tar -xvzf libev-4.24.tar.gz
 git clone https://xgitlab.cels.anl.gov/sds/abt-snoozer.git
 git clone https://xgitlab.cels.anl.gov/sds/margo.git
 git clone https://xgitlab.cels.anl.gov/sds/ssg.git
+wget http://mvapich.cse.ohio-state.edu/download/mvapich/osu-micro-benchmarks-5.3.2.tar.gz
+tar -xvzf osu-micro-benchmarks-5.3.2.tar.gz
+
+# OSU MPI benchmarks
+echo "=== BUILDING OSU MICRO BENCHMARKS ==="
+cd $SANDBOX/osu-micro-benchmarks-5.3.2
+mkdir build
+cd build
+../configure --prefix=$PREFIX CC=mpicc CXX=mpicxx
+make -j 3
+make install
 
 # argobots
 echo "=== BUILDING ARGOBOTS ==="
@@ -109,6 +120,7 @@ make tests
 # set up job to run
 echo "=== SUBMITTING AND WAITING FOR JOB ==="
 cp $SANDBOX/ssg/build/tests/perf-regression/.libs/margo-p2p-latency $JOBDIR
+cp $PREFIX/libexec/osu-micro-benchmarks/mpi/pt2pt/osu_latency $JOBDIR
 cd $JOBDIR
 JOBID=`qsub --env CCI_CONFIG=/home/carns/working/install-cooley/etc/cci.conf:LD_LIBRARY_PATH=$PREFIX/lib ./margo-p2p-latency.qsub`
 cqwait $JOBID
