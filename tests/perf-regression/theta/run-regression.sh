@@ -43,7 +43,7 @@ wget http://mvapich.cse.ohio-state.edu/download/mvapich/osu-micro-benchmarks-5.3
 tar -xvzf osu-micro-benchmarks-5.3.2.tar.gz
 
 # OSU MPI benchmarks
-echo "=== BUILDING ARGOBOTS ==="
+echo "=== BUILDING OSU MICRO BENCHMARKS ==="
 cd $SANDBOX/osu-micro-benchmarks-5.3.2
 mkdir build
 cd build
