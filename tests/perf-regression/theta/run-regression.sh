@@ -16,7 +16,9 @@ module swap PrgEnv-intel PrgEnv-gnu
 module load boost/gnu
 
 export CC=cc
+export CXX=CC
 export CFLAGS="-O3 -I$BOOST_ROOT/include"
+export CXXFLAGS="-O3"
 export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:$PKG_CONFIG_PATH"
 export CRAYPE_LINK_TYPE=dynamic
 
@@ -37,6 +39,17 @@ tar -xvzf libev-4.24.tar.gz
 git clone https://xgitlab.cels.anl.gov/sds/abt-snoozer.git
 git clone https://xgitlab.cels.anl.gov/sds/margo.git
 git clone https://xgitlab.cels.anl.gov/sds/ssg.git
+wget http://mvapich.cse.ohio-state.edu/download/mvapich/osu-micro-benchmarks-5.3.2.tar.gz
+tar -xvzf osu-micro-benchmarks-5.3.2.tar.gz
+
+# OSU MPI benchmarks
+echo "=== BUILDING ARGOBOTS ==="
+cd $SANDBOX/osu-micro-benchmarks-5.3.2
+mkdir build
+cd build
+../configure --prefix=$PREFIX --host=x86_64-linux 
+make -j 3
+make install
 
 # argobots
 echo "=== BUILDING ARGOBOTS ==="
@@ -123,6 +136,7 @@ make tests
 echo "=== SUBMITTING AND WAITING FOR JOB ==="
 cp $SANDBOX/ssg/build/tests/perf-regression/.libs/margo-p2p-latency $JOBDIR
 cp $PREFIX/bin/fi_pingpong $JOBDIR
+cp $PREFIX/libexec/osu-micro-benchmarks/mpi/pt2pt/osu_latency $JOBDIR
 cd $JOBDIR
 JOBID=`qsub ./margo-p2p-latency.qsub`
 cqwait $JOBID

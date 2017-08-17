@@ -6,6 +6,9 @@
 #COBALT -q debug-flat-quad
 #COBALT -M carns@mcs.anl.gov
 
+echo "MPI (one way, double the latency for round trip):"
+aprun -n 2 -N 1 ./osu_latency
+
 echo "Margo OFI/GNI (round trip):"
 aprun -n 2 -N 1 ./margo-p2p-latency -i 100000 -n ofi+gni://ipogif0:5000
 echo "Margo BMI/TCP (round trip):"
