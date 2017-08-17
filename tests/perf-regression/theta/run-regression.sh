@@ -55,7 +55,7 @@ git checkout tags/v1.5.0
 ./autogen.sh
 mkdir build
 cd build
-../configure --prefix=$PREFIX --enable-gni --enable-sockets --disable-rxd --disable-rxm --disable-udp --disable-usnic --disable-verbs --host=x86_64-linux 
+../configure --prefix=$PREFIX --enable-gni --enable-ugni-static --enable-sockets --disable-rxd --disable-rxm --disable-udp --disable-usnic --disable-verbs --host=x86_64-linux 
 make -j 3
 make install
 
