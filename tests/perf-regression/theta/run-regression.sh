@@ -49,8 +49,9 @@ make -j 3
 make install
  
 # libfabric
-echo "=== BUILDING LIBFABRIC ==="
+echo "=== BUILDING LIBFABRIC v1.5.0 ==="
 cd $SANDBOX/libfabric
+git checkout tags/v1.5.0
 ./autogen.sh
 mkdir build
 cd build
