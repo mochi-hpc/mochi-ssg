@@ -22,7 +22,7 @@ mkdir $JOBDIR
 cp margo-p2p-latency.qsub $JOBDIR
 
 cd $SANDBOX
-git clone https://github.com/pmodels/argobots.git
+git clone https://github.com/carns/argobots.git
 git clone https://github.com/CCI/cci.git
 git clone https://github.com/mercury-hpc/mercury.git
 wget http://dist.schmorp.de/libev/libev-4.24.tar.gz
@@ -45,6 +45,7 @@ make install
 # argobots
 echo "=== BUILDING ARGOBOTS ==="
 cd $SANDBOX/argobots
+git checkout dev-htable-push-bug
 libtoolize
 ./autogen.sh
 mkdir build
