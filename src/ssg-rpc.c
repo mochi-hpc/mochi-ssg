@@ -51,15 +51,10 @@ static hg_id_t ssg_group_attach_rpc_id;
  */
 void ssg_register_rpcs()
 {
-    hg_class_t *hgcl = NULL;
-
-    hgcl = margo_get_class(ssg_inst->mid);
-    if (!hgcl) return;
-
     /* register HG RPCs for SSG */
-    ssg_group_attach_rpc_id = MERCURY_REGISTER(hgcl, "ssg_group_attach",
+    MARGO_REGISTER(ssg_inst->mid, "ssg_group_attach",
         ssg_group_attach_request_t, ssg_group_attach_response_t,
-        ssg_group_attach_recv_ult_handler);
+        ssg_group_attach_recv_ult, &ssg_group_attach_rpc_id);
 
     return;
 }

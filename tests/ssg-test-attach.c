@@ -123,8 +123,8 @@ int main(int argc, char *argv[])
     DIE_IF(sret != SSG_SUCCESS, "ssg_init");
 
     /* register RPC for forwarding an SSG group identifier */
-    group_id_forward_rpc_id = MERCURY_REGISTER(hgcl, "group_id_forward",
-        ssg_group_id_t, void, group_id_forward_recv_ult_handler);
+    MARGO_REGISTER(mid, "group_id_forward",
+        ssg_group_id_t, void, group_id_forward_recv_ult, &group_id_forward_rpc_id);
     group_id_forward_ctx.mid = mid;
     group_id_forward_ctx.g_id_p = &g_id;
     hret = HG_Register_data(hgcl, group_id_forward_rpc_id, &group_id_forward_ctx, NULL);

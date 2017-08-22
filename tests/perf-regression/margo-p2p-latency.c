@@ -103,14 +103,15 @@ int main(int argc, char **argv)
     if(g_opts.diag_file_name)
         margo_diag_start(mid);
 
-    MARGO_REGISTER(
+    MARGO_REGISTER_MPLEX(
         mid, 
         "noop_rpc", 
         void,
         void,
-        noop_ult_handler,
+        noop_ult,
         MARGO_DEFAULT_MPLEX_ID,
-        NULL);
+        NULL, 
+        MARGO_RPC_ID_IGNORE);
 
     /* set up group */
     ret = ssg_init(mid);
@@ -245,11 +246,8 @@ static void usage(void)
 static void noop_ult(hg_handle_t handle)
 {
     margo_instance_id mid;
-    const struct hg_info *hgi;
 
-    hgi = HG_Get_info(handle);
-    assert(hgi);
-    mid = margo_hg_class_to_instance(hgi->hg_class);
+    mid = margo_hg_handle_get_instance(handle);
 
     margo_respond(mid, handle, NULL);
     HG_Destroy(handle);
