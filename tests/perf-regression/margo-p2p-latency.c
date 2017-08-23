@@ -52,7 +52,6 @@ int main(int argc, char **argv)
     ssg_group_id_t gid;
     ssg_member_id_t self;
     int rank;
-    hg_bool_t flag;
     double *measurement_array;
     int namelen;
     char processor_name[MPI_MAX_PROCESSOR_NAME];
@@ -117,7 +116,7 @@ int main(int argc, char **argv)
         noop_ult,
         MARGO_DEFAULT_MPLEX_ID,
         NULL, 
-        MARGO_RPC_ID_IGNORE);
+        &noop_id);
 
     /* set up group */
     ret = ssg_init(mid);
@@ -131,10 +130,6 @@ int main(int argc, char **argv)
 #if 0
     printf("MPI rank %d has SSG ID %lu\n", rank, self);
 #endif
-
-    /* TODO: there should be a cleaner way to get ID from MARGO_REGISTER */
-    ret = HG_Registered_name(hg_class, "noop_rpc", &noop_id, &flag);
-    assert(ret == 0 && flag);
 
     if(self == 0)
     {
