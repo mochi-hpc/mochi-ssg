@@ -21,6 +21,8 @@
 struct options
 {
     int iterations;
+    int snoozer_flag_client;
+    int snoozer_flag_server;
     char* diag_file_name;
     char* na_transport;
 };
@@ -88,12 +90,16 @@ int main(int argc, char **argv)
         return(-1);
     }
 
-    /* set primary ES to idle without polling */
-    ret = ABT_snoozer_xstream_self_set();
-    if(ret != 0)
+    if((rank == 0 && g_opts.snoozer_flag_client) || 
+        (rank == 1 && g_opts.snoozer_flag_server))
     {
-        fprintf(stderr, "Error: ABT_snoozer_xstream_self_set()\n");
-        return(-1);
+        /* set primary ES to idle without polling in scheduler */
+        ret = ABT_snoozer_xstream_self_set();
+        if(ret != 0)
+        {
+            fprintf(stderr, "Error: ABT_snoozer_xstream_self_set()\n");
+            return(-1);
+        }
     }
 
     /* actually start margo */
@@ -182,10 +188,15 @@ static void parse_args(int argc, char **argv, struct options *opts)
 {
     int opt;
     int ret;
+    char clientflag, serverflag;
 
     memset(opts, 0, sizeof(*opts));
 
-    while((opt = getopt(argc, argv, "n:i:d:")) != -1)
+    /* default to enabling snoozer scheduler on both client and server */
+    opts->snoozer_flag_client = 1;
+    opts->snoozer_flag_server = 1;
+
+    while((opt = getopt(argc, argv, "n:i:d:s:")) != -1)
     {
         switch(opt)
         {
@@ -204,6 +215,16 @@ static void parse_args(int argc, char **argv, struct options *opts)
                     usage();
                     exit(EXIT_FAILURE);
                 }
+                break;
+            case 's':
+                ret = sscanf(optarg, "%c%c", &clientflag, &serverflag);
+                if(ret != 2)
+                {
+                    usage();
+                    exit(EXIT_FAILURE);
+                }
+                if(clientflag == '0') opts->snoozer_flag_client = 0;
+                if(serverflag == '0') opts->snoozer_flag_server = 0;
                 break;
             case 'n':
                 opts->na_transport = strdup(optarg);
@@ -235,6 +256,9 @@ static void usage(void)
         "margo-p2p-latency -i <iterations> -n <na>\n"
         "\t-i <iterations> - number of RPC iterations\n"
         "\t-n <na> - na transport\n"
+        "\t[-d filename] - enable diagnostics output \n"
+        "\t[-s <boolbool>] - specify if snoozer scheduler is used on client and server\n"
+        "\t\t(e.g., -s 01 means snoozer disabled on client and enabled on server)\n"
         "\t\texample: mpiexec -n 2 ./margo-p2p-latency -i 10000 -n verbs://\n"
         "\t\t(must be run with exactly 2 processes\n");
     
