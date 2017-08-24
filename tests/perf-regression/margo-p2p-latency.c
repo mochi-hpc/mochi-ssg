@@ -23,6 +23,8 @@ struct options
     int iterations;
     int snoozer_flag_client;
     int snoozer_flag_server;
+    unsigned int mercury_timeout_client;
+    unsigned int mercury_timeout_server;
     char* diag_file_name;
     char* na_transport;
 };
@@ -108,6 +110,12 @@ int main(int argc, char **argv)
     if(g_opts.diag_file_name)
         margo_diag_start(mid);
 
+    /* adjust mercury timeout in Margo if requested */
+    if(rank == 0 && g_opts.mercury_timeout_client != UINT_MAX)
+        margo_set_info(mid, MARGO_INFO_PROGRESS_TIMEOUT_UB, &g_opts.mercury_timeout_client);
+    if(rank == 1 && g_opts.mercury_timeout_server != UINT_MAX)
+        margo_set_info(mid, MARGO_INFO_PROGRESS_TIMEOUT_UB, &g_opts.mercury_timeout_server);
+
     MARGO_REGISTER_MPLEX(
         mid, 
         "noop_rpc", 
@@ -190,8 +198,11 @@ static void parse_args(int argc, char **argv, struct options *opts)
     /* default to enabling snoozer scheduler on both client and server */
     opts->snoozer_flag_client = 1;
     opts->snoozer_flag_server = 1;
+    /* default to using whatever the standard timeout is in margo */
+    opts->mercury_timeout_client = UINT_MAX;
+    opts->mercury_timeout_server = UINT_MAX; 
 
-    while((opt = getopt(argc, argv, "n:i:d:s:")) != -1)
+    while((opt = getopt(argc, argv, "n:i:d:s:t:")) != -1)
     {
         switch(opt)
         {
@@ -212,7 +223,7 @@ static void parse_args(int argc, char **argv, struct options *opts)
                 }
                 break;
             case 's':
-                ret = sscanf(optarg, "%c%c", &clientflag, &serverflag);
+                ret = sscanf(optarg, "%c,%c", &clientflag, &serverflag);
                 if(ret != 2)
                 {
                     usage();
@@ -220,6 +231,14 @@ static void parse_args(int argc, char **argv, struct options *opts)
                 }
                 if(clientflag == '0') opts->snoozer_flag_client = 0;
                 if(serverflag == '0') opts->snoozer_flag_server = 0;
+                break;
+            case 't':
+                ret = sscanf(optarg, "%u,%u", &opts->mercury_timeout_client, &opts->mercury_timeout_server);
+                if(ret != 2)
+                {
+                    usage();
+                    exit(EXIT_FAILURE);
+                }
                 break;
             case 'n':
                 opts->na_transport = strdup(optarg);
@@ -252,8 +271,8 @@ static void usage(void)
         "\t-i <iterations> - number of RPC iterations\n"
         "\t-n <na> - na transport\n"
         "\t[-d filename] - enable diagnostics output \n"
-        "\t[-s <boolbool>] - specify if snoozer scheduler is used on client and server\n"
-        "\t\t(e.g., -s 01 means snoozer disabled on client and enabled on server)\n"
+        "\t[-s <bool,bool>] - specify if snoozer scheduler is used on client and server\n"
+        "\t\t(e.g., -s 0,1 means snoozer disabled on client and enabled on server)\n"
         "\t\texample: mpiexec -n 2 ./margo-p2p-latency -i 10000 -n verbs://\n"
         "\t\t(must be run with exactly 2 processes\n");
     
