@@ -45,7 +45,7 @@ make install
 # argobots
 echo "=== BUILDING ARGOBOTS ==="
 cd $SANDBOX/argobots
-git checkout dev-htable-push-bug
+git checkout dev-get-dev-basic
 libtoolize
 ./autogen.sh
 mkdir build
