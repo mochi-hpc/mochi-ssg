@@ -4,6 +4,8 @@
  * See COPYRIGHT in top-level directory.
  */
 
+#include "ssg-config.h"
+
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
@@ -12,7 +14,9 @@
 #include <mpi.h>
 
 #include <margo.h>
+#ifdef HAVE_ABT_SNOOZER
 #include <abt-snoozer.h>
+#endif
 #include <mercury.h>
 #include <abt.h>
 #include <ssg.h>
@@ -95,6 +99,7 @@ int main(int argc, char **argv)
     if((rank == 0 && g_opts.snoozer_flag_client) || 
         (rank == 1 && g_opts.snoozer_flag_server))
     {
+#ifdef HAVE_ABT_SNOOZER
         /* set primary ES to idle without polling in scheduler */
         ret = ABT_snoozer_xstream_self_set();
         if(ret != 0)
@@ -102,6 +107,10 @@ int main(int argc, char **argv)
             fprintf(stderr, "Error: ABT_snoozer_xstream_self_set()\n");
             return(-1);
         }
+#else
+        fprintf(stderr, "Error: abt-snoozer scheduler is not supported\n");
+        return(-1);
+#endif
     }
 
     /* get main pool for running mercury progress and RPC handlers */
@@ -209,9 +218,14 @@ static void parse_args(int argc, char **argv, struct options *opts)
 
     memset(opts, 0, sizeof(*opts));
 
+#ifdef HAVE_ABT_SNOOZER
     /* default to enabling snoozer scheduler on both client and server */
     opts->snoozer_flag_client = 1;
     opts->snoozer_flag_server = 1;
+#else
+    opts->snoozer_flag_client = 0;
+    opts->snoozer_flag_server = 0;
+#endif
     /* default to using whatever the standard timeout is in margo */
     opts->mercury_timeout_client = UINT_MAX;
     opts->mercury_timeout_server = UINT_MAX; 
@@ -244,7 +258,9 @@ static void parse_args(int argc, char **argv, struct options *opts)
                     exit(EXIT_FAILURE);
                 }
                 if(clientflag == '0') opts->snoozer_flag_client = 0;
+                else if(clientflag == '1') opts->snoozer_flag_client = 1;
                 if(serverflag == '0') opts->snoozer_flag_server = 0;
+                else if(serverflag == '1') opts->snoozer_flag_server = 1;
                 break;
             case 't':
                 ret = sscanf(optarg, "%u,%u", &opts->mercury_timeout_client, &opts->mercury_timeout_server);
