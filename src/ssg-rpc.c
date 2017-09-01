@@ -70,7 +70,6 @@ int ssg_group_attach_send(
     int * group_size,
     void ** view_buf)
 {
-    hg_class_t *hgcl = NULL;
     hg_addr_t member_addr = HG_ADDR_NULL;
     hg_handle_t handle = HG_HANDLE_NULL;
     hg_bulk_t bulk_handle = HG_BULK_NULL;
@@ -129,7 +128,7 @@ int ssg_group_attach_send(
 
         /* free old bulk handle and recreate it */
         margo_bulk_free(bulk_handle);
-        hret = HG_Bulk_create(hgcl, 1, &tmp_view_buf, &tmp_view_buf_size,
+        hret = margo_bulk_create(ssg_inst->mid, 1, &tmp_view_buf, &tmp_view_buf_size,
             HG_BULK_WRITE_ONLY, &bulk_handle);
         if (hret != HG_SUCCESS) goto fini;
 
@@ -138,7 +137,7 @@ int ssg_group_attach_send(
         if (hret != HG_SUCCESS) goto fini;
 
         margo_free_output(handle, &attach_resp);
-        hret = HG_Get_output(handle, &attach_resp);
+        hret = margo_get_output(handle, &attach_resp);
         if (hret != HG_SUCCESS) goto fini;
     }
 
@@ -174,7 +173,7 @@ fini:
 static void ssg_group_attach_recv_ult(
     hg_handle_t handle)
 {
-	const struct hg_info *hgi = NULL;
+    const struct hg_info *hgi = NULL;
     ssg_group_t *g = NULL;
     ssg_group_attach_request_t attach_req;
     ssg_group_attach_response_t attach_resp;
@@ -213,8 +212,8 @@ static void ssg_group_attach_recv_ult(
     if (view_size_requested >= view_buf_size)
     {
         /* if attacher's buf is large enough, transfer the view */
-        hret = margo_bulk_create(ssg_inst->mid, 1, &view_buf, &view_buf_size, HG_BULK_READ_ONLY,
-            &bulk_handle);
+        hret = margo_bulk_create(ssg_inst->mid, 1, &view_buf, &view_buf_size,
+            HG_BULK_READ_ONLY, &bulk_handle);
         if (hret != HG_SUCCESS)
         {
             margo_free_input(handle, &attach_req);

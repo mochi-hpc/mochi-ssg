@@ -729,16 +729,11 @@ void ssg_apply_membership_update(
     ssg_group_t *g,
     ssg_membership_update_t update)
 {
-    hg_class_t *hgcl = NULL;
-    
     if(!ssg_inst || !g) return;
-
-    hgcl = margo_get_class(ssg_inst->mid);
-    if (!hgcl) return;
 
     if (update.type == SSG_MEMBER_REMOVE)
     {
-        HG_Addr_free(hgcl, g->view.member_states[update.member].addr);
+        margo_addr_free(ssg_inst->mid, g->view.member_states[update.member].addr);
         free(g->view.member_states[update.member].addr_str);
         g->view.member_states[update.member].addr_str = NULL;
         g->view.member_states[update.member].is_member = 0;
