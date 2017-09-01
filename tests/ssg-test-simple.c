@@ -14,8 +14,6 @@
 #endif
 
 #include <margo.h>
-#include <mercury.h>
-#include <abt.h>
 #include <ssg.h>
 #ifdef SSG_HAVE_MPI
 #include <ssg-mpi.h>
@@ -101,8 +99,6 @@ static void parse_args(int argc, char *argv[], int *sleep_time, const char **add
 
 int main(int argc, char *argv[])
 {
-    hg_class_t *hgcl = NULL;
-    hg_context_t *hgctx = NULL;
     margo_instance_id mid = MARGO_INSTANCE_NULL;
     int sleep_time = 0;
     const char *addr_str;
@@ -116,21 +112,14 @@ int main(int argc, char *argv[])
 
     parse_args(argc, argv, &sleep_time, &addr_str, &mode, &conf_file);
 
-    ABT_init(argc, argv);
-
 #ifdef SSG_HAVE_MPI
     if (strcmp(mode, "mpi") == 0)
         MPI_Init(&argc, &argv);
 #endif
 
-    /* init HG */
-    hgcl = HG_Init(addr_str, HG_TRUE);
-    DIE_IF(hgcl == NULL, "HG_Init");
-    hgctx = HG_Context_create(hgcl);
-    DIE_IF(hgctx == NULL, "HG_Context_create");
-
-    /* init margo in single threaded mode */
-    mid = margo_init(0, -1, hgctx);
+    /* init margo */
+    /* use the main xstream to drive progress & run handlers */
+    mid = margo_init(addr_str, MARGO_SERVER_MODE, 0, -1);
     DIE_IF(mid == MARGO_INSTANCE_NULL, "margo_init");
 
     /* initialize SSG */
@@ -157,37 +146,12 @@ int main(int argc, char *argv[])
     if (sleep_time > 0) margo_thread_sleep(mid, sleep_time * 1000.0);
 
     /** cleanup **/
-#ifdef SWIM_FORCE_FAIL
-    if (my_id == 1)
-    {
-        ssg_group_destroy(g_id);
-    }
-    else
-    {
-        /* sleep to give all group members a chance to detect the failure */
-        if (sleep_time > 0) margo_thread_sleep(mid, sleep_time * 1000.0);
-
-        ssg_group_destroy(g_id);
-    }
-#else
     ssg_group_destroy(g_id);
-#endif
     ssg_finalize();
-
     margo_finalize(mid);
-
-#ifndef SWIM_FORCE_FAIL
-    if(hgctx) HG_Context_destroy(hgctx);
-    if(hgcl) HG_Finalize(hgcl);
-#endif
-
 #ifdef SSG_HAVE_MPI
     if (strcmp(mode, "mpi") == 0)
         MPI_Finalize();
-#endif
-
-#ifndef SWIM_FORCE_FAIL
-    ABT_finalize();
 #endif
 
     return 0;

@@ -2,10 +2,8 @@ check_PROGRAMS += \
  tests/ssg-test-simple \
  tests/ssg-test-attach
 
-tests_ssg_test_simple_SOURCES = tests/ssg-test-simple.c
 tests_ssg_test_simple_LDADD = src/libssg.la
 
-tests_ssg_test_attach_SOURCES = tests/ssg-test-attach.c
 tests_ssg_test_attach_LDADD = src/libssg.la
 
 if SSG_HAVE_MPI

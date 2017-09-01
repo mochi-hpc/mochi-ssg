@@ -32,8 +32,7 @@ struct options
 static void parse_args(int argc, char **argv, struct options *opts);
 static void usage(void);
 static int run_benchmark(int iterations, hg_id_t id, ssg_member_id_t target, 
-    ssg_group_id_t gid, margo_instance_id mid, hg_context_t *hg_context, 
-    double *measurement_array);
+    ssg_group_id_t gid, margo_instance_id mid, double *measurement_array);
 static void bench_routine_print(const char* op, int size, int iterations, 
     double* measurement_array);
 static int measurement_cmp(const void* a, const void *b);
@@ -50,6 +49,8 @@ int main(int argc, char **argv)
     int nranks;
     hg_context_t *hg_context;
     hg_class_t *hg_class;
+    ABT_xstream xstream;
+    ABT_pool pool;
     int ret;
     ssg_group_id_t gid;
     ssg_member_id_t self;
@@ -103,8 +104,22 @@ int main(int argc, char **argv)
         }
     }
 
+    /* get main pool for running mercury progress and RPC handlers */
+    ret = ABT_xstream_self(&xstream);
+    if(ret != 0)
+    {
+        fprintf(stderr, "Error: ABT_xstream_self()\n");
+        return(-1);
+    }   
+    ret = ABT_xstream_get_main_pools(xstream, 1, &pool);
+    if(ret != 0)
+    {
+        fprintf(stderr, "Error: ABT_xstream_get_main_pools()\n");
+        return(-1);
+    }
+
     /* actually start margo */
-    mid = margo_init(0, 0, hg_context);
+    mid = margo_init_pool(pool, pool, hg_context);
     assert(mid);
 
     if(g_opts.diag_file_name)
@@ -112,19 +127,18 @@ int main(int argc, char **argv)
 
     /* adjust mercury timeout in Margo if requested */
     if(rank == 0 && g_opts.mercury_timeout_client != UINT_MAX)
-        margo_set_info(mid, MARGO_INFO_PROGRESS_TIMEOUT_UB, &g_opts.mercury_timeout_client);
+        margo_set_param(mid, MARGO_PARAM_PROGRESS_TIMEOUT_UB, &g_opts.mercury_timeout_client);
     if(rank == 1 && g_opts.mercury_timeout_server != UINT_MAX)
-        margo_set_info(mid, MARGO_INFO_PROGRESS_TIMEOUT_UB, &g_opts.mercury_timeout_server);
+        margo_set_param(mid, MARGO_PARAM_PROGRESS_TIMEOUT_UB, &g_opts.mercury_timeout_server);
 
-    MARGO_REGISTER_MPLEX(
+    noop_id = MARGO_REGISTER_MPLEX(
         mid, 
         "noop_rpc", 
         void,
         void,
         noop_ult,
         MARGO_DEFAULT_MPLEX_ID,
-        NULL, 
-        &noop_id);
+        NULL);
 
     /* set up group */
     ret = ssg_init(mid);
@@ -146,7 +160,7 @@ int main(int argc, char **argv)
         measurement_array = calloc(g_opts.iterations, sizeof(*measurement_array));
         assert(measurement_array);
 
-        ret = run_benchmark(g_opts.iterations, noop_id, 1, gid, mid, hg_context, measurement_array);
+        ret = run_benchmark(g_opts.iterations, noop_id, 1, gid, mid, measurement_array);
         assert(ret == 0);
 
         printf("# <op> <iterations> <size> <min> <q1> <med> <avg> <q3> <max>\n");
@@ -286,9 +300,10 @@ static void noop_ult(hg_handle_t handle)
     margo_instance_id mid;
 
     mid = margo_hg_handle_get_instance(handle);
+    assert(mid);
 
     margo_respond(mid, handle, NULL);
-    HG_Destroy(handle);
+    margo_destroy(mid, handle);
 
     rpcs_serviced++;
     if(rpcs_serviced == g_opts.iterations)
@@ -301,8 +316,7 @@ static void noop_ult(hg_handle_t handle)
 DEFINE_MARGO_RPC_HANDLER(noop_ult)
 
 static int run_benchmark(int iterations, hg_id_t id, ssg_member_id_t target, 
-    ssg_group_id_t gid, margo_instance_id mid, hg_context_t *hg_context, 
-    double *measurement_array)
+    ssg_group_id_t gid, margo_instance_id mid, double *measurement_array)
 {
     hg_handle_t handle;
     hg_addr_t target_addr;
@@ -313,7 +327,7 @@ static int run_benchmark(int iterations, hg_id_t id, ssg_member_id_t target,
     target_addr = ssg_get_addr(gid, target);
     assert(target_addr != HG_ADDR_NULL);
 
-    ret = HG_Create(hg_context, target_addr, id, &handle);
+    ret = margo_create(mid, target_addr, id, &handle);
     assert(ret == 0);
 
     /* TODO: have command line option to toggle whether we reuse one handle
@@ -328,7 +342,7 @@ static int run_benchmark(int iterations, hg_id_t id, ssg_member_id_t target,
         measurement_array[i] = tm2-tm1;
     }
 
-    HG_Destroy(handle);
+    margo_destroy(mid, handle);
 
     return(0);
 }
