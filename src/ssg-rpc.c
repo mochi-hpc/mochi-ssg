@@ -52,9 +52,10 @@ static hg_id_t ssg_group_attach_rpc_id;
 void ssg_register_rpcs()
 {
     /* register HG RPCs for SSG */
-    MARGO_REGISTER(ssg_inst->mid, "ssg_group_attach",
+    ssg_group_attach_rpc_id =
+		MARGO_REGISTER(ssg_inst->mid, "ssg_group_attach",
         ssg_group_attach_request_t, ssg_group_attach_response_t,
-        ssg_group_attach_recv_ult, &ssg_group_attach_rpc_id);
+        ssg_group_attach_recv_ult);
 
     return;
 }
