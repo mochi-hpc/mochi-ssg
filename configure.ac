@@ -67,6 +67,14 @@ LIBS="$MARGO_LIBS $LIBS"
 CPPFLAGS="$MARGO_CFLAGS $CPPFLAGS"
 CFLAGS="$MARGO_CFLAGS $CFLAGS"
 
+PKG_CHECK_MODULES([ABT_SNOOZER],[abt-snoozer],
+    [AC_DEFINE([HAVE_ABT_SNOOZER], [1], [Use ABT-SNOOZER])],
+    [printf ""])
+LIBS="$ABT_SNOOZER_LIBS $LIBS"
+CPPFLAGS="$ABT_SNOOZER_CFLAGS $CPPFLAGS"
+CFLAGS="$ABT_SNOOZER_CFLAGS $CFLAGS"
+
+
 AC_ARG_ENABLE([swim-fd],
     [  --enable-swim-fd        enable SWIM failure detection (default: disabled)],
     [if test "x$enable_swim_fd" = "xyes" ; then
