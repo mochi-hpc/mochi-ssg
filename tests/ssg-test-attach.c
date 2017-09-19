@@ -164,10 +164,10 @@ int main(int argc, char *argv[])
             DIE_IF(hret != HG_SUCCESS, "margo_addr_lookup");
             hret = margo_create(mid, attacher_addr, group_id_forward_rpc_id, &handle);
             DIE_IF(hret != HG_SUCCESS, "margo_create");
-            hret = margo_forward(mid, handle, &g_id);
+            hret = margo_forward(handle, &g_id);
             DIE_IF(hret != HG_SUCCESS, "margo_forward");
             margo_addr_free(mid, attacher_addr);
-            margo_destroy(mid, handle);
+            margo_destroy(handle);
         }
     }
     else
@@ -243,10 +243,10 @@ static void group_id_forward_recv_ult(hg_handle_t handle)
 
     *g_id_p = ssg_group_id_dup(tmp_g_id);
 
-    margo_respond(mid, handle, NULL);
+    margo_respond(handle, NULL);
 
     margo_free_input(handle, &tmp_g_id);
-    margo_destroy(mid, handle);
+    margo_destroy(handle);
     return;
 }
 DEFINE_MARGO_RPC_HANDLER(group_id_forward_recv_ult)

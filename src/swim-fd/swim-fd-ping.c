@@ -144,7 +144,7 @@ static int swim_send_dping(
     swim_pack_message(g, &(dping_req.msg));
 
     /* send a direct ping that expires at the end of the protocol period */
-    hret = margo_forward_timed(ssg_inst->mid, handle, &dping_req,
+    hret = margo_forward_timed(handle, &dping_req,
         swim_ctx->prot_period_len);
     if (hret == HG_SUCCESS)
     {
@@ -166,7 +166,7 @@ static int swim_send_dping(
     }
 
 fini:
-    margo_destroy(ssg_inst->mid, handle);
+    margo_destroy(handle);
     return(ret);
 }
 
@@ -198,11 +198,11 @@ static void swim_dping_recv_ult(hg_handle_t handle)
     SSG_DEBUG(g, "SWIM: send dping ack to %d\n", (int)dping_req.msg.source_id);
 
     /* respond to sender of the dping req */
-    margo_respond(ssg_inst->mid, handle, &dping_resp);
+    margo_respond(handle, &dping_resp);
 
     margo_free_input(handle, &dping_req);
 fini:
-    margo_destroy(ssg_inst->mid, handle);
+    margo_destroy(handle);
     return;
 }
 DEFINE_MARGO_RPC_HANDLER(swim_dping_recv_ult)
@@ -261,7 +261,7 @@ void swim_iping_send_ult(
      * the dping timeout, which should cause this iping to timeout
      * right at the end of the current protocol period.
      */
-    hret = margo_forward_timed(ssg_inst->mid, handle, &iping_req,
+    hret = margo_forward_timed(handle, &iping_req,
         (swim_ctx->prot_period_len - swim_ctx->dping_timeout));
     if (hret == HG_SUCCESS)
     {
@@ -290,7 +290,7 @@ void swim_iping_send_ult(
     }
 
 fini:
-    margo_destroy(ssg_inst->mid, handle);
+    margo_destroy(handle);
     return;
 }
 
@@ -331,12 +331,12 @@ static void swim_iping_recv_ult(hg_handle_t handle)
             (int)iping_req.msg.source_id, (int)iping_req.target_id);
 
         /* respond to sender of the iping req */
-        margo_respond(ssg_inst->mid, handle, &iping_resp);
+        margo_respond(handle, &iping_resp);
     }
 
     margo_free_input(handle, &iping_req);
 fini:
-    margo_destroy(ssg_inst->mid, handle);
+    margo_destroy(handle);
     return;
 }
 DEFINE_MARGO_RPC_HANDLER(swim_iping_recv_ult)

@@ -108,7 +108,7 @@ int ssg_group_attach_send(
     /* send an attach request to the given group member address */
     memcpy(&attach_req.group_descriptor, group_descriptor, sizeof(*group_descriptor));
     attach_req.bulk_handle = bulk_handle;
-    hret = margo_forward(ssg_inst->mid, handle, &attach_req);
+    hret = margo_forward(handle, &attach_req);
     if (hret != HG_SUCCESS) goto fini;
 
     hret = margo_get_output(handle, &attach_resp);
@@ -133,7 +133,7 @@ int ssg_group_attach_send(
         if (hret != HG_SUCCESS) goto fini;
 
         attach_req.bulk_handle = bulk_handle;
-        hret = margo_forward(ssg_inst->mid, handle, &attach_req);
+        hret = margo_forward(handle, &attach_req);
         if (hret != HG_SUCCESS) goto fini;
 
         margo_free_output(handle, &attach_resp);
@@ -163,7 +163,7 @@ int ssg_group_attach_send(
     sret = SSG_SUCCESS;
 fini:
     if (member_addr != HG_ADDR_NULL) margo_addr_free(ssg_inst->mid, member_addr);
-    if (handle != HG_HANDLE_NULL) margo_destroy(ssg_inst->mid, handle);
+    if (handle != HG_HANDLE_NULL) margo_destroy(handle);
     if (bulk_handle != HG_BULK_NULL) margo_bulk_free(bulk_handle);
     free(tmp_view_buf);
 
@@ -233,12 +233,12 @@ static void ssg_group_attach_recv_ult(
     attach_resp.group_name = g->name;
     attach_resp.group_size = (int)g->view.size;
     attach_resp.view_buf_size = view_buf_size;
-    margo_respond(ssg_inst->mid, handle, &attach_resp);
+    margo_respond(handle, &attach_resp);
 
     margo_free_input(handle, &attach_req);
 fini:
     free(view_buf); /* TODO: cache this */
-    if (handle != HG_HANDLE_NULL) margo_destroy(ssg_inst->mid, handle);
+    if (handle != HG_HANDLE_NULL) margo_destroy(handle);
     if (bulk_handle != HG_BULK_NULL) margo_bulk_free(bulk_handle);
 
     return;

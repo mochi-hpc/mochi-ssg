@@ -313,13 +313,8 @@ static void usage(void)
 /* service a remote RPC for a no-op */
 static void noop_ult(hg_handle_t handle)
 {
-    margo_instance_id mid;
-
-    mid = margo_hg_handle_get_instance(handle);
-    assert(mid);
-
-    margo_respond(mid, handle, NULL);
-    margo_destroy(mid, handle);
+    margo_respond(handle, NULL);
+    margo_destroy(handle);
 
     rpcs_serviced++;
     if(rpcs_serviced == g_opts.iterations)
@@ -352,13 +347,13 @@ static int run_benchmark(int iterations, hg_id_t id, ssg_member_id_t target,
     for(i=0; i<iterations; i++)
     {
         tm1 = ABT_get_wtime();
-        ret = margo_forward(mid, handle, NULL);
+        ret = margo_forward(handle, NULL);
         tm2 = ABT_get_wtime();
         assert(ret == 0);
         measurement_array[i] = tm2-tm1;
     }
 
-    margo_destroy(mid, handle);
+    margo_destroy(handle);
 
     return(0);
 }
