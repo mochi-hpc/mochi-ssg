@@ -130,7 +130,6 @@ ssg_group_id_t ssg_group_create(
     ssg_membership_update_cb update_cb,
     void * update_cb_dat)
 {
-    hg_class_t *hgcl = NULL;
     hg_addr_t self_addr = HG_ADDR_NULL;
     char *self_addr_str = NULL;
     hg_size_t self_addr_str_size = 0;
@@ -141,9 +140,6 @@ ssg_group_id_t ssg_group_create(
     ssg_group_id_t group_id = SSG_GROUP_ID_NULL;
 
     if (!ssg_inst) return group_id;
-
-    hgcl = margo_get_class(ssg_inst->mid);
-    if (!hgcl) return group_id;
 
     /* generate a unique ID for this group  */
     tmp_descriptor = ssg_group_descriptor_create(group_name, group_addr_strs[0]);
@@ -159,13 +155,13 @@ ssg_group_id_t ssg_group_create(
     }
 
     /* get my address */
-    hret = HG_Addr_self(hgcl, &self_addr);
+    hret = margo_addr_self(ssg_inst->mid, &self_addr);
     if (hret != HG_SUCCESS) goto fini;
-    hret = HG_Addr_to_string(hgcl, NULL, &self_addr_str_size, self_addr);
+    hret = margo_addr_to_string(ssg_inst->mid, NULL, &self_addr_str_size, self_addr);
     if (hret != HG_SUCCESS) goto fini;
     self_addr_str = malloc(self_addr_str_size);
     if (self_addr_str == NULL) goto fini;
-    hret = HG_Addr_to_string(hgcl, self_addr_str, &self_addr_str_size, self_addr);
+    hret = margo_addr_to_string(ssg_inst->mid, self_addr_str, &self_addr_str_size, self_addr);
     if (hret != HG_SUCCESS) goto fini;
 
     /* allocate an SSG group data structure and initialize some of it */
@@ -215,7 +211,7 @@ ssg_group_id_t ssg_group_create(
     self_addr = HG_ADDR_NULL;
     g = NULL;
 fini:
-    if (hgcl && self_addr != HG_ADDR_NULL) HG_Addr_free(hgcl, self_addr);
+    if (self_addr != HG_ADDR_NULL) margo_addr_free(ssg_inst->mid, self_addr);
     free(self_addr_str);
     if (g)
     {
@@ -326,7 +322,6 @@ ssg_group_id_t ssg_group_create_mpi(
     ssg_membership_update_cb update_cb,
     void * update_cb_dat)
 {
-    hg_class_t *hgcl = NULL;
     hg_addr_t self_addr = HG_ADDR_NULL;
     char *self_addr_str = NULL;
     hg_size_t self_addr_str_size = 0;
@@ -341,17 +336,14 @@ ssg_group_id_t ssg_group_create_mpi(
 
     if (!ssg_inst) goto fini;
 
-    hgcl = margo_get_class(ssg_inst->mid);
-    if (!hgcl) goto fini;
-
     /* get my address */
-    hret = HG_Addr_self(hgcl, &self_addr);
+    hret = margo_addr_self(ssg_inst->mid, &self_addr);
     if (hret != HG_SUCCESS) goto fini;
-    hret = HG_Addr_to_string(hgcl, NULL, &self_addr_str_size, self_addr);
+    hret = margo_addr_to_string(ssg_inst->mid, NULL, &self_addr_str_size, self_addr);
     if (hret != HG_SUCCESS) goto fini;
     self_addr_str = malloc(self_addr_str_size);
     if (self_addr_str == NULL) goto fini;
-    hret = HG_Addr_to_string(hgcl, self_addr_str, &self_addr_str_size, self_addr);
+    hret = margo_addr_to_string(ssg_inst->mid, self_addr_str, &self_addr_str_size, self_addr);
     if (hret != HG_SUCCESS) goto fini;
     self_addr_str_size_int = (int)self_addr_str_size; /* null char included in call */
 
@@ -388,7 +380,7 @@ ssg_group_id_t ssg_group_create_mpi(
 
 fini:
     /* cleanup before returning */
-    if (hgcl && self_addr != HG_ADDR_NULL) HG_Addr_free(hgcl, self_addr);
+    if (self_addr != HG_ADDR_NULL) margo_addr_free(ssg_inst->mid, self_addr);
     free(self_addr_str);
     free(sizes);
     free(sizes_psum);
@@ -737,16 +729,11 @@ void ssg_apply_membership_update(
     ssg_group_t *g,
     ssg_membership_update_t update)
 {
-    hg_class_t *hgcl = NULL;
-    
     if(!ssg_inst || !g) return;
-
-    hgcl = margo_get_class(ssg_inst->mid);
-    if (!hgcl) return;
 
     if (update.type == SSG_MEMBER_REMOVE)
     {
-        HG_Addr_free(hgcl, g->view.member_states[update.member].addr);
+        margo_addr_free(ssg_inst->mid, g->view.member_states[update.member].addr);
         free(g->view.member_states[update.member].addr_str);
         g->view.member_states[update.member].addr_str = NULL;
         g->view.member_states[update.member].is_member = 0;
@@ -978,7 +965,7 @@ static void ssg_group_view_destroy(
     for (i = 0; i < view->size; i++)
     {
         free(view->member_states[i].addr_str);
-        HG_Addr_free(margo_get_class(ssg_inst->mid), view->member_states[i].addr);
+        margo_addr_free(ssg_inst->mid, view->member_states[i].addr);
     }
     free(view->member_states);
 

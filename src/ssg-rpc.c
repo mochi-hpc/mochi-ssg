@@ -51,15 +51,11 @@ static hg_id_t ssg_group_attach_rpc_id;
  */
 void ssg_register_rpcs()
 {
-    hg_class_t *hgcl = NULL;
-
-    hgcl = margo_get_class(ssg_inst->mid);
-    if (!hgcl) return;
-
     /* register HG RPCs for SSG */
-    ssg_group_attach_rpc_id = MERCURY_REGISTER(hgcl, "ssg_group_attach",
+    ssg_group_attach_rpc_id =
+		MARGO_REGISTER(ssg_inst->mid, "ssg_group_attach",
         ssg_group_attach_request_t, ssg_group_attach_response_t,
-        ssg_group_attach_recv_ult_handler);
+        ssg_group_attach_recv_ult);
 
     return;
 }
@@ -74,7 +70,6 @@ int ssg_group_attach_send(
     int * group_size,
     void ** view_buf)
 {
-    hg_class_t *hgcl = NULL;
     hg_addr_t member_addr = HG_ADDR_NULL;
     hg_handle_t handle = HG_HANDLE_NULL;
     hg_bulk_t bulk_handle = HG_BULK_NULL;
@@ -89,15 +84,12 @@ int ssg_group_attach_send(
     *group_size = 0;
     *view_buf = NULL;
 
-    hgcl = margo_get_class(ssg_inst->mid);
-    if (!hgcl) goto fini;
-
     /* lookup the address of the given group member */
     hret = margo_addr_lookup(ssg_inst->mid, group_descriptor->addr_str,
         &member_addr);
     if (hret != HG_SUCCESS) goto fini;
 
-    hret = HG_Create(margo_get_context(ssg_inst->mid), member_addr,
+    hret = margo_create(ssg_inst->mid, member_addr,
         ssg_group_attach_rpc_id, &handle);
     if (hret != HG_SUCCESS) goto fini;
 
@@ -109,17 +101,17 @@ int ssg_group_attach_send(
     tmp_view_buf = malloc(tmp_view_buf_size);
     if (!tmp_view_buf) goto fini;
 
-    hret = HG_Bulk_create(hgcl, 1, &tmp_view_buf, &tmp_view_buf_size,
+    hret = margo_bulk_create(ssg_inst->mid, 1, &tmp_view_buf, &tmp_view_buf_size,
         HG_BULK_WRITE_ONLY, &bulk_handle);
     if (hret != HG_SUCCESS) goto fini;
 
     /* send an attach request to the given group member address */
     memcpy(&attach_req.group_descriptor, group_descriptor, sizeof(*group_descriptor));
     attach_req.bulk_handle = bulk_handle;
-    hret = margo_forward(ssg_inst->mid, handle, &attach_req);
+    hret = margo_forward(handle, &attach_req);
     if (hret != HG_SUCCESS) goto fini;
 
-    hret = HG_Get_output(handle, &attach_resp);
+    hret = margo_get_output(handle, &attach_resp);
     if (hret != HG_SUCCESS) goto fini;
 
     /* if our initial buffer is too small, reallocate to the exact size & reattach */
@@ -128,24 +120,24 @@ int ssg_group_attach_send(
         b = realloc(tmp_view_buf, attach_resp.view_buf_size);
         if(!b)
         {
-            HG_Free_output(handle, &attach_resp);
+            margo_free_output(handle, &attach_resp);
             goto fini;
         }
         tmp_view_buf = b;
         tmp_view_buf_size = attach_resp.view_buf_size;
 
         /* free old bulk handle and recreate it */
-        HG_Bulk_free(bulk_handle);
-        hret = HG_Bulk_create(hgcl, 1, &tmp_view_buf, &tmp_view_buf_size,
+        margo_bulk_free(bulk_handle);
+        hret = margo_bulk_create(ssg_inst->mid, 1, &tmp_view_buf, &tmp_view_buf_size,
             HG_BULK_WRITE_ONLY, &bulk_handle);
         if (hret != HG_SUCCESS) goto fini;
 
         attach_req.bulk_handle = bulk_handle;
-        hret = margo_forward(ssg_inst->mid, handle, &attach_req);
+        hret = margo_forward(handle, &attach_req);
         if (hret != HG_SUCCESS) goto fini;
 
-        HG_Free_output(handle, &attach_resp);
-        hret = HG_Get_output(handle, &attach_resp);
+        margo_free_output(handle, &attach_resp);
+        hret = margo_get_output(handle, &attach_resp);
         if (hret != HG_SUCCESS) goto fini;
     }
 
@@ -155,7 +147,7 @@ int ssg_group_attach_send(
         b = realloc(tmp_view_buf, attach_resp.view_buf_size);
         if(!b)
         {
-            HG_Free_output(handle, &attach_resp);
+            margo_free_output(handle, &attach_resp);
             goto fini;
         }
         tmp_view_buf = b;
@@ -166,13 +158,13 @@ int ssg_group_attach_send(
     *group_size = (int)attach_resp.group_size;
     *view_buf = tmp_view_buf;
 
-    HG_Free_output(handle, &attach_resp);
+    margo_free_output(handle, &attach_resp);
     tmp_view_buf = NULL;
     sret = SSG_SUCCESS;
 fini:
-    if (hgcl && member_addr != HG_ADDR_NULL) HG_Addr_free(hgcl, member_addr);
-    if (handle != HG_HANDLE_NULL) HG_Destroy(handle);
-    if (bulk_handle != HG_BULK_NULL) HG_Bulk_free(bulk_handle);
+    if (member_addr != HG_ADDR_NULL) margo_addr_free(ssg_inst->mid, member_addr);
+    if (handle != HG_HANDLE_NULL) margo_destroy(handle);
+    if (bulk_handle != HG_BULK_NULL) margo_bulk_free(bulk_handle);
     free(tmp_view_buf);
 
     return sret;
@@ -181,7 +173,6 @@ fini:
 static void ssg_group_attach_recv_ult(
     hg_handle_t handle)
 {
-    hg_class_t *hgcl = NULL;
     const struct hg_info *hgi = NULL;
     ssg_group_t *g = NULL;
     ssg_group_attach_request_t attach_req;
@@ -195,39 +186,37 @@ static void ssg_group_attach_recv_ult(
 
     if (!ssg_inst) goto fini;
 
-    hgcl = margo_get_class(ssg_inst->mid);
-    if (!hgcl) goto fini;
-
-    hgi = HG_Get_info(handle);
+    hgi = margo_get_info(handle);
     if (!hgi) goto fini;
-    hret = HG_Get_input(handle, &attach_req);
+
+    hret = margo_get_input(handle, &attach_req);
     if (hret != HG_SUCCESS) goto fini;
-    view_size_requested = HG_Bulk_get_size(attach_req.bulk_handle);
+    view_size_requested = margo_bulk_get_size(attach_req.bulk_handle);
 
     /* look for the given group in my local table of groups */
     HASH_FIND(hh, ssg_inst->group_table, &attach_req.group_descriptor.name_hash,
         sizeof(uint64_t), g);
     if (!g)
     {
-        HG_Free_input(handle, &attach_req);
+        margo_free_input(handle, &attach_req);
         goto fini;
     }
 
     sret = ssg_group_view_serialize(&g->view, &view_buf, &view_buf_size);
     if (sret != SSG_SUCCESS)
     {
-        HG_Free_input(handle, &attach_req);
+        margo_free_input(handle, &attach_req);
         goto fini;
     }
 
     if (view_size_requested >= view_buf_size)
     {
         /* if attacher's buf is large enough, transfer the view */
-        hret = HG_Bulk_create(hgcl, 1, &view_buf, &view_buf_size, HG_BULK_READ_ONLY,
-            &bulk_handle);
+        hret = margo_bulk_create(ssg_inst->mid, 1, &view_buf, &view_buf_size,
+            HG_BULK_READ_ONLY, &bulk_handle);
         if (hret != HG_SUCCESS)
         {
-            HG_Free_input(handle, &attach_req);
+            margo_free_input(handle, &attach_req);
             goto fini;
         }
 
@@ -235,7 +224,7 @@ static void ssg_group_attach_recv_ult(
             attach_req.bulk_handle, 0, bulk_handle, 0, view_buf_size);
         if (hret != HG_SUCCESS)
         {
-            HG_Free_input(handle, &attach_req);
+            margo_free_input(handle, &attach_req);
             goto fini;
         }
     }
@@ -244,13 +233,13 @@ static void ssg_group_attach_recv_ult(
     attach_resp.group_name = g->name;
     attach_resp.group_size = (int)g->view.size;
     attach_resp.view_buf_size = view_buf_size;
-    margo_respond(ssg_inst->mid, handle, &attach_resp);
+    margo_respond(handle, &attach_resp);
 
-    HG_Free_input(handle, &attach_req);
+    margo_free_input(handle, &attach_req);
 fini:
     free(view_buf); /* TODO: cache this */
-    if (handle != HG_HANDLE_NULL) HG_Destroy(handle);
-    if (bulk_handle != HG_BULK_NULL) HG_Bulk_free(bulk_handle);
+    if (handle != HG_HANDLE_NULL) margo_destroy(handle);
+    if (bulk_handle != HG_BULK_NULL) margo_bulk_free(bulk_handle);
 
     return;
 }

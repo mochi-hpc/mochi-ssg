@@ -16,7 +16,6 @@
 
 #include <margo.h>
 #include <mercury.h>
-#include <abt.h>
 #include <ssg.h>
 #ifdef SSG_HAVE_MPI
 #include <ssg-mpi.h>
@@ -84,15 +83,12 @@ struct group_id_forward_context
 
 int main(int argc, char *argv[])
 {
-    hg_class_t *hgcl = NULL;
-    hg_context_t *hgctx = NULL;
     margo_instance_id mid = MARGO_INSTANCE_NULL;
     int sleep_time = 0;
     const char *addr_str;
     const char *group_name = "simple_group";
     ssg_group_id_t g_id;
     int group_id_forward_rpc_id;
-    struct group_id_forward_context group_id_forward_ctx;
     int is_attacher = 0;
     hg_addr_t attacher_addr;
     char attacher_addr_str[128];
@@ -103,19 +99,13 @@ int main(int argc, char *argv[])
 
     parse_args(argc, argv, &sleep_time, &addr_str);
 
-    ABT_init(argc, argv);
 #ifdef SSG_HAVE_MPI
     MPI_Init(&argc, &argv);
 #endif
 
-    /* init HG */
-    hgcl = HG_Init(addr_str, HG_TRUE);
-    DIE_IF(hgcl == NULL, "HG_Init");
-    hgctx = HG_Context_create(hgcl);
-    DIE_IF(hgctx == NULL, "HG_Context_create");
-
-    /* init margo in single threaded mode */
-    mid = margo_init(0, -1, hgctx);
+    /* init margo */
+    /* use the main xstream to drive progress & run handlers */
+    mid = margo_init(addr_str, MARGO_SERVER_MODE, 0, -1);
     DIE_IF(mid == MARGO_INSTANCE_NULL, "margo_init");
 
     /* initialize SSG */
@@ -123,13 +113,12 @@ int main(int argc, char *argv[])
     DIE_IF(sret != SSG_SUCCESS, "ssg_init");
 
     /* register RPC for forwarding an SSG group identifier */
-    group_id_forward_rpc_id = MERCURY_REGISTER(hgcl, "group_id_forward",
-        ssg_group_id_t, void, group_id_forward_recv_ult_handler);
-    group_id_forward_ctx.mid = mid;
-    group_id_forward_ctx.g_id_p = &g_id;
-    hret = HG_Register_data(hgcl, group_id_forward_rpc_id, &group_id_forward_ctx, NULL);
-    DIE_IF(hret != HG_SUCCESS, "HG_Register_data");
+    group_id_forward_rpc_id = MARGO_REGISTER(mid, "group_id_forward",
+        ssg_group_id_t, void, group_id_forward_recv_ult);
+    hret = margo_register_data(mid, group_id_forward_rpc_id, &g_id, NULL);
+    DIE_IF(hret != HG_SUCCESS, "margo_register_data");
 
+    /* XXX do something for config file case? */
 #ifdef SSG_HAVE_MPI
     int my_world_rank;
     int world_size;
@@ -173,34 +162,28 @@ int main(int argc, char *argv[])
             /* send the identifier for the created group back to the attacher */
             hret = margo_addr_lookup(mid, attacher_addr_str, &attacher_addr);
             DIE_IF(hret != HG_SUCCESS, "margo_addr_lookup");
-            hret = HG_Create(margo_get_context(mid), attacher_addr,
-                group_id_forward_rpc_id, &handle);
-            DIE_IF(hret != HG_SUCCESS, "HG_Create");
-            hret = margo_forward(mid, handle, &g_id);
+            hret = margo_create(mid, attacher_addr, group_id_forward_rpc_id, &handle);
+            DIE_IF(hret != HG_SUCCESS, "margo_create");
+            hret = margo_forward(handle, &g_id);
             DIE_IF(hret != HG_SUCCESS, "margo_forward");
-            HG_Addr_free(hgcl, attacher_addr);
-            HG_Destroy(handle);
+            margo_addr_free(mid, attacher_addr);
+            margo_destroy(handle);
         }
     }
     else
     {
-        hret = HG_Addr_self(hgcl, &attacher_addr);
-        DIE_IF(hret != HG_SUCCESS, "HG_Addr_self");
-        hret = HG_Addr_to_string(hgcl, attacher_addr_str, &attacher_addr_str_sz,
+        hret = margo_addr_self(mid, &attacher_addr);
+        DIE_IF(hret != HG_SUCCESS, "margo_addr_self");
+        hret = margo_addr_to_string(mid, attacher_addr_str, &attacher_addr_str_sz,
             attacher_addr);
-        DIE_IF(hret != HG_SUCCESS, "HG_Addr_to_string");
-        HG_Addr_free(hgcl, attacher_addr);
+        DIE_IF(hret != HG_SUCCESS, "margo_addr_to_string");
+        margo_addr_free(mid, attacher_addr);
 
         /* send the attacher's address to a group member, so the group
          * member can send us back the corresponding SSG group identifier
          */
         MPI_Send(attacher_addr_str, 128, MPI_BYTE, 1, 0, MPI_COMM_WORLD);
     }
-#endif
-
-#ifdef SWIM_FORCE_FAIL
-    if (my_world_rank == 2)
-        goto cleanup;
 #endif
 
     /* for now, just sleep to give all procs an opportunity to create the group */
@@ -221,7 +204,7 @@ int main(int argc, char *argv[])
     /* have everyone dump their group state */
     ssg_group_dump(g_id);
 
-cleanup:
+    /* clean up */
     if (is_attacher)
     {
         ssg_group_detach(g_id);
@@ -231,20 +214,10 @@ cleanup:
         ssg_group_destroy(g_id);
     }
     ssg_finalize();
-
     margo_finalize(mid);
-
-#ifndef SWIM_FORCE_FAIL
-    if(hgctx) HG_Context_destroy(hgctx);
-    if(hgcl) HG_Finalize(hgcl);
-#endif
 
 #ifdef SSG_HAVE_MPI
     MPI_Finalize();
-#endif
-
-#ifndef SWIM_FORCE_FAIL
-    ABT_finalize();
 #endif
 
     return 0;
@@ -253,25 +226,27 @@ cleanup:
 static void group_id_forward_recv_ult(hg_handle_t handle)
 {
     const struct hg_info *info;
-    struct group_id_forward_context *group_id_forward_ctx;
+    margo_instance_id mid;
+    ssg_group_id_t *g_id_p;
     ssg_group_id_t tmp_g_id;
     hg_return_t hret;
 
-    info = HG_Get_info(handle);
-    DIE_IF(info == NULL, "HG_Get_info");
-    group_id_forward_ctx = (struct group_id_forward_context *)HG_Registered_data(
-        info->hg_class, info->id);
-    DIE_IF(group_id_forward_ctx == NULL, "HG_Registered_data");
+    info = margo_get_info(handle);
+    DIE_IF(info == NULL, "margo_get_info");
+    mid = margo_hg_info_get_instance(info);
+    DIE_IF(mid == MARGO_INSTANCE_NULL, "margo_hg_info_get_instance");
+    g_id_p = (ssg_group_id_t *)margo_registered_data(mid, info->id);
+    DIE_IF(g_id_p == NULL, "margo_registered_data");
 
-    hret = HG_Get_input(handle, &tmp_g_id);
-    DIE_IF(hret != HG_SUCCESS, "HG_Get_input");
+    hret = margo_get_input(handle, &tmp_g_id);
+    DIE_IF(hret != HG_SUCCESS, "margo_get_input");
 
-    *(group_id_forward_ctx->g_id_p) = ssg_group_id_dup(tmp_g_id);
+    *g_id_p = ssg_group_id_dup(tmp_g_id);
 
-    margo_respond(group_id_forward_ctx->mid, handle, NULL);
+    margo_respond(handle, NULL);
 
-    HG_Free_input(handle, &tmp_g_id);
-    HG_Destroy(handle);
+    margo_free_input(handle, &tmp_g_id);
+    margo_destroy(handle);
     return;
 }
 DEFINE_MARGO_RPC_HANDLER(group_id_forward_recv_ult)

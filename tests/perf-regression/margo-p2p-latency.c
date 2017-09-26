@@ -4,6 +4,8 @@
  * See COPYRIGHT in top-level directory.
  */
 
+#include "ssg-config.h"
+
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
@@ -12,7 +14,9 @@
 #include <mpi.h>
 
 #include <margo.h>
+#ifdef HAVE_ABT_SNOOZER
 #include <abt-snoozer.h>
+#endif
 #include <mercury.h>
 #include <abt.h>
 #include <ssg.h>
@@ -21,6 +25,10 @@
 struct options
 {
     int iterations;
+    int snoozer_flag_client;
+    int snoozer_flag_server;
+    unsigned int mercury_timeout_client;
+    unsigned int mercury_timeout_server;
     char* diag_file_name;
     char* na_transport;
 };
@@ -28,8 +36,7 @@ struct options
 static void parse_args(int argc, char **argv, struct options *opts);
 static void usage(void);
 static int run_benchmark(int iterations, hg_id_t id, ssg_member_id_t target, 
-    ssg_group_id_t gid, margo_instance_id mid, hg_context_t *hg_context, 
-    double *measurement_array);
+    ssg_group_id_t gid, margo_instance_id mid, double *measurement_array);
 static void bench_routine_print(const char* op, int size, int iterations, 
     double* measurement_array);
 static int measurement_cmp(const void* a, const void *b);
@@ -46,11 +53,12 @@ int main(int argc, char **argv)
     int nranks;
     hg_context_t *hg_context;
     hg_class_t *hg_class;
+    ABT_xstream xstream;
+    ABT_pool pool;
     int ret;
     ssg_group_id_t gid;
     ssg_member_id_t self;
     int rank;
-    hg_bool_t flag;
     double *measurement_array;
     int namelen;
     char processor_name[MPI_MAX_PROCESSOR_NAME];
@@ -88,27 +96,56 @@ int main(int argc, char **argv)
         return(-1);
     }
 
-    /* set primary ES to idle without polling */
-    ret = ABT_snoozer_xstream_self_set();
+    if((rank == 0 && g_opts.snoozer_flag_client) || 
+        (rank == 1 && g_opts.snoozer_flag_server))
+    {
+#ifdef HAVE_ABT_SNOOZER
+        /* set primary ES to idle without polling in scheduler */
+        ret = ABT_snoozer_xstream_self_set();
+        if(ret != 0)
+        {
+            fprintf(stderr, "Error: ABT_snoozer_xstream_self_set()\n");
+            return(-1);
+        }
+#else
+        fprintf(stderr, "Error: abt-snoozer scheduler is not supported\n");
+        return(-1);
+#endif
+    }
+
+    /* get main pool for running mercury progress and RPC handlers */
+    ret = ABT_xstream_self(&xstream);
     if(ret != 0)
     {
-        fprintf(stderr, "Error: ABT_snoozer_xstream_self_set()\n");
+        fprintf(stderr, "Error: ABT_xstream_self()\n");
+        return(-1);
+    }   
+    ret = ABT_xstream_get_main_pools(xstream, 1, &pool);
+    if(ret != 0)
+    {
+        fprintf(stderr, "Error: ABT_xstream_get_main_pools()\n");
         return(-1);
     }
 
     /* actually start margo */
-    mid = margo_init(0, 0, hg_context);
+    mid = margo_init_pool(pool, pool, hg_context);
     assert(mid);
 
     if(g_opts.diag_file_name)
         margo_diag_start(mid);
 
-    MARGO_REGISTER(
+    /* adjust mercury timeout in Margo if requested */
+    if(rank == 0 && g_opts.mercury_timeout_client != UINT_MAX)
+        margo_set_param(mid, MARGO_PARAM_PROGRESS_TIMEOUT_UB, &g_opts.mercury_timeout_client);
+    if(rank == 1 && g_opts.mercury_timeout_server != UINT_MAX)
+        margo_set_param(mid, MARGO_PARAM_PROGRESS_TIMEOUT_UB, &g_opts.mercury_timeout_server);
+
+    noop_id = MARGO_REGISTER_MPLEX(
         mid, 
         "noop_rpc", 
         void,
         void,
-        noop_ult_handler,
+        noop_ult,
         MARGO_DEFAULT_MPLEX_ID,
         NULL);
 
@@ -125,10 +162,6 @@ int main(int argc, char **argv)
     printf("MPI rank %d has SSG ID %lu\n", rank, self);
 #endif
 
-    /* TODO: there should be a cleaner way to get ID from MARGO_REGISTER */
-    ret = HG_Registered_name(hg_class, "noop_rpc", &noop_id, &flag);
-    assert(ret == 0 && flag);
-
     if(self == 0)
     {
         /* ssg id 0 runs benchmark */
@@ -136,7 +169,7 @@ int main(int argc, char **argv)
         measurement_array = calloc(g_opts.iterations, sizeof(*measurement_array));
         assert(measurement_array);
 
-        ret = run_benchmark(g_opts.iterations, noop_id, 1, gid, mid, hg_context, measurement_array);
+        ret = run_benchmark(g_opts.iterations, noop_id, 1, gid, mid, measurement_array);
         assert(ret == 0);
 
         printf("# <op> <iterations> <size> <min> <q1> <med> <avg> <q3> <max>\n");
@@ -181,10 +214,23 @@ static void parse_args(int argc, char **argv, struct options *opts)
 {
     int opt;
     int ret;
+    char clientflag, serverflag;
 
     memset(opts, 0, sizeof(*opts));
 
-    while((opt = getopt(argc, argv, "n:i:d:")) != -1)
+#ifdef HAVE_ABT_SNOOZER
+    /* default to enabling snoozer scheduler on both client and server */
+    opts->snoozer_flag_client = 1;
+    opts->snoozer_flag_server = 1;
+#else
+    opts->snoozer_flag_client = 0;
+    opts->snoozer_flag_server = 0;
+#endif
+    /* default to using whatever the standard timeout is in margo */
+    opts->mercury_timeout_client = UINT_MAX;
+    opts->mercury_timeout_server = UINT_MAX; 
+
+    while((opt = getopt(argc, argv, "n:i:d:s:t:")) != -1)
     {
         switch(opt)
         {
@@ -199,6 +245,26 @@ static void parse_args(int argc, char **argv, struct options *opts)
             case 'i':
                 ret = sscanf(optarg, "%d", &opts->iterations);
                 if(ret != 1)
+                {
+                    usage();
+                    exit(EXIT_FAILURE);
+                }
+                break;
+            case 's':
+                ret = sscanf(optarg, "%c,%c", &clientflag, &serverflag);
+                if(ret != 2)
+                {
+                    usage();
+                    exit(EXIT_FAILURE);
+                }
+                if(clientflag == '0') opts->snoozer_flag_client = 0;
+                else if(clientflag == '1') opts->snoozer_flag_client = 1;
+                if(serverflag == '0') opts->snoozer_flag_server = 0;
+                else if(serverflag == '1') opts->snoozer_flag_server = 1;
+                break;
+            case 't':
+                ret = sscanf(optarg, "%u,%u", &opts->mercury_timeout_client, &opts->mercury_timeout_server);
+                if(ret != 2)
                 {
                     usage();
                     exit(EXIT_FAILURE);
@@ -234,6 +300,9 @@ static void usage(void)
         "margo-p2p-latency -i <iterations> -n <na>\n"
         "\t-i <iterations> - number of RPC iterations\n"
         "\t-n <na> - na transport\n"
+        "\t[-d filename] - enable diagnostics output \n"
+        "\t[-s <bool,bool>] - specify if snoozer scheduler is used on client and server\n"
+        "\t\t(e.g., -s 0,1 means snoozer disabled on client and enabled on server)\n"
         "\t\texample: mpiexec -n 2 ./margo-p2p-latency -i 10000 -n verbs://\n"
         "\t\t(must be run with exactly 2 processes\n");
     
@@ -244,15 +313,8 @@ static void usage(void)
 /* service a remote RPC for a no-op */
 static void noop_ult(hg_handle_t handle)
 {
-    margo_instance_id mid;
-    const struct hg_info *hgi;
-
-    hgi = HG_Get_info(handle);
-    assert(hgi);
-    mid = margo_hg_class_to_instance(hgi->hg_class);
-
-    margo_respond(mid, handle, NULL);
-    HG_Destroy(handle);
+    margo_respond(handle, NULL);
+    margo_destroy(handle);
 
     rpcs_serviced++;
     if(rpcs_serviced == g_opts.iterations)
@@ -265,8 +327,7 @@ static void noop_ult(hg_handle_t handle)
 DEFINE_MARGO_RPC_HANDLER(noop_ult)
 
 static int run_benchmark(int iterations, hg_id_t id, ssg_member_id_t target, 
-    ssg_group_id_t gid, margo_instance_id mid, hg_context_t *hg_context, 
-    double *measurement_array)
+    ssg_group_id_t gid, margo_instance_id mid, double *measurement_array)
 {
     hg_handle_t handle;
     hg_addr_t target_addr;
@@ -277,7 +338,7 @@ static int run_benchmark(int iterations, hg_id_t id, ssg_member_id_t target,
     target_addr = ssg_get_addr(gid, target);
     assert(target_addr != HG_ADDR_NULL);
 
-    ret = HG_Create(hg_context, target_addr, id, &handle);
+    ret = margo_create(mid, target_addr, id, &handle);
     assert(ret == 0);
 
     /* TODO: have command line option to toggle whether we reuse one handle
@@ -286,13 +347,13 @@ static int run_benchmark(int iterations, hg_id_t id, ssg_member_id_t target,
     for(i=0; i<iterations; i++)
     {
         tm1 = ABT_get_wtime();
-        ret = margo_forward(mid, handle, NULL);
+        ret = margo_forward(handle, NULL);
         tm2 = ABT_get_wtime();
         assert(ret == 0);
         measurement_array[i] = tm2-tm1;
     }
 
-    HG_Destroy(handle);
+    margo_destroy(handle);
 
     return(0);
 }
