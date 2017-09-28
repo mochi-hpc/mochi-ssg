@@ -15,7 +15,6 @@ export PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig
 
 # scratch area to clone and build things
 mkdir $SANDBOX
-cp cci-rdma-destroy-ep.patch $SANDBOX
 
 # scratch area for job submission
 mkdir $JOBDIR
@@ -57,7 +56,6 @@ make install
 # cci
 echo "=== BUILDING CCI ==="
 cd $SANDBOX/cci
-patch -p1 < $SANDBOX/cci-rdma-destroy-ep.patch
 libtoolize
 ./autogen.pl
 mkdir build
