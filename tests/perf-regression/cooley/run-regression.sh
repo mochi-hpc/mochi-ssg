@@ -12,6 +12,7 @@ PREFIX=~/tmp/mochi-regression-install-$$
 JOBDIR=~/tmp/mochi-regression-job-$$
 export CFLAGS="-O3"
 export PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig
+export PATH=/soft/buildtools/cmake/current/bin/:$PATH # working cmake version
 
 # scratch area to clone and build things
 mkdir $SANDBOX
@@ -19,6 +20,7 @@ mkdir $SANDBOX
 # scratch area for job submission
 mkdir $JOBDIR
 cp margo-p2p-latency.qsub $JOBDIR
+cp cooley-cci.conf $JOBDIR
 
 cd $SANDBOX
 git clone https://github.com/carns/argobots.git
@@ -31,6 +33,7 @@ git clone https://xgitlab.cels.anl.gov/sds/margo.git
 git clone https://xgitlab.cels.anl.gov/sds/ssg.git
 wget http://mvapich.cse.ohio-state.edu/download/mvapich/osu-micro-benchmarks-5.3.2.tar.gz
 tar -xvzf osu-micro-benchmarks-5.3.2.tar.gz
+git clone https://github.com/pdlfs/mercury-runner.git
 
 # OSU MPI benchmarks
 echo "=== BUILDING OSU MICRO BENCHMARKS ==="
@@ -116,12 +119,21 @@ make -j 3
 make install
 make tests
 
+# mercury-runner benchmark
+echo "=== BUILDING MERCURY-RUNNER BENCHMARK ==="
+cd $SANDBOX/mercury-runner
+mkdir build
+cd build
+CC=mpicc CXX=mpicxx CXXFLAGS='-D__STDC_FORMAT_MACROS' cmake -DCMAKE_PREFIX_PATH=$PREFIX -DCMAKE_INSTALL_PREFIX=/$PREFIX -DMPI=ON ..
+make -j 3
+make install
+
 # set up job to run
 echo "=== SUBMITTING AND WAITING FOR JOB ==="
 cp $SANDBOX/ssg/build/tests/perf-regression/.libs/margo-p2p-latency $JOBDIR
 cp $PREFIX/libexec/osu-micro-benchmarks/mpi/pt2pt/osu_latency $JOBDIR
 cd $JOBDIR
-JOBID=`qsub --env CCI_CONFIG=/home/carns/working/install-cooley/etc/cci.conf:LD_LIBRARY_PATH=$PREFIX/lib ./margo-p2p-latency.qsub`
+JOBID=`qsub --env CCI_CONFIG=$JOBDIR/cooley-cci.conf:LD_LIBRARY_PATH=$PREFIX/lib ./margo-p2p-latency.qsub`
 cqwait $JOBID
 
 echo "=== JOB DONE, COLLECTING AND SENDING RESULTS ==="
