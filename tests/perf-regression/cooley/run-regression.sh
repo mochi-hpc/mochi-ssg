@@ -69,6 +69,7 @@ make install
 # mercury
 echo "=== BUILDING MERCURY ==="
 cd $SANDBOX/mercury
+git submodule update --init
 mkdir build
 cd build
 cmake -DNA_USE_CCI:BOOL=ON -DMERCURY_USE_BOOST_PP:BOOL=ON -DCMAKE_INSTALL_PREFIX=/$PREFIX -DBoost_NO_BOOST_CMAKE=TRUE -DBUILD_SHARED_LIBS:BOOL=ON -DMERCURY_USE_SELF_FORWARD:BOOL=ON -DNA_USE_SM:BOOL=OFF ../
