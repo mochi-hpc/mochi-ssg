@@ -196,16 +196,14 @@ int main(int argc, char **argv)
     if(g_opts.diag_file_name)
         margo_diag_dump(mid, g_opts.diag_file_name, 1);
 
-/* TODO: we get multiple hangs when shutting down margo/mercury/etc. using cci+verbs.
- * 	 DEBUG FURTHER.
- */
-#if 0
     margo_finalize(mid);
     HG_Context_destroy(hg_context);
+/* TODO: we currently get hangs in HG_Finalzie with cci+verbs */
+#if 0
     HG_Finalize(hg_class);
+#endif
     MPI_Finalize();
     ABT_finalize();
-#endif
 
     return 0;
 }
