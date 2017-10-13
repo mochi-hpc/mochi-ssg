@@ -15,6 +15,9 @@ JOBDIR=~/tmp/mochi-regression-job-$$
 module swap PrgEnv-intel PrgEnv-gnu
 module load boost/gnu
 
+# need newer cmake
+module load cmake
+
 export CC=cc
 export CXX=CC
 export CFLAGS="-O3 -I$BOOST_ROOT/include"
