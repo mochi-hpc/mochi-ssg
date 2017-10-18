@@ -771,7 +771,7 @@ static ssg_group_descriptor_t * ssg_group_descriptor_create(
         return NULL;
     }
     descriptor->owner_status = SSG_OWNER_IS_MEMBER;
-    descriptor->ref_count = 0;
+    descriptor->ref_count = 1;
     return descriptor;
 }
 
