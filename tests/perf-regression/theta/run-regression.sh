@@ -44,6 +44,7 @@ git clone https://xgitlab.cels.anl.gov/sds/margo.git
 git clone https://xgitlab.cels.anl.gov/sds/ssg.git
 wget http://mvapich.cse.ohio-state.edu/download/mvapich/osu-micro-benchmarks-5.3.2.tar.gz
 tar -xvzf osu-micro-benchmarks-5.3.2.tar.gz
+git clone https://github.com/pdlfs/mercury-runner.git
 
 # OSU MPI benchmarks
 echo "=== BUILDING OSU MICRO BENCHMARKS ==="
@@ -135,11 +136,21 @@ make -j 3
 make install
 make tests
 
+# mercury-runner benchmark
+echo "=== BUILDING MERCURY-RUNNER BENCHMARK ==="
+cd $SANDBOX/mercury-runner
+mkdir build
+cd build
+cmake -DCMAKE_PREFIX_PATH=$PREFIX -DCMAKE_INSTALL_PREFIX=$PREFIX -DMPI=ON ..
+make -j 3
+make install
+
 # set up job to run
 echo "=== SUBMITTING AND WAITING FOR JOB ==="
 cp $SANDBOX/ssg/build/tests/perf-regression/.libs/margo-p2p-latency $JOBDIR
 cp $PREFIX/bin/fi_pingpong $JOBDIR
 cp $PREFIX/libexec/osu-micro-benchmarks/mpi/pt2pt/osu_latency $JOBDIR
+cp $PREFIX/bin/mercury-runner $JOBDIR
 cd $JOBDIR
 JOBID=`qsub ./margo-p2p-latency.qsub`
 cqwait $JOBID
