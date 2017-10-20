@@ -203,6 +203,50 @@ ssg_group_id_t ssg_group_id_dup(
 void ssg_group_id_free(
     ssg_group_id_t group_id);
 
+/**
+ * Serializes an SSG group identifier into a buffer.
+ *
+ * @param[in]   group_id    SSG group ID
+ * @param[out]  buf_p       Pointer to store allocated buffer in
+ * @param[out]  buf_size_p  Pointer to store buffer size in
+ */
+void ssg_group_id_serialize(
+    ssg_group_id_t group_id,
+    char ** buf_p,
+    size_t * buf_size_p);
+
+/**
+ * Deserializes an SSG group identifier from a buffer.
+ *
+ * @param[in]   buf         Buffer containing the SSG group identifier
+ * @param[in]   buf_size    Size of given buffer
+ * @param[out]  group_id_p  Pointer to store group identifier in
+ */
+void ssg_group_id_deserialize(
+    const char * buf,
+    size_t buf_size,
+    ssg_group_id_t * group_id_p);
+
+/**
+ * Stores an SSG group identifier in the given file name.
+ *
+ * @param[in]   file_name   File to store the group ID in
+ * @param[in]   group_id    SSG group ID
+ */
+int ssg_group_id_store(
+    const char * file_name,
+    ssg_group_id_t group_id);
+
+/**
+ * Loads an SSG group identifier from the given file name.
+ *
+ * @param[in]   file_name   File to store the group ID in
+ * @param[out]  group_id_p  Pointer to store group identifier in
+ */
+int ssg_group_id_load(
+    const char * file_name,
+    ssg_group_id_t * group_id_p);
+
 /** Dumps details of caller's membership in a given group to stdout.
  *
  * @param[in] group_id SSG group ID

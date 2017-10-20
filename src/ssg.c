@@ -43,7 +43,7 @@ static void ssg_group_lookup_ult(void * arg);
 
 /* SSG helper routine prototypes */
 static ssg_group_descriptor_t * ssg_group_descriptor_create(
-    const char * name, const char * leader_addr_str);
+    uint64_t name_hash, const char * leader_addr_str, int owner_status);
 static ssg_group_descriptor_t * ssg_group_descriptor_dup(
     ssg_group_descriptor_t * descriptor);
 static void ssg_group_descriptor_free(
@@ -130,6 +130,8 @@ ssg_group_id_t ssg_group_create(
     ssg_membership_update_cb update_cb,
     void * update_cb_dat)
 {
+    uint32_t upper, lower;
+    uint64_t name_hash;
     hg_addr_t self_addr = HG_ADDR_NULL;
     char *self_addr_str = NULL;
     hg_size_t self_addr_str_size = 0;
@@ -141,8 +143,12 @@ ssg_group_id_t ssg_group_create(
 
     if (!ssg_inst) return group_id;
 
+    ssg_hashlittle2(group_name, strlen(group_name), &lower, &upper);
+    name_hash = lower + (((uint64_t)upper)<<32);
+
     /* generate a unique ID for this group  */
-    tmp_descriptor = ssg_group_descriptor_create(group_name, group_addr_strs[0]);
+    tmp_descriptor = ssg_group_descriptor_create(name_hash, group_addr_strs[0],
+        SSG_OWNER_IS_MEMBER);
     if (tmp_descriptor == NULL) return group_id;
 
     /* make sure we aren't re-creating an existing group */
@@ -654,6 +660,189 @@ void ssg_group_id_free(
     return;
 }
 
+void ssg_group_id_serialize(
+    ssg_group_id_t group_id,
+    char ** buf_p,
+    size_t * buf_size_p)
+{
+    ssg_group_descriptor_t *group_descriptor = (ssg_group_descriptor_t *)group_id;
+    size_t alloc_size;
+    char *gid_buf; 
+
+    *buf_p = NULL;
+    *buf_size_p = 0;
+
+    /* determine needed buffer size */
+    alloc_size = (sizeof(group_descriptor->magic_nr) + sizeof(group_descriptor->name_hash) +
+        strlen(group_descriptor->addr_str) + 1);
+
+    gid_buf = malloc(alloc_size);
+    if (!gid_buf)
+        return;
+
+    /* serialize */
+    *(uint64_t *)gid_buf = group_descriptor->magic_nr;
+    gid_buf += sizeof(uint64_t);
+    *(uint64_t *)gid_buf = group_descriptor->name_hash;
+    gid_buf += sizeof(uint64_t);
+    strcpy(gid_buf, group_descriptor->addr_str);
+    gid_buf += strlen(group_descriptor->addr_str) + 1;
+    /* the rest of the descriptor is stateful and not appropriate for serializing... */
+
+    *buf_p = gid_buf;
+    *buf_size_p = alloc_size;
+
+    return;
+}
+
+void ssg_group_id_deserialize(
+    const char * buf,
+    size_t buf_size,
+    ssg_group_id_t * group_id_p)
+{
+    size_t min_buf_size;
+    uint64_t magic_nr;
+    uint64_t name_hash;
+    const char *addr_str;
+    ssg_group_descriptor_t *group_descriptor;
+
+    *group_id_p = SSG_GROUP_ID_NULL;
+
+    /* check to ensure the buffer contains enough data to make a group ID */
+    min_buf_size = (sizeof(group_descriptor->magic_nr) +
+        sizeof(group_descriptor->name_hash) + 1);
+    if (buf_size < min_buf_size)
+    {
+        fprintf(stderr, "Error: Serialized buffer does not contain a valid SSG group ID\n");
+        return;
+    }
+
+    /* deserialize */
+    magic_nr = *(uint64_t *)buf;
+    if (magic_nr != SSG_MAGIC_NR)
+    {
+        fprintf(stderr, "Error: Magic number mismatch when deserializing SSG group ID\n");
+        return;
+    }
+    buf += sizeof(uint64_t);
+    name_hash = *(uint64_t *)buf;
+    buf += sizeof(uint64_t);
+    addr_str = buf;
+
+    group_descriptor = ssg_group_descriptor_create(name_hash, addr_str,
+        SSG_OWNER_IS_UNASSOCIATED);
+    if (!group_descriptor)
+        return;
+
+    *group_id_p = (ssg_group_id_t)group_descriptor;
+
+    return;
+}
+
+int ssg_group_id_store(
+    const char * file_name,
+    ssg_group_id_t group_id)
+{
+    int fd;
+    char *buf;
+    size_t buf_size;
+    ssize_t bytes_written;
+
+    fd = open(file_name, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0)
+    {
+        fprintf(stderr, "Error: Unable to open file %s for storing SSG group ID\n",
+            file_name);
+        return SSG_FAILURE;
+    }
+
+    ssg_group_id_serialize(group_id, &buf, &buf_size);
+    if (buf == NULL)
+    {
+        fprintf(stderr, "Error: Unable to serialize SSG group ID.\n");
+        close(fd);
+        return SSG_FAILURE;
+    }
+
+    bytes_written = write(fd, buf, buf_size);
+    if (bytes_written != (ssize_t)buf_size)
+    {
+        fprintf(stderr, "Error: Unable to write SSG group ID to file %s\n", file_name);
+        close(fd);
+        free(buf);
+        return SSG_FAILURE;
+    }
+
+    close(fd);
+    free(buf);
+    return SSG_SUCCESS;
+}
+
+
+int ssg_group_id_load(
+    const char * file_name,
+    ssg_group_id_t * group_id_p)
+{
+    int fd;
+    struct stat fstats;
+    char *buf;
+    ssize_t bytes_read;
+    int ret;
+
+    *group_id_p = SSG_GROUP_ID_NULL;
+
+    fd = open(file_name, O_RDONLY);
+    if (fd < 0)
+    {
+        fprintf(stderr, "Error: Unable to open file %s for loading SSG group ID\n",
+            file_name);
+        return SSG_FAILURE;
+    }
+
+    ret = fstat(fd, &fstats);
+    if (ret != 0)
+    {
+        fprintf(stderr, "Error: Unable to stat file %s\n", file_name);
+        close(fd);
+        return SSG_FAILURE;
+    }
+    if (fstats.st_size == 0)
+    {
+        fprintf(stderr, "Error: SSG group ID file %s is empty\n", file_name);
+        close(fd);
+        return SSG_FAILURE;
+    }
+
+    buf = malloc(fstats.st_size);
+    if (buf == NULL)
+    {
+        close(fd);
+        return SSG_FAILURE;
+    }
+
+    bytes_read = read(fd, buf, fstats.st_size);
+    if (bytes_read != (ssize_t)fstats.st_size)
+    {
+        fprintf(stderr, "Error: Unable to read SSG group ID from file %s\n", file_name);
+        close(fd);
+        free(buf);
+        return SSG_FAILURE;
+    }
+
+    ssg_group_id_deserialize(buf, (size_t)bytes_read, group_id_p);
+    if (*group_id_p == SSG_GROUP_ID_NULL)
+    {
+        fprintf(stderr, "Error: Unable to deserialize SSG group ID\n");
+        close(fd);
+        free(buf);
+        return SSG_FAILURE;
+    }
+
+    close(fd);
+    free(buf);
+    return SSG_SUCCESS;
+}
+
 void ssg_group_dump(
     ssg_group_id_t group_id)
 {
@@ -752,25 +941,23 @@ void ssg_apply_membership_update(
 }
 
 static ssg_group_descriptor_t * ssg_group_descriptor_create(
-    const char * name, const char * leader_addr_str)
+    uint64_t name_hash, const char * leader_addr_str, int owner_status)
 {
     ssg_group_descriptor_t *descriptor;
-    uint32_t upper, lower;
 
     descriptor = malloc(sizeof(*descriptor));
     if (!descriptor) return NULL;
 
     /* hash the group name to obtain an 64-bit unique ID */
-    ssg_hashlittle2(name, strlen(name), &lower, &upper);
     descriptor->magic_nr = SSG_MAGIC_NR;
-    descriptor->name_hash = lower + (((uint64_t)upper)<<32);
+    descriptor->name_hash = name_hash;
     descriptor->addr_str = strdup(leader_addr_str);
     if (!descriptor->addr_str)
     {
         free(descriptor);
         return NULL;
     }
-    descriptor->owner_status = SSG_OWNER_IS_MEMBER;
+    descriptor->owner_status = owner_status;
     descriptor->ref_count = 1;
     return descriptor;
 }
