@@ -667,7 +667,7 @@ void ssg_group_id_serialize(
 {
     ssg_group_descriptor_t *group_descriptor = (ssg_group_descriptor_t *)group_id;
     size_t alloc_size;
-    char *gid_buf; 
+    char *gid_buf, *p; 
 
     *buf_p = NULL;
     *buf_size_p = 0;
@@ -681,12 +681,12 @@ void ssg_group_id_serialize(
         return;
 
     /* serialize */
-    *(uint64_t *)gid_buf = group_descriptor->magic_nr;
-    gid_buf += sizeof(uint64_t);
-    *(uint64_t *)gid_buf = group_descriptor->name_hash;
-    gid_buf += sizeof(uint64_t);
-    strcpy(gid_buf, group_descriptor->addr_str);
-    gid_buf += strlen(group_descriptor->addr_str) + 1;
+    p = gid_buf;
+    *(uint64_t *)p = group_descriptor->magic_nr;
+    p += sizeof(uint64_t);
+    *(uint64_t *)p = group_descriptor->name_hash;
+    p += sizeof(uint64_t);
+    strcpy(p, group_descriptor->addr_str);
     /* the rest of the descriptor is stateful and not appropriate for serializing... */
 
     *buf_p = gid_buf;
