@@ -660,6 +660,15 @@ void ssg_group_id_free(
     return;
 }
 
+char *ssg_group_id_get_addr_str(
+    ssg_group_id_t group_id)
+{
+    ssg_group_descriptor_t *group_descriptor = (ssg_group_descriptor_t *)group_id;
+
+    return strdup(group_descriptor->addr_str);
+}
+
+
 void ssg_group_id_serialize(
     ssg_group_id_t group_id,
     char ** buf_p,

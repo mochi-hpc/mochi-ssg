@@ -204,6 +204,17 @@ void ssg_group_id_free(
     ssg_group_id_t group_id);
 
 /**
+ * Retrieves the HG address string associated with an SSG group identifier.
+ *
+ * @param[in] group_id SSG group ID
+ * @returns address string on success, NULL otherwise
+ * 
+ * NOTE: returned string must be freed by caller.
+ */
+char *ssg_group_id_get_addr_str(
+    ssg_group_id_t group_id);
+
+/**
  * Serializes an SSG group identifier into a buffer.
  *
  * @param[in]   group_id    SSG group ID
