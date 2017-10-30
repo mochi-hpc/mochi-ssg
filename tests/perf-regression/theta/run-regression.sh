@@ -67,7 +67,7 @@ make -j 3
 make install
  
 # libfabric
-echo "=== BUILDING LIBFABRIC v1.5.0 ==="
+echo "=== BUILDING LIBFABRIC ==="
 cd $SANDBOX/libfabric
 ./autogen.sh
 mkdir build
