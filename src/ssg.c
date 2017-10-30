@@ -328,6 +328,7 @@ ssg_group_id_t ssg_group_create_mpi(
     ssg_membership_update_cb update_cb,
     void * update_cb_dat)
 {
+    int i;
     hg_addr_t self_addr = HG_ADDR_NULL;
     char *self_addr_str = NULL;
     hg_size_t self_addr_str_size = 0;
@@ -367,7 +368,7 @@ ssg_group_id_t ssg_group_create_mpi(
     sizes_psum = malloc((comm_size+1) * sizeof(*sizes_psum));
     if (sizes_psum == NULL) goto fini;
     sizes_psum[0] = 0;
-    for (int i = 1; i < comm_size+1; i++)
+    for (i = 1; i < comm_size+1; i++)
         sizes_psum[i] = sizes_psum[i-1] + sizes[i-1];
 
     /* allgather the addresses */
@@ -1203,11 +1204,12 @@ static void ssg_attached_group_destroy(
 static const char ** ssg_addr_str_buf_to_list(
     const char * buf, int num_addrs)
 {
+    int i;
     const char **ret = malloc(num_addrs * sizeof(*ret));
     if (ret == NULL) return NULL;
 
     ret[0] = buf;
-    for (int i = 1; i < num_addrs; i++)
+    for (i = 1; i < num_addrs; i++)
     {
         const char * a = ret[i-1];
         ret[i] = a + strlen(a) + 1;
