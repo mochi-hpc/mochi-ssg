@@ -198,10 +198,7 @@ int main(int argc, char **argv)
 
     margo_finalize(mid);
     HG_Context_destroy(hg_context);
-/* TODO: we currently get hangs in HG_Finalzie with cci+verbs */
-#if 0
     HG_Finalize(hg_class);
-#endif
     MPI_Finalize();
     ABT_finalize();
 
