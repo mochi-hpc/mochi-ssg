@@ -26,7 +26,7 @@ cp margo-p2p-latency.qsub $JOBDIR
 
 cd $SANDBOX
 git clone https://github.com/carns/argobots.git
-git clone https://github.com/CCI/cci.git
+git clone https://github.com/carns/cci.git
 git clone https://github.com/mercury-hpc/mercury.git
 wget http://dist.schmorp.de/libev/libev-4.24.tar.gz
 tar -xvzf libev-4.24.tar.gz
@@ -61,6 +61,7 @@ make install
 # cci
 echo "=== BUILDING CCI ==="
 cd $SANDBOX/cci
+git checkout dev-destroy-endpoint-hang
 libtoolize
 ./autogen.pl
 mkdir build
