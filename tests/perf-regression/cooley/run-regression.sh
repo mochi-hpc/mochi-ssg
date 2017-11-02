@@ -10,6 +10,9 @@ set -e
 SANDBOX=/tmp/mochi-regression-$$
 PREFIX=~/tmp/mochi-regression-install-$$
 JOBDIR=~/tmp/mochi-regression-job-$$
+
+# less ancient gcc
+export CC=/soft/compilers/gcc/7.1.0/bin/gcc
 export CFLAGS="-O3"
 export PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig
 export PATH=/soft/buildtools/cmake/current/bin/:$PATH # working cmake version
