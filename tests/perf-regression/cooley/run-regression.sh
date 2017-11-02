@@ -65,7 +65,7 @@ libtoolize
 ./autogen.pl
 mkdir build
 cd build
-../configure --prefix=$PREFIX 
+../configure --prefix=$PREFIX --enable-plugins-no-build=ctp-sm
 make -j 3
 make install
  
