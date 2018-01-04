@@ -1,0 +1,37 @@
+#!/bin/bash
+#COBALT -n 2
+#COBALT -t 10
+#COBALT --mode script
+#COBALT -A radix-io
+#COBALT -q debug-flat-quad
+#COBALT -M carns@mcs.anl.gov
+
+# XXX xalt module currently eating '-M' flag for mercury-runner...disabling for now
+module unload xalt
+
+echo "## MPI (one way, double the latency for round trip):"
+aprun -n 2 -N 1 ./osu_latency
+
+echo "## Margo OFI/GNI (round trip):"
+aprun -n 2 -N 1 ./margo-p2p-latency -i 100000 -n ofi+gni://ipogif0:5000
+# echo "## WARNING: Margo OFI/TCP (disabled because it hangs as of 8/10/2017)"
+# aprun -n 2 -N 1 ./margo-p2p-latency -i 100000 -n ofi+tcp://ipogif0:5000
+
+# figure out nodes and hostnames for use with fi_
+declare -a nodes=($(python /home/carns/bin/run_on_all_nids.py));
+server_hostname=$(printf "nid%05d\n" ${nodes[0]})
+
+echo "## fi_pingpong OFI/GNI (one way, double the usec/xfer for round trip):"
+aprun -n 1 -N 1 -L ${nodes[0]} -b -p carns-test ./fi_pingpong -p gni -S 1 -I 10000 > $COBALT_JOBID.fi_pingpong_server.log &
+sleep 5
+aprun -n 1 -N 1 -L ${nodes[1]} -b -p carns-test ./fi_pingpong -p gni -S 1 -I 10000 $server_hostname > $COBALT_JOBID.fi_pingpong_client.log &
+
+wait
+cat $COBALT_JOBID.fi_pingpong_client.log
+
+# one more margo run, this time with diagnostics enabled
+# echo "## Margo OFI/GNI (round trip) with diagnostics:"
+# aprun -n 2 -N 1 ./margo-p2p-latency -i 100000 -n ofi+gni://ipogif0:5000 -d $COBALT_JOBID.diag
+
+#echo "## Mercury-runner OFI/GNI (round trip):"
+#aprun -n 2 -N 1 ./mercury-runner -q -c 100000 -l 1 -m c -M -d `pwd` 1 h0=ofi+gni://ipogif0:5000 h1
