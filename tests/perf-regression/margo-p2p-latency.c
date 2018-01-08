@@ -82,7 +82,26 @@ int main(int argc, char **argv)
 
     /* boilerplate HG initialization steps */
     /***************************************/
-    hg_class = HG_Init(g_opts.na_transport, HG_TRUE);
+
+    if((rank == 0 && g_opts.mercury_timeout_client == 0) ||
+       (rank == 1 && g_opts.mercury_timeout_server == 0))
+    {
+        struct hg_init_info hii;
+        
+        /* If mercury timeout of zero is requested, then set
+         * init option to NO_BLOCK.  This allows some transports to go
+         * faster because they do not have to set up or maintain the data
+         * structures necessary for signaling completion on blocked
+         * operations.
+         */
+        memset(&hii, 0, sizeof(hii));
+        hii.na_init_info.progress_mode = NA_NO_BLOCK;
+        hg_class = HG_Init_opt(g_opts.na_transport, HG_TRUE, &hii);
+    }
+    else
+    {
+        hg_class = HG_Init(g_opts.na_transport, HG_TRUE);
+    }
     if(!hg_class)
     {
         fprintf(stderr, "Error: HG_Init()\n");
