@@ -145,7 +145,7 @@ echo "=== JOB DONE, COLLECTING AND SENDING RESULTS ==="
 # gather output, strip out funny characters, mail
 cat $JOBID.* > combined.$JOBID.txt
 dos2unix combined.$JOBID.txt
-mailx -s "margo-p2p-latency (cooley)" sds-commits@mcs.anl.gov < combined.$JOBID.txt
+mailx -s "margo-p2p-latency (cooley)" sds-commits@lists.mcs.anl.gov < combined.$JOBID.txt
 
 cd /tmp
 rm -rf $SANDBOX
