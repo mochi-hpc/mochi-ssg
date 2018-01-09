@@ -1091,7 +1091,9 @@ static int ssg_group_view_create(
 
         /* XXX limit outstanding lookups to some max */
         lookup_ult_args[j].member_state = &view->member_states[j];
-        aret = ABT_thread_create(*margo_get_handler_pool(ssg_inst->mid),
+        ABT_pool pool;
+        margo_get_handler_pool(ssg_inst->mid, &pool);
+        aret = ABT_thread_create(pool,
             &ssg_group_lookup_ult, &lookup_ult_args[j], ABT_THREAD_ATTR_NULL,
             &lookup_ults[j]);
         if (aret != ABT_SUCCESS)
