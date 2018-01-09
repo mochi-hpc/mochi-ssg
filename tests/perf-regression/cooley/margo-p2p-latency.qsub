@@ -1,6 +1,6 @@
 #!/bin/bash
 #COBALT -n 2
-#COBALT -t 10
+#COBALT -t 15
 #COBALT --mode script
 #COBALT -A radix-io
 #COBALT -q ibleaf3-debug
