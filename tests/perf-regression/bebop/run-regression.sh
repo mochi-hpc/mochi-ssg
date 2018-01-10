@@ -24,8 +24,7 @@ mkdir $SANDBOX
 # scratch area for job submission
 mkdir $JOBDIR
 
-# TODO: add job script appropriate for Bebop
-# cp margo-p2p-latency.qsub $JOBDIR
+cp margo-p2p-latency.sbatch $JOBDIR
 
 cd $SANDBOX
 git clone http://git.mpich.org/openpa.git/
@@ -155,23 +154,19 @@ CC=mpicc CXX=mpicxx CXXFLAGS='-D__STDC_FORMAT_MACROS' cmake -DCMAKE_PREFIX_PATH=
 make -j 3
 make install
 
-# TODO: fix below after builds are working above
-exit 0
-
 # set up job to run
 echo "=== SUBMITTING AND WAITING FOR JOB ==="
 cp $SANDBOX/ssg/build/tests/perf-regression/.libs/margo-p2p-latency $JOBDIR
 cp $PREFIX/libexec/osu-micro-benchmarks/mpi/pt2pt/osu_latency $JOBDIR
 cp $PREFIX/bin/mercury-runner $JOBDIR
 cd $JOBDIR
-JOBID=`qsub --env LD_LIBRARY_PATH=$PREFIX/lib ./margo-p2p-latency.qsub`
-cqwait $JOBID
+sbatch --wait --export=ALL ./margo-p2p-latency.sbatch
 
 echo "=== JOB DONE, COLLECTING AND SENDING RESULTS ==="
 # gather output, strip out funny characters, mail
-cat $JOBID.* > combined.$JOBID.txt
-dos2unix combined.$JOBID.txt
-mailx -s "margo-p2p-latency (cooley)" sds-commits@lists.mcs.anl.gov < combined.$JOBID.txt
+cat *.out > combined.JOBIDtxt
+dos2unix combined.JOBID.txt
+mailx -s "margo-p2p-latency (bebop)" carns@lists.mcs.anl.gov < combined.JOBID.txt
 
 cd /tmp
 rm -rf $SANDBOX
