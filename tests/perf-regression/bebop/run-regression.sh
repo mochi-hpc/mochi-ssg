@@ -11,6 +11,7 @@ SANDBOX=/tmp/mochi-regression-$$
 PREFIX=~/tmp/mochi-regression-install-$$
 JOBDIR=~/tmp/mochi-regression-job-$$
 
+export CC=icc
 export CFLAGS="-O3"
 export PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig
 
@@ -25,6 +26,8 @@ mkdir $SANDBOX
 mkdir $JOBDIR
 
 cp margo-p2p-latency.sbatch $JOBDIR
+cp margo-p2p-latency-knl.sbatch $JOBDIR
+
 # TODO: this is temporary, the real fix is in topic_ofi branch and will
 #  be merged at some point
 cp mercury-psm2-mr-basic.patch $SANDBOX
@@ -99,6 +102,8 @@ make install
 echo "=== BUILDING MERCURY ==="
 cd $SANDBOX/mercury
 git submodule update --init
+# TODO: this is temporary, the real fix is in topic_ofi branch and will
+#  be merged at some point
 patch -p1 < $SANDBOX/mercury-psm2-mr-basic.patch
 mkdir build
 cd build
@@ -165,12 +170,14 @@ cp $PREFIX/libexec/osu-micro-benchmarks/mpi/pt2pt/osu_latency $JOBDIR
 cp $PREFIX/bin/mercury-runner $JOBDIR
 cd $JOBDIR
 sbatch --wait --export=ALL ./margo-p2p-latency.sbatch
+sbatch --wait --export=ALL ./margo-p2p-latency-knl.sbatch
 
 echo "=== JOB DONE, COLLECTING AND SENDING RESULTS ==="
 # gather output, strip out funny characters, mail
-cat *.out > combined.JOBIDtxt
-dos2unix combined.JOBID.txt
-mailx -s "margo-p2p-latency (bebop)" carns@lists.mcs.anl.gov < combined.JOBID.txt
+cat *.out > combined.txt
+# TODO: dooesn't look like we have this on bebop, need another solution
+# dos2unix combined.txt
+mailx -s "margo-p2p-latency (bebop)" sds-commits@lists.mcs.anl.gov < combined.txt
 
 cd /tmp
 rm -rf $SANDBOX
