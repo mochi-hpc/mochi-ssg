@@ -20,4 +20,8 @@ mpirun -IB ./margo-p2p-latency -i 100000 -n psm2://ib0:5000
 echo "## Margo OFI/PSM2 (round trip, knl, Hg busy spin):"
 mpirun -IB ./margo-p2p-latency -i 100000 -n psm2://ib0:5000 -t 0,0
 
+echo "## Margo OFI/VERBS (round trip, knl):"
+mpirun ./margo-p2p-latency -i 100000 -n verbs://ib0:5000
+echo "## Margo OFI/VERBS (round trip, knl, Hg busy spin):"
+mpirun ./margo-p2p-latency -i 100000 -n verbs://ib0:5000 -t 0,0
 
