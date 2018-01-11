@@ -25,6 +25,9 @@ mkdir $SANDBOX
 mkdir $JOBDIR
 
 cp margo-p2p-latency.sbatch $JOBDIR
+# TODO: this is temporary, the real fix is in topic_ofi branch and will
+#  be merged at some point
+cp mercury-psm2-mr-basic.patch $SANDBOX
 
 cd $SANDBOX
 git clone http://git.mpich.org/openpa.git/
@@ -96,6 +99,7 @@ make install
 echo "=== BUILDING MERCURY ==="
 cd $SANDBOX/mercury
 git submodule update --init
+patch -p1 < $SANDBOX/mercury-psm2-mr-basic.patch
 mkdir build
 cd build
 cmake -DNA_USE_OFI:BOOL=ON -DMERCURY_USE_BOOST_PP:BOOL=ON -DCMAKE_INSTALL_PREFIX=/$PREFIX -DBUILD_SHARED_LIBS:BOOL=ON -DMERCURY_USE_SELF_FORWARD:BOOL=ON -DNA_USE_SM:BOOL=ON ../
