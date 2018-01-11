@@ -52,7 +52,7 @@ echo "=== BUILDING OSU MICRO BENCHMARKS ==="
 cd $SANDBOX/osu-micro-benchmarks-5.3.2
 mkdir build
 cd build
-../configure --prefix=$PREFIX CC=mpicc CXX=mpicxx
+../configure --prefix=$PREFIX CC=mpiicc CXX=mpiicc
 make -j 3
 make install
 
@@ -149,7 +149,7 @@ libtoolize
 ./prepare.sh
 mkdir build
 cd build
-../configure --prefix=$PREFIX CC=mpicc
+../configure --prefix=$PREFIX CC=mpiicc
 make -j 3
 make install
 make tests
@@ -159,7 +159,7 @@ echo "=== BUILDING MERCURY-RUNNER BENCHMARK ==="
 cd $SANDBOX/mercury-runner
 mkdir build
 cd build
-CC=mpicc CXX=mpicxx CXXFLAGS='-D__STDC_FORMAT_MACROS' cmake -DCMAKE_PREFIX_PATH=$PREFIX -DCMAKE_INSTALL_PREFIX=$PREFIX -DMPI=ON ..
+CC=mpiicc CXX=mpiicc CXXFLAGS='-D__STDC_FORMAT_MACROS' cmake -DCMAKE_PREFIX_PATH=$PREFIX -DCMAKE_INSTALL_PREFIX=$PREFIX -DMPI=ON ..
 make -j 3
 make install
 
