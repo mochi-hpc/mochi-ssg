@@ -10,9 +10,9 @@ export FI_PSM2_NAME_SERVER=1
 echo "## MPI (one way, double the latency for round trip):"
 mpirun ./osu_latency
 
-echo "## Margo CCI/VERBS (round trip):"
+echo "## Margo OFI/PSM2 (round trip):"
 mpirun ./margo-p2p-latency -i 100000 -n psm2://ib0:5000
-echo "## Margo CCI/VERBS (round trip, Hg busy spin):"
+echo "## Margo OFI/PSM2 (round trip, Hg busy spin):"
 mpirun ./margo-p2p-latency -i 100000 -n psm2://ib0:5000 -t 0,0
 
 
