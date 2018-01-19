@@ -72,7 +72,7 @@ make DESTDIR=$PREFIX install
 
 # TODO: it doesn't seem like this should be necessary; we are specifying path
 # to lib in libfabric build.
-LD_LIBRARY_PATH=$PREFIX/usr/lib64:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$PREFIX/usr/lib64:$LD_LIBRARY_PATH
 
 # libfabric
 echo "=== BUILDING LIBFABRIC ==="

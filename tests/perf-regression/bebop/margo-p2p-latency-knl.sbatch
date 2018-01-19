@@ -16,12 +16,12 @@ mpirun ./osu_latency
 #  (apparently because MPI is using MR_SCALABLE and Mercury is using MR_BASIC?)
 
 echo "## Margo OFI/PSM2 (round trip, knl):"
-mpirun -IB ./margo-p2p-latency -i 100000 -n psm2://ib0:5000
+mpirun -IB -genvall ./margo-p2p-latency -i 100000 -n psm2://ib0:5000
 echo "## Margo OFI/PSM2 (round trip, knl, Hg busy spin):"
-mpirun -IB ./margo-p2p-latency -i 100000 -n psm2://ib0:5000 -t 0,0
+mpirun -IB -genvall ./margo-p2p-latency -i 100000 -n psm2://ib0:5000 -t 0,0
 
 echo "## Margo OFI/VERBS (round trip, knl):"
-mpirun ./margo-p2p-latency -i 100000 -n verbs://ib0:5000
+mpirun -genvall ./margo-p2p-latency -i 100000 -n verbs://ib0:5000
 echo "## Margo OFI/VERBS (round trip, knl, Hg busy spin):"
-mpirun ./margo-p2p-latency -i 100000 -n verbs://ib0:5000 -t 0,0
+mpirun -genvall ./margo-p2p-latency -i 100000 -n verbs://ib0:5000 -t 0,0
 
