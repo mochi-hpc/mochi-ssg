@@ -1,16 +1,29 @@
 #!/bin/bash
 #COBALT -n 2
-#COBALT -t 15
+#COBALT -t 20
 #COBALT --mode script
 #COBALT -A radix-io
 #COBALT -q ibleaf3-debug
 
 echo "## MPI (one way, double the latency for round trip):"
 mpirun -f $COBALT_NODEFILE -n 2 ./osu_latency
+
+sleep 1 
+
 echo "## Margo CCI/VERBS (round trip):"
-mpirun -f $COBALT_NODEFILE -n 2 ./margo-p2p-latency -i 100000 -n verbs://
+mpirun -f $COBALT_NODEFILE -n 2 ./margo-p2p-latency -i 100000 -n cci+verbs://
+
+sleep 1
+
 echo "## Margo CCI/VERBS (round trip, Hg busy spin):"
-mpirun -f $COBALT_NODEFILE -n 2 ./margo-p2p-latency -i 100000 -n verbs:// -t 0,0
+mpirun -f $COBALT_NODEFILE -n 2 ./margo-p2p-latency -i 100000 -n cci+verbs:// -t 0,0
+
+sleep 1
+
+echo "## Margo OFI/VERBS (round trip, Hg busy spin):"
+mpirun -f $COBALT_NODEFILE -n 2 ./margo-p2p-latency -i 100000 -n ofi+verbs:// -t 0,0
+
+echo "## NOTE: OFI/VERBS HANGS WHEN NOT IN BUSY SPIN MODE AS OF 2018-01-24"
 
 # echo "## Margo CCI/VERBS (round trip) with diagnostics:"
 # mpirun -f $COBALT_NODEFILE -n 2 ./margo-p2p-latency -i 100000 -n verbs:// -d $COBALT_JOBID.diag
