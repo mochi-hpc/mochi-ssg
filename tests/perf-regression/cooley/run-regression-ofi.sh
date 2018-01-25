@@ -22,12 +22,12 @@ mkdir $SANDBOX
 
 # scratch area for job submission
 mkdir $JOBDIR
-cp margo-p2p-latency.qsub $JOBDIR
+cp margo-p2p-latency-ofi.qsub $JOBDIR
 
 cd $SANDBOX
 git clone https://github.com/carns/argobots.git
 git clone https://github.com/ofiwg/libfabric.git
-git clone https://github.com/carns/cci.git
+#git clone https://github.com/carns/cci.git
 git clone https://github.com/mercury-hpc/mercury.git
 wget http://dist.schmorp.de/libev/libev-4.24.tar.gz
 tar -xvzf libev-4.24.tar.gz
@@ -60,27 +60,27 @@ make -j 3
 make install
  
 # libfabric
-#echo "=== BUILDING LIBFABRIC ==="
-#cd $SANDBOX/libfabric
-#libtoolize
-#./autogen.sh
-#mkdir build
-#cd build
-#../configure --prefix=$PREFIX --enable-sockets --enable-verbs 
-#make -j 3
-#make install
-
-# cci
-echo "=== BUILDING CCI ==="
-cd $SANDBOX/cci
-git checkout dev-destroy-endpoint-hang
+echo "=== BUILDING LIBFABRIC ==="
+cd $SANDBOX/libfabric
 libtoolize
-./autogen.pl
+./autogen.sh
 mkdir build
 cd build
-../configure --prefix=$PREFIX --enable-plugins-no-build=ctp-sm
+../configure --prefix=$PREFIX --enable-sockets --enable-verbs 
 make -j 3
 make install
+
+# cci
+#echo "=== BUILDING CCI ==="
+#cd $SANDBOX/cci
+#git checkout dev-destroy-endpoint-hang
+#libtoolize
+#./autogen.pl
+#mkdir build
+#cd build
+#../configure --prefix=$PREFIX --enable-plugins-no-build=ctp-sm
+#make -j 3
+#make install
  
 # mercury
 echo "=== BUILDING MERCURY ==="
@@ -88,7 +88,7 @@ cd $SANDBOX/mercury
 git submodule update --init
 mkdir build
 cd build
-cmake -DNA_USE_CCI:BOOL=ON -DMERCURY_USE_BOOST_PP:BOOL=ON -DCMAKE_INSTALL_PREFIX=/$PREFIX -DBoost_NO_BOOST_CMAKE=TRUE -DBUILD_SHARED_LIBS:BOOL=ON -DMERCURY_USE_SELF_FORWARD:BOOL=ON -DNA_USE_SM:BOOL=OFF ../
+cmake -DNA_USE_OFI:BOOL=ON -DMERCURY_USE_BOOST_PP:BOOL=ON -DCMAKE_INSTALL_PREFIX=/$PREFIX -DBoost_NO_BOOST_CMAKE=TRUE -DBUILD_SHARED_LIBS:BOOL=ON -DMERCURY_USE_SELF_FORWARD:BOOL=ON -DNA_USE_SM:BOOL=OFF ../
 #cmake -DNA_USE_OFI:BOOL=ON -DNA_USE_CCI:BOOL=ON -DMERCURY_USE_BOOST_PP:BOOL=ON -DCMAKE_INSTALL_PREFIX=/$PREFIX -DBoost_NO_BOOST_CMAKE=TRUE -DBUILD_SHARED_LIBS:BOOL=ON -DMERCURY_USE_SELF_FORWARD:BOOL=ON -DNA_USE_SM:BOOL=OFF ../
 make -j 3
 make install
@@ -151,14 +151,14 @@ cp $SANDBOX/ssg/build/tests/perf-regression/.libs/margo-p2p-latency $JOBDIR
 cp $PREFIX/libexec/osu-micro-benchmarks/mpi/pt2pt/osu_latency $JOBDIR
 cp $PREFIX/bin/mercury-runner $JOBDIR
 cd $JOBDIR
-JOBID=`qsub --env LD_LIBRARY_PATH=$PREFIX/lib ./margo-p2p-latency.qsub`
+JOBID=`qsub --env LD_LIBRARY_PATH=$PREFIX/lib ./margo-p2p-latency-ofi.qsub`
 cqwait $JOBID
 
 echo "=== JOB DONE, COLLECTING AND SENDING RESULTS ==="
 # gather output, strip out funny characters, mail
 cat $JOBID.* > combined.$JOBID.txt
 dos2unix combined.$JOBID.txt
-mailx -s "margo-p2p-latency (cooley, cci)" sds-commits@lists.mcs.anl.gov < combined.$JOBID.txt
+mailx -s "margo-p2p-latency (cooley, ofi)" sds-commits@lists.mcs.anl.gov < combined.$JOBID.txt
 
 cd /tmp
 rm -rf $SANDBOX
