@@ -60,15 +60,15 @@ make -j 3
 make install
  
 # libfabric
-echo "=== BUILDING LIBFABRIC ==="
-cd $SANDBOX/libfabric
-libtoolize
-./autogen.sh
-mkdir build
-cd build
-../configure --prefix=$PREFIX --enable-sockets --enable-verbs 
-make -j 3
-make install
+#echo "=== BUILDING LIBFABRIC ==="
+#cd $SANDBOX/libfabric
+#libtoolize
+#./autogen.sh
+#mkdir build
+#cd build
+#../configure --prefix=$PREFIX --enable-sockets --enable-verbs 
+#make -j 3
+#make install
 
 # cci
 echo "=== BUILDING CCI ==="
@@ -88,7 +88,8 @@ cd $SANDBOX/mercury
 git submodule update --init
 mkdir build
 cd build
-cmake -DNA_USE_OFI:BOOL=ON -DNA_USE_CCI:BOOL=ON -DMERCURY_USE_BOOST_PP:BOOL=ON -DCMAKE_INSTALL_PREFIX=/$PREFIX -DBoost_NO_BOOST_CMAKE=TRUE -DBUILD_SHARED_LIBS:BOOL=ON -DMERCURY_USE_SELF_FORWARD:BOOL=ON -DNA_USE_SM:BOOL=OFF ../
+cmake -DNA_USE_CCI:BOOL=ON -DMERCURY_USE_BOOST_PP:BOOL=ON -DCMAKE_INSTALL_PREFIX=/$PREFIX -DBoost_NO_BOOST_CMAKE=TRUE -DBUILD_SHARED_LIBS:BOOL=ON -DMERCURY_USE_SELF_FORWARD:BOOL=ON -DNA_USE_SM:BOOL=OFF ../
+#cmake -DNA_USE_OFI:BOOL=ON -DNA_USE_CCI:BOOL=ON -DMERCURY_USE_BOOST_PP:BOOL=ON -DCMAKE_INSTALL_PREFIX=/$PREFIX -DBoost_NO_BOOST_CMAKE=TRUE -DBUILD_SHARED_LIBS:BOOL=ON -DMERCURY_USE_SELF_FORWARD:BOOL=ON -DNA_USE_SM:BOOL=OFF ../
 make -j 3
 make install
 
