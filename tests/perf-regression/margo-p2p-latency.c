@@ -355,9 +355,6 @@ static int run_benchmark(int iterations, hg_id_t id, ssg_member_id_t target,
     ret = margo_create(mid, target_addr, id, &handle);
     assert(ret == 0);
 
-    /* TODO: have command line option to toggle whether we reuse one handle
-     * or create/release on every cycle
-     */
     for(i=0; i<iterations; i++)
     {
         tm1 = ABT_get_wtime();
