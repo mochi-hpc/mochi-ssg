@@ -9,4 +9,6 @@ tests_ssg_test_attach_LDADD = src/libssg.la
 if SSG_HAVE_MPI
 check_PROGRAMS += tests/perf-regression/margo-p2p-latency
 tests_perf_regression_margo_p2p_latency_LDADD = src/libssg.la
+check_PROGRAMS += tests/perf-regression/margo-p2p-bw
+tests_perf_regression_margo_p2p_bw_LDADD = src/libssg.la
 endif
