@@ -49,10 +49,13 @@ static void bench_routine_print(const char* op, int size, int iterations,
     double* measurement_array);
 static int measurement_cmp(const void* a, const void *b);
 #endif
+static void bw_worker(void *_arg);
 
 static ABT_eventual bw_done_eventual;
 
 static struct options g_opts;
+
+static ABT_pool transfer_pool;
 
 int main(int argc, char **argv) 
 {
@@ -198,6 +201,19 @@ int main(int argc, char **argv)
     }
     else
     {
+        if(g_opts.threads == 0)
+        {
+            /* run bulk transfers from primary pool on server */
+            transfer_pool = pool;
+        }
+        else
+        {
+            /* TODO: implement; need to create dedicated pool with requested
+             * number of execution streams
+             */
+            assert(0);
+        }
+
         /* ssg id 1 acts as server to run transfers */
         ret = ABT_eventual_create(0, &bw_done_eventual);
         assert(ret == 0);
@@ -343,8 +359,30 @@ static void usage(void)
 /* service an RPC that runs the bandwidth test */
 static void bw_ult(hg_handle_t handle)
 {
+    int i;
+    ABT_thread *tid_array;
+    int ret;
+
+    tid_array = malloc(g_opts.concurrency * sizeof(*tid_array));
+    assert(tid_array);
+
+    /* create requested number of workers to run transfer */
+    for(i=0; i<g_opts.concurrency; i++)
+    {
+        ret = ABT_thread_create(transfer_pool, bw_worker, NULL, ABT_THREAD_ATTR_NULL, &tid_array[i]);
+        assert(ret == 0);
+    }
+
+    for(i=0; i<g_opts.concurrency; i++)
+    {
+        ABT_thread_join(tid_array[i]);
+        ABT_thread_free(&tid_array[i]);
+    }
+
     margo_respond(handle, NULL);
     margo_destroy(handle);
+
+    free(tid_array);
 
     ABT_eventual_set(bw_done_eventual, NULL, 0);
 
@@ -440,3 +478,10 @@ static int measurement_cmp(const void* a, const void *b)
 }
 #endif
 
+/* function that assists in transferring data until end condition is met */
+static void bw_worker(void *_arg)
+{
+    printf("# DBG: worker started.\n");
+    printf("# DBG: worker stopped.\n");
+    return;
+}
