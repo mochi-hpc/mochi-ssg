@@ -25,6 +25,7 @@
 struct options
 {
     int xfer_size;
+    int duration_seconds;
     int concurrency;
     int threads;
     int snoozer_flag_client;
@@ -49,6 +50,12 @@ static void bench_routine_print(const char* op, int size, int iterations,
     double* measurement_array);
 static int measurement_cmp(const void* a, const void *b);
 #endif
+struct bw_worker_arg
+{
+    double start_tm;
+    margo_instance_id mid;
+};
+
 static void bw_worker(void *_arg);
 
 static ABT_eventual bw_done_eventual;
@@ -259,7 +266,7 @@ static void parse_args(int argc, char **argv, struct options *opts)
     opts->mercury_timeout_client = UINT_MAX;
     opts->mercury_timeout_server = UINT_MAX; 
 
-    while((opt = getopt(argc, argv, "n:x:c:p:d:s:t:")) != -1)
+    while((opt = getopt(argc, argv, "n:x:c:T:d:s:t:D:")) != -1)
     {
         switch(opt)
         {
@@ -287,8 +294,16 @@ static void parse_args(int argc, char **argv, struct options *opts)
                     exit(EXIT_FAILURE);
                 }
                 break;
-            case 'p':
+            case 'T':
                 ret = sscanf(optarg, "%d", &opts->threads);
+                if(ret != 1)
+                {
+                    usage();
+                    exit(EXIT_FAILURE);
+                }
+                break;
+            case 'D':
+                ret = sscanf(optarg, "%d", &opts->duration_seconds);
                 if(ret != 1)
                 {
                     usage();
@@ -329,7 +344,7 @@ static void parse_args(int argc, char **argv, struct options *opts)
         }
     }
 
-    if(opts->xfer_size < 1 || opts->concurrency < 1 || !opts->na_transport)
+    if(opts->xfer_size < 1 || opts->concurrency < 1 || opts->duration_seconds < 1 || !opts->na_transport)
     {
         usage();
         exit(EXIT_FAILURE);
@@ -342,15 +357,16 @@ static void usage(void)
 {
     fprintf(stderr,
         "Usage: "
-        "margo-p2p-bw -x <xfer_size> -c <concurrency> -p <os threads> -n <na>\n"
-        "\t-x <xfer_size> - size of each bulk tranfer\n"
+        "margo-p2p-bw -x <xfer_size> -D <duration> -n <na>\n"
+        "\t-x <xfer_size> - size of each bulk tranfer in bytes\n"
+        "\t-D <duration> - duration of test in seconds\n"
         "\t-n <na> - na transport\n"
         "\t[-c concurrency] - number of concurrent operations to issue with ULTs\n"
-        "\t[-p <os threads] - number of dedicated operating system threads to run ULTs on\n"
+        "\t[-T <os threads] - number of dedicated operating system threads to run ULTs on\n"
         "\t[-d filename] - enable diagnostics output \n"
         "\t[-s <bool,bool>] - specify if snoozer scheduler is used on client and server\n"
         "\t\t(e.g., -s 0,1 means snoozer disabled on client and enabled on server)\n"
-        "\t\texample: mpiexec -n 2 ./margo-p2p-bw -x 4096 -n verbs://\n"
+        "\t\texample: mpiexec -n 2 ./margo-p2p-bw -x 4096 -D 30 -n verbs://\n"
         "\t\t(must be run with exactly 2 processes\n");
     
     return;
@@ -361,15 +377,30 @@ static void bw_ult(hg_handle_t handle)
 {
     int i;
     ABT_thread *tid_array;
+    struct bw_worker_arg *arg_array;
     int ret;
+    double start_time;
+    margo_instance_id mid;
+    const struct hg_info *hgi;
+
+    /* get handle info and margo instance */
+    hgi = margo_get_info(handle);
+    assert(hgi);
+    mid = margo_hg_info_get_instance(hgi);
+    assert(mid != MARGO_INSTANCE_NULL);
 
     tid_array = malloc(g_opts.concurrency * sizeof(*tid_array));
     assert(tid_array);
+    arg_array = malloc(g_opts.concurrency * sizeof(*arg_array));
+    assert(arg_array);
 
+    start_time = ABT_get_wtime();
     /* create requested number of workers to run transfer */
     for(i=0; i<g_opts.concurrency; i++)
     {
-        ret = ABT_thread_create(transfer_pool, bw_worker, NULL, ABT_THREAD_ATTR_NULL, &tid_array[i]);
+        arg_array[i].start_tm = start_time;
+        arg_array[i].mid = mid;
+        ret = ABT_thread_create(transfer_pool, bw_worker, &arg_array[i], ABT_THREAD_ATTR_NULL, &tid_array[i]);
         assert(ret == 0);
     }
 
@@ -383,6 +414,7 @@ static void bw_ult(hg_handle_t handle)
     margo_destroy(handle);
 
     free(tid_array);
+    free(arg_array);
 
     ABT_eventual_set(bw_done_eventual, NULL, 0);
 
@@ -481,7 +513,20 @@ static int measurement_cmp(const void* a, const void *b)
 /* function that assists in transferring data until end condition is met */
 static void bw_worker(void *_arg)
 {
+    struct bw_worker_arg *arg = _arg;
+    double now;
+
     printf("# DBG: worker started.\n");
+
+    now = ABT_get_wtime();
+
+    while((now - arg->start_tm) < g_opts.duration_seconds)
+    {
+        /* TODO: run a bulk transfer */
+        margo_thread_sleep(arg->mid, 1000.0);
+        now = ABT_get_wtime();
+    }
+
     printf("# DBG: worker stopped.\n");
     return;
 }
