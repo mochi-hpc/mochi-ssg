@@ -61,6 +61,8 @@ struct bw_worker_arg
     size_t *cur_off;
     hg_bulk_t *client_bulk_handle;
     const hg_addr_t *target_addr;
+    hg_size_t bytes_moved;
+    double end_ts;
 };
 
 static void bw_worker(void *_arg);
@@ -450,7 +452,7 @@ static void bw_ult(hg_handle_t handle)
 
     tid_array = malloc(g_opts.concurrency * sizeof(*tid_array));
     assert(tid_array);
-    arg_array = malloc(g_opts.concurrency * sizeof(*arg_array));
+    arg_array = calloc(g_opts.concurrency, sizeof(*arg_array));
     assert(arg_array);
 
     start_time = ABT_get_wtime();
@@ -473,6 +475,10 @@ static void bw_ult(hg_handle_t handle)
         ABT_thread_join(tid_array[i]);
         ABT_thread_free(&tid_array[i]);
     }
+
+    /* TODO: check buffer contents (stop at min of (g_buffer_size rounded
+     * down to nearest xfer_size) and total bytes moved) 
+     */
 
     margo_respond(handle, NULL);
     margo_free_input(handle, &in);
@@ -497,6 +503,11 @@ static int run_benchmark(hg_id_t id, ssg_member_id_t target,
     int ret;
     bw_rpc_in_t in;
     void* buffer = g_buffer;
+    hg_size_t i;
+
+    /* fill pattern in origin buffer */
+    for(i=0; i<(g_buffer_size/sizeof(i)); i++)
+        ((hg_size_t*)buffer)[i] = i;
 
     target_addr = ssg_get_addr(gid, target);
     assert(target_addr != HG_ADDR_NULL);
@@ -612,8 +623,10 @@ static void bw_worker(void *_arg)
                 *arg->target_addr, *arg->client_bulk_handle, my_off, g_bulk_handle, my_off, g_opts.xfer_size);
         assert(ret == 0);
 
+        arg->bytes_moved += g_opts.xfer_size;
         now = ABT_get_wtime();
     }
+    arg->end_ts = now;
 
     printf("# DBG: worker stopped.\n");
     return;
