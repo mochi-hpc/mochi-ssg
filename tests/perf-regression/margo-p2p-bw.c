@@ -81,6 +81,7 @@ int main(int argc, char **argv)
 #endif
     int namelen;
     char processor_name[MPI_MAX_PROCESSOR_NAME];
+    ABT_xstream *bw_worker_xstreams = NULL;
 
     ABT_init(argc, argv);
     MPI_Init(&argc, &argv);
@@ -202,12 +203,19 @@ int main(int argc, char **argv)
 
     if(self == 0)
     {
+        /* TODO: something smarter than this; don't contact server before 
+         * it is ready.
+         */
+        sleep(5);
         /* ssg id 0 initiates benchmark */
         ret = run_benchmark(bw_id, 1, gid, mid);
         assert(ret == 0);
     }
     else
     {
+        /* ssg id 1 acts as server to run transfers */
+        int i;
+
         if(g_opts.threads == 0)
         {
             /* run bulk transfers from primary pool on server */
@@ -215,18 +223,29 @@ int main(int argc, char **argv)
         }
         else
         {
-            /* TODO: implement; need to create dedicated pool with requested
-             * number of execution streams
-             */
-            assert(0);
+            /* run bulk transfers from a dedicated pool */
+            bw_worker_xstreams = malloc(
+                    g_opts.threads * sizeof(*bw_worker_xstreams));
+            assert(bw_worker_xstreams);
+            ret = ABT_snoozer_xstream_create(g_opts.threads, &transfer_pool,
+                    bw_worker_xstreams);
+            assert(ret == ABT_SUCCESS);
         }
 
-        /* ssg id 1 acts as server to run transfers */
         ret = ABT_eventual_create(0, &bw_done_eventual);
         assert(ret == 0);
 
+        /* wait for test RPC to complete */
         ABT_eventual_wait(bw_done_eventual, NULL);
-        sleep(3);
+        sleep(1);
+
+        /* cleanup dedicated pool if needed */
+        for (i = 0; i < g_opts.threads; i++) {
+            ABT_xstream_join(bw_worker_xstreams[i]);
+            ABT_xstream_free(&bw_worker_xstreams[i]);
+        }
+        if(bw_worker_xstreams)
+            free(bw_worker_xstreams);
     }
 
     ssg_group_destroy(gid);
