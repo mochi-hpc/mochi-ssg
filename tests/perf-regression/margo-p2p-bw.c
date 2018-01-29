@@ -438,6 +438,10 @@ static void bw_ult(hg_handle_t handle)
     const struct hg_info *hgi;
     size_t cur_off = 0;
     ABT_mutex cur_off_mutex;
+    unsigned long bytes_moved = 0;
+    double end_ts = 0.0;
+    unsigned long bytes_to_check = 0;
+    hg_size_t x;
 
     ABT_mutex_create(&cur_off_mutex);
     
@@ -474,11 +478,32 @@ static void bw_ult(hg_handle_t handle)
     {
         ABT_thread_join(tid_array[i]);
         ABT_thread_free(&tid_array[i]);
+        
+        bytes_moved += arg_array[i].bytes_moved;
+        if(arg_array[i].end_ts > end_ts)
+            end_ts = arg_array[i].end_ts;
     }
 
-    /* TODO: check buffer contents (stop at min of (g_buffer_size rounded
-     * down to nearest xfer_size) and total bytes moved) 
+    /* calculate how many bytes of the buffer have been transferred */
+    bytes_to_check = (g_buffer_size / g_opts.xfer_size) * g_opts.xfer_size;
+    if(bytes_moved < bytes_to_check)
+        bytes_to_check = bytes_moved;
+
+    /* check integrity of fill pattern.  Note that this isn't as strong as
+     * checking every RDMA transfer separately since we are looping around
+     * and overwriting in a ring-buffer style.  We could corrupt early and
+     * then get it right later and miss the problem.
      */
+    for(x=0; x<(bytes_to_check/sizeof(x)); x++)
+        assert(((hg_size_t*)g_buffer)[x] == x);
+
+    printf("<op>\t<concurrency>\t<threads>\t<bytes>\t<seconds>\t<MiB/s>\n");
+    printf("PULL\t%d\t%d\t%lu\t%f\t%f\n",
+        g_opts.concurrency,
+        g_opts.threads,
+        bytes_moved,
+        (end_ts-start_time),
+        ((double)bytes_moved/(end_ts-start_time))/(1024.0*1024.0));
 
     margo_respond(handle, NULL);
     margo_free_input(handle, &in);
@@ -602,7 +627,7 @@ static void bw_worker(void *_arg)
     size_t my_off;
     int ret;
 
-    printf("# DBG: worker started.\n");
+    // printf("# DBG: worker started.\n");
 
     now = ABT_get_wtime();
 
@@ -628,6 +653,6 @@ static void bw_worker(void *_arg)
     }
     arg->end_ts = now;
 
-    printf("# DBG: worker stopped.\n");
+    // printf("# DBG: worker stopped.\n");
     return;
 }
