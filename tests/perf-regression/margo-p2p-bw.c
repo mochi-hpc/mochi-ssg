@@ -498,10 +498,11 @@ static void bw_ult(hg_handle_t handle)
         ((hg_size_t*)g_buffer)[x] = x+1;
     }
 
-    printf("<op>\t<concurrency>\t<threads>\t<bytes>\t<seconds>\t<MiB/s>\n");
-    printf("PULL\t%d\t%d\t%lu\t%f\t%f\n",
+    printf("<op>\t<concurrency>\t<threads>\t<xfer_size>\t<total_bytes>\t<seconds>\t<MiB/s>\n");
+    printf("PULL\t%d\t%d\t%d\t%lu\t%f\t%f\n",
         g_opts.concurrency,
         g_opts.threads,
+        g_opts.xfer_size,
         bytes_moved,
         (end_ts-start_time),
         ((double)bytes_moved/(end_ts-start_time))/(1024.0*1024.0));
@@ -538,9 +539,10 @@ static void bw_ult(hg_handle_t handle)
             end_ts = arg_array[i].end_ts;
     }
 
-    printf("PUSH\t%d\t%d\t%lu\t%f\t%f\n",
+    printf("PUSH\t%d\t%d\t%d\t%lu\t%f\t%f\n",
         g_opts.concurrency,
         g_opts.threads,
+        g_opts.xfer_size,
         bytes_moved,
         (end_ts-start_time),
         ((double)bytes_moved/(end_ts-start_time))/(1024.0*1024.0));
