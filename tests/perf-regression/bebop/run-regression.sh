@@ -25,8 +25,8 @@ mkdir $SANDBOX
 # scratch area for job submission
 mkdir $JOBDIR
 
-cp margo-p2p-latency.sbatch $JOBDIR
-cp margo-p2p-latency-knl.sbatch $JOBDIR
+cp margo-regression.sbatch $JOBDIR
+cp margo-regression-knl.sbatch $JOBDIR
 
 cd $SANDBOX
 git clone http://git.mpich.org/openpa.git/
@@ -159,18 +159,19 @@ make install
 # set up job to run
 echo "=== SUBMITTING AND WAITING FOR JOB ==="
 cp $SANDBOX/ssg/build/tests/perf-regression/.libs/margo-p2p-latency $JOBDIR
+cp $SANDBOX/ssg/build/tests/perf-regression/.libs/margo-p2p-bw $JOBDIR
 cp $PREFIX/libexec/osu-micro-benchmarks/mpi/pt2pt/osu_latency $JOBDIR
 cp $PREFIX/bin/mercury-runner $JOBDIR
 cd $JOBDIR
-sbatch --wait --export=ALL ./margo-p2p-latency.sbatch
-sbatch --wait --export=ALL ./margo-p2p-latency-knl.sbatch
+sbatch --wait --export=ALL ./margo-regression.sbatch
+sbatch --wait --export=ALL ./margo-regression-knl.sbatch
 
 echo "=== JOB DONE, COLLECTING AND SENDING RESULTS ==="
 # gather output, strip out funny characters, mail
 cat *.out > combined.txt
 # TODO: dooesn't look like we have this on bebop, need another solution
 # dos2unix combined.txt
-mailx -s "margo-p2p-latency (bebop)" sds-commits@lists.mcs.anl.gov < combined.txt
+mailx -s "margo-regression (bebop)" sds-commits@lists.mcs.anl.gov < combined.txt
 
 cd /tmp
 rm -rf $SANDBOX
