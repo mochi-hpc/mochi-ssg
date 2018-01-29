@@ -48,11 +48,6 @@ DECLARE_MARGO_RPC_HANDLER(bw_ult);
 static int run_benchmark(hg_id_t id, ssg_member_id_t target, 
     ssg_group_id_t gid, margo_instance_id mid);
 
-#if 0
-static void bench_routine_print(const char* op, int size, int iterations, 
-    double* measurement_array);
-static int measurement_cmp(const void* a, const void *b);
-#endif
 struct bw_worker_arg
 {
     double start_tm;
@@ -87,9 +82,6 @@ int main(int argc, char **argv)
     ssg_group_id_t gid;
     ssg_member_id_t self;
     int rank;
-#if 0
-    double *measurement_array;
-#endif
     int namelen;
     char processor_name[MPI_MAX_PROCESSOR_NAME];
     ABT_xstream *bw_worker_xstreams = NULL;
@@ -217,9 +209,6 @@ int main(int argc, char **argv)
     assert(ssg_get_group_size(gid) == 2);
 
     self = ssg_get_group_self_id(gid);
-#if 0
-    printf("MPI rank %d has SSG ID %lu\n", rank, self);
-#endif
 
     if(self == 1)
     {
@@ -551,73 +540,6 @@ static int run_benchmark(hg_id_t id, ssg_member_id_t target,
 
     return(0);
 }
-
-#if 0
-static void bench_routine_print(const char* op, int size, int iterations, double* measurement_array)
-{
-    double min, max, q1, q3, med, avg, sum;
-    int bracket1, bracket2;
-    int i;
-
-    qsort(measurement_array, iterations, sizeof(double), measurement_cmp);
-
-    min = measurement_array[0];
-    max = measurement_array[iterations-1];
-
-    sum = 0;
-    for(i=0; i<iterations; i++)
-    {
-        sum += measurement_array[i];
-    }
-    avg = sum/(double)iterations;
-
-    bracket1 = iterations/2;
-    if(iterations%2)
-        bracket2 = bracket1 + 1;
-    else
-        bracket2 = bracket1;
-    med = (measurement_array[bracket1] + measurement_array[bracket2])/(double)2;
-
-    bracket1 = iterations/4;
-    if(iterations%4)
-        bracket2 = bracket1 + 1;
-    else
-        bracket2 = bracket1;
-    q1 = (measurement_array[bracket1] + measurement_array[bracket2])/(double)2;
-
-    bracket1 *= 3;
-    if(iterations%4)
-        bracket2 = bracket1 + 1;
-    else
-        bracket2 = bracket1;
-    q3 = (measurement_array[bracket1] + measurement_array[bracket2])/(double)2;
-
-    printf("%s\t%d\t%d\t%.9f\t%.9f\t%.9f\t%.9f\t%.9f\t%.9f\n", op, iterations, size, min, q1, med, avg, q3, max);
-#if 0
-    for(i=0; i<iterations; i++)
-    {
-        printf("\t%.9f", measurement_array[i]);
-    }
-    printf("\n");
-#endif
-    fflush(NULL);
-
-    return;
-}
-
-static int measurement_cmp(const void* a, const void *b)
-{
-    const double *d_a = a;
-    const double *d_b = b;
-
-    if(*d_a < *d_b)
-        return(-1);
-    else if(*d_a > *d_b)
-        return(1);
-    else
-        return(0);
-}
-#endif
 
 /* function that assists in transferring data until end condition is met */
 static void bw_worker(void *_arg)
