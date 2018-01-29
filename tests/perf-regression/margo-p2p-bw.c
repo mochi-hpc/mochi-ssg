@@ -43,6 +43,8 @@ static void usage(void);
 
 MERCURY_GEN_PROC(bw_rpc_in_t,
         ((hg_bulk_t)(bulk_handle)))
+MERCURY_GEN_PROC(bw_rpc_out_t,
+        ((int64_t)(bytes_to_check)))
 DECLARE_MARGO_RPC_HANDLER(bw_ult);
 
 static int run_benchmark(hg_id_t id, ssg_member_id_t target, 
@@ -196,7 +198,7 @@ int main(int argc, char **argv)
         mid, 
         "bw_rpc", 
         bw_rpc_in_t,
-        void,
+        bw_rpc_out_t,
         bw_ult,
         MARGO_DEFAULT_MPLEX_ID,
         NULL);
@@ -420,6 +422,7 @@ static void bw_ult(hg_handle_t handle)
 {
     int i;
     bw_rpc_in_t in;
+    bw_rpc_out_t out;
     ABT_thread *tid_array;
     struct bw_worker_arg *arg_array;
     int ret;
@@ -431,6 +434,7 @@ static void bw_ult(hg_handle_t handle)
     unsigned long bytes_moved = 0;
     double end_ts = 0.0;
     unsigned long bytes_to_check = 0;
+    unsigned long bytes_to_check2 = 0;
     hg_size_t x;
 
     ABT_mutex_create(&cur_off_mutex);
@@ -541,7 +545,19 @@ static void bw_ult(hg_handle_t handle)
         (end_ts-start_time),
         ((double)bytes_moved/(end_ts-start_time))/(1024.0*1024.0));
 
-    margo_respond(handle, NULL);
+    /* calculate how many bytes of the buffer have been transferred */
+    bytes_to_check2 = (g_buffer_size / g_opts.xfer_size) * g_opts.xfer_size;
+    if(bytes_moved < bytes_to_check2)
+        bytes_to_check2 = bytes_moved;
+
+    /* tell client how many bytes to validate on that end.  Will be minimum
+     * of pull and push buffer used
+     */
+    out.bytes_to_check = bytes_to_check;
+    if(bytes_to_check > bytes_to_check2)
+        out.bytes_to_check = bytes_to_check2;
+
+    margo_respond(handle, &out);
     margo_free_input(handle, &in);
     margo_destroy(handle);
 
@@ -563,6 +579,7 @@ static int run_benchmark(hg_id_t id, ssg_member_id_t target,
     hg_addr_t target_addr;
     int ret;
     bw_rpc_in_t in;
+    bw_rpc_out_t out;
     void* buffer = g_buffer;
     hg_size_t i;
 
@@ -582,6 +599,16 @@ static int run_benchmark(hg_id_t id, ssg_member_id_t target,
     ret = margo_forward(handle, &in);
     assert(ret == 0);
 
+    ret = margo_get_output(handle, &out);
+    assert(ret == HG_SUCCESS);
+
+    /* check fill pattern we got back; should be what we set plus one */
+    for(i=0; i<(out.bytes_to_check/sizeof(i)); i++)
+    {
+        assert(((hg_size_t*)g_buffer)[i] == i+1);
+    }
+
+    margo_free_output(handle, &out);
     margo_bulk_free(in.bulk_handle);
     margo_destroy(handle);
 
