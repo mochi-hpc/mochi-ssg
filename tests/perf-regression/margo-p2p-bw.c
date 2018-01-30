@@ -582,7 +582,7 @@ static int run_benchmark(hg_id_t id, ssg_member_id_t target,
     ret = margo_get_output(handle, &out);
     assert(ret == HG_SUCCESS);
 
-    printf("PULL\t%d\t%d\t%d\t%lu\t%f\t%f\n",
+    printf("PUSH\t%d\t%d\t%d\t%lu\t%f\t%f\n",
         g_opts.concurrency,
         g_opts.threads,
         g_opts.xfer_size,
