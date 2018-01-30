@@ -27,6 +27,9 @@ margo-p2p-bw is a point to point bandwidth benchmark.  It measures Margo
 (Mercury) bulk transfer operations in both PULL and PUSH mode and includes
 command line arguments to control the concurrency level.
 
+The timing and bandwidth calculation is performed by the client and includes
+a round trip RPC to initiate and complete the streaming transfer.
+
 Example compile (must build with MPI support):
 
 ```
