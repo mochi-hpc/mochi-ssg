@@ -30,7 +30,7 @@ mkdir $SANDBOX
 
 # scratch area for job submission
 mkdir $JOBDIR
-cp margo-p2p-latency.qsub $JOBDIR
+cp margo-regression.qsub $JOBDIR
 
 cd $SANDBOX
 git clone https://github.com/ofiwg/libfabric.git
@@ -148,18 +148,19 @@ make install
 # set up job to run
 echo "=== SUBMITTING AND WAITING FOR JOB ==="
 cp $SANDBOX/ssg/build/tests/perf-regression/.libs/margo-p2p-latency $JOBDIR
+cp $SANDBOX/ssg/build/tests/perf-regression/.libs/margo-p2p-bw $JOBDIR
 cp $PREFIX/bin/fi_pingpong $JOBDIR
 cp $PREFIX/libexec/osu-micro-benchmarks/mpi/pt2pt/osu_latency $JOBDIR
 cp $PREFIX/bin/mercury-runner $JOBDIR
 cd $JOBDIR
-JOBID=`qsub ./margo-p2p-latency.qsub`
+JOBID=`qsub ./margo-regression.qsub`
 cqwait $JOBID
 
 echo "=== JOB DONE, COLLECTING AND SENDING RESULTS ==="
 # gather output, strip out funny characters, mail
 cat $JOBID.* > combined.$JOBID.txt
 dos2unix combined.$JOBID.txt
-mailx -s "margo-p2p-latency (theta dynamic)" sds-commits@lists.mcs.anl.gov < combined.$JOBID.txt
+mailx -s "margo-regression (theta dynamic)" sds-commits@lists.mcs.anl.gov < combined.$JOBID.txt
 
 cd /tmp
 echo sandbox: $SANDBOX

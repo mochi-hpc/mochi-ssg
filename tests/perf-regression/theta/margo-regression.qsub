@@ -1,6 +1,6 @@
 #!/bin/bash
 #COBALT -n 2
-#COBALT -t 10
+#COBALT -t 20
 #COBALT --mode script
 #COBALT -A radix-io
 #COBALT -q debug-flat-quad
@@ -9,15 +9,32 @@
 # XXX xalt module currently eating '-M' flag for mercury-runner...disabling for now
 module unload xalt
 
+# NOTE: needed as of January 2018 to avoid conflicts between MPI and 
+#       libfabric GNI provider
+# NOTE: doing this with -e option to aprun
+# export MPICH_GNI_NDREG_MAX_ENTRIES=2000
+
 echo "## MPI (one way, double the latency for round trip):"
 aprun -n 2 -N 1 ./osu_latency
 
-echo "## Margo OFI/GNI (round trip):"
-aprun -n 2 -N 1 ./margo-p2p-latency -i 100000 -n ofi+gni://ipogif0:5000
+echo "## Margo OFI/GNI (round trip, busy spin):"
+aprun -e MPICH_GNI_NDREG_ENTRIES=2000 -n 2 -N 1 ./margo-p2p-latency -i 100000 -n ofi+gni://ipogif0:5000 -t 0,0
+echo "## Margo OFI/GNI (bw, busy spin):"
+aprun -e MPICH_GNI_NDREG_ENTRIES=2000 -n 2 -N 1 ./margo-p2p-bw -x 1048576 -n ofi+gni://ipogif0:5000 -c 1 -D 20 -t 0,0
+echo "## Margo OFI/GNI (bw, 8x concurrency, busy spin):"
+aprun -e MPICH_GNI_NDREG_ENTRIES=2000 -n 2 -N 1 ./margo-p2p-bw -x 1048576 -n ofi+gni://ipogif0:5000 -c 8 -D 20 -t 0,0
+
+
 echo "## Margo BMI/TCP (round trip):"
-aprun -n 2 -N 1 ./margo-p2p-latency -i 100000 -n bmi+tcp://
+aprun -e MPICH_GNI_NDREG_ENTRIES=2000 -n 2 -N 1 ./margo-p2p-latency -i 100000 -n bmi+tcp://
+echo "## Margo BMI/TCP (bw):"
+aprun -e MPICH_GNI_NDREG_ENTRIES=2000 -n 2 -N 1 ./margo-p2p-bw -x 1048576 -n bmi+tcp:// -c 1 -D 20
+echo "## Margo BMI/TCP (bw, 8x concurrency):"
+aprun -e MPICH_GNI_NDREG_ENTRIES=2000 -n 2 -N 1 ./margo-p2p-bw -x 1048576 -n bmi+tcp:// -c 8 -D 20
+
 # echo "## WARNING: Margo OFI/TCP (disabled because it hangs as of 8/10/2017)"
 # aprun -n 2 -N 1 ./margo-p2p-latency -i 100000 -n ofi+tcp://ipogif0:5000
+
 
 # figure out nodes and hostnames for use with fi_
 declare -a nodes=($(python /home/carns/bin/run_on_all_nids.py));
@@ -36,4 +53,4 @@ cat $COBALT_JOBID.fi_pingpong_client.log
 # aprun -n 2 -N 1 ./margo-p2p-latency -i 100000 -n ofi+gni://ipogif0:5000 -d $COBALT_JOBID.diag
 
 echo "## Mercury-runner OFI/GNI (round trip):"
-aprun -n 2 -N 1 ./mercury-runner -q -c 100000 -l 1 -m c -M -d `pwd` 1 h0=ofi+gni://ipogif0:5000 h1
+aprun -e MPICH_GNI_NDREG_ENTRIES=2000 -n 2 -N 1 ./mercury-runner -q -c 100000 -l 1 -m c -M -d `pwd` 1 h0=ofi+gni://ipogif0:5000 h1
