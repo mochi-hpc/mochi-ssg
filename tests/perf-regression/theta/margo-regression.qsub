@@ -12,7 +12,7 @@ module unload xalt
 # NOTE: needed as of January 2018 to avoid conflicts between MPI and 
 #       libfabric GNI provider
 # NOTE: doing this with -e option to aprun
-# export MPICH_GNI_NDREG_MAX_ENTRIES=2000
+# export MPICH_GNI_NDREG_ENTRIES=2000
 
 echo "## MPI (one way, double the latency for round trip):"
 aprun -n 2 -N 1 ./osu_latency
