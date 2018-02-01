@@ -22,7 +22,7 @@ mkdir $SANDBOX
 
 # scratch area for job submission
 mkdir $JOBDIR
-cp margo-p2p-latency.qsub $JOBDIR
+cp margo-regression.qsub $JOBDIR
 
 cd $SANDBOX
 git clone https://github.com/carns/argobots.git
@@ -148,18 +148,20 @@ make install
 # set up job to run
 echo "=== SUBMITTING AND WAITING FOR JOB ==="
 cp $SANDBOX/ssg/build/tests/perf-regression/.libs/margo-p2p-latency $JOBDIR
+cp $SANDBOX/ssg/build/tests/perf-regression/.libs/margo-p2p-bw $JOBDIR
 cp $PREFIX/libexec/osu-micro-benchmarks/mpi/pt2pt/osu_latency $JOBDIR
 cp $PREFIX/bin/mercury-runner $JOBDIR
 cd $JOBDIR
-JOBID=`qsub --env LD_LIBRARY_PATH=$PREFIX/lib ./margo-p2p-latency.qsub`
+JOBID=`qsub --env LD_LIBRARY_PATH=$PREFIX/lib ./margo-regression.qsub`
 cqwait $JOBID
 
 echo "=== JOB DONE, COLLECTING AND SENDING RESULTS ==="
 # gather output, strip out funny characters, mail
 cat $JOBID.* > combined.$JOBID.txt
 dos2unix combined.$JOBID.txt
-mailx -s "margo-p2p-latency (cooley, cci)" sds-commits@lists.mcs.anl.gov < combined.$JOBID.txt
+mailx -s "margo-regression (cooley, cci)" sds-commits@lists.mcs.anl.gov < combined.$JOBID.txt
 
 cd /tmp
+echo $SANDBOX $PREFIX
 rm -rf $SANDBOX
 rm -rf $PREFIX

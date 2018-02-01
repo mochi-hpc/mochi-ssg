@@ -22,7 +22,7 @@ mkdir $SANDBOX
 
 # scratch area for job submission
 mkdir $JOBDIR
-cp margo-p2p-latency-ofi.qsub $JOBDIR
+cp margo-regression-ofi.qsub $JOBDIR
 
 cd $SANDBOX
 git clone https://github.com/carns/argobots.git
@@ -60,8 +60,12 @@ make -j 3
 make install
  
 # libfabric
+# NOTE: check out 1.5.x branch; as of late January 2018, master includes an
+#       initial perf counter implementation that won't work on Cooley's old 
+#       kernel
 echo "=== BUILDING LIBFABRIC ==="
 cd $SANDBOX/libfabric
+# git checkout v1.5.x
 libtoolize
 ./autogen.sh
 mkdir build
@@ -148,17 +152,18 @@ make install
 # set up job to run
 echo "=== SUBMITTING AND WAITING FOR JOB ==="
 cp $SANDBOX/ssg/build/tests/perf-regression/.libs/margo-p2p-latency $JOBDIR
+cp $SANDBOX/ssg/build/tests/perf-regression/.libs/margo-p2p-bw $JOBDIR
 cp $PREFIX/libexec/osu-micro-benchmarks/mpi/pt2pt/osu_latency $JOBDIR
 cp $PREFIX/bin/mercury-runner $JOBDIR
 cd $JOBDIR
-JOBID=`qsub --env LD_LIBRARY_PATH=$PREFIX/lib ./margo-p2p-latency-ofi.qsub`
+JOBID=`qsub --env LD_LIBRARY_PATH=$PREFIX/lib ./margo-regression-ofi.qsub`
 cqwait $JOBID
 
 echo "=== JOB DONE, COLLECTING AND SENDING RESULTS ==="
 # gather output, strip out funny characters, mail
 cat $JOBID.* > combined.$JOBID.txt
 dos2unix combined.$JOBID.txt
-mailx -s "margo-p2p-latency (cooley, ofi)" sds-commits@lists.mcs.anl.gov < combined.$JOBID.txt
+mailx -s "margo-regression (cooley, ofi)" sds-commits@lists.mcs.anl.gov < combined.$JOBID.txt
 
 cd /tmp
 rm -rf $SANDBOX
