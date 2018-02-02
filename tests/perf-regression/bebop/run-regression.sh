@@ -18,6 +18,7 @@ export PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig
 module load numactl
 module load cmake
 module load boost
+module load gcc
 
 # scratch area to clone and build things
 mkdir $SANDBOX
@@ -80,7 +81,7 @@ cd $SANDBOX/libfabric
 ./autogen.sh
 mkdir build
 cd build
-../configure --prefix=$PREFIX --enable-sockets --enable-psm2=$PREFIX/usr --enable-verbs 
+../configure --prefix=$PREFIX --enable-sockets --enable-psm2=$PREFIX/usr --enable-verbs CC=gcc
 make -j 3
 make install
 
