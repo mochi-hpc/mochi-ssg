@@ -18,7 +18,6 @@ export PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig
 module load numactl
 module load cmake
 module load boost
-module load gcc
 
 # scratch area to clone and build things
 mkdir $SANDBOX
@@ -78,10 +77,14 @@ export LD_LIBRARY_PATH=$PREFIX/usr/lib64:$LD_LIBRARY_PATH
 # libfabric
 echo "=== BUILDING LIBFABRIC ==="
 cd $SANDBOX/libfabric
+# TODO: update this later
+# NOTE: check out an old commit before gcc atomic operations were added in 
+#       master
+git checkout f5950e3de95e8c02525bff97581ab5ad00bd520c
 ./autogen.sh
 mkdir build
 cd build
-../configure --prefix=$PREFIX --enable-sockets --enable-psm2=$PREFIX/usr --enable-verbs CC=gcc
+../configure --prefix=$PREFIX --enable-sockets --enable-psm2=$PREFIX/usr --enable-verbs
 make -j 3
 make install
 
