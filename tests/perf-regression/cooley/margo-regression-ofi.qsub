@@ -3,7 +3,6 @@
 #COBALT -t 20
 #COBALT --mode script
 #COBALT -A radix-io
-#COBALT -q ibleaf3-debug
 
 # NOTE: as of Jan 31 2018, some of the test programs will hang in non-busy
 #       spin mode on cooley with RHEL 6.9.  They work fine with RHEL 7.4 though.

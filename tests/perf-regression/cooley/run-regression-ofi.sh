@@ -23,6 +23,7 @@ mkdir $SANDBOX
 # scratch area for job submission
 mkdir $JOBDIR
 cp margo-regression-ofi.qsub $JOBDIR
+cp hg-verbs-no-lock.patch $SANDBOX
 
 cd $SANDBOX
 git clone https://github.com/carns/argobots.git
@@ -65,7 +66,6 @@ make install
 #       kernel
 echo "=== BUILDING LIBFABRIC ==="
 cd $SANDBOX/libfabric
-# git checkout v1.5.x
 libtoolize
 ./autogen.sh
 mkdir build
@@ -90,6 +90,8 @@ make install
 echo "=== BUILDING MERCURY ==="
 cd $SANDBOX/mercury
 git submodule update --init
+# patch to turn off extra locking for verbs provider
+patch -p1 < $SANDBOX/hg-verbs-no-lock.patch
 mkdir build
 cd build
 cmake -DNA_USE_OFI:BOOL=ON -DMERCURY_USE_BOOST_PP:BOOL=ON -DCMAKE_INSTALL_PREFIX=/$PREFIX -DBoost_NO_BOOST_CMAKE=TRUE -DBUILD_SHARED_LIBS:BOOL=ON -DMERCURY_USE_SELF_FORWARD:BOOL=ON -DNA_USE_SM:BOOL=OFF ../
@@ -162,8 +164,8 @@ cqwait $JOBID
 echo "=== JOB DONE, COLLECTING AND SENDING RESULTS ==="
 # gather output, strip out funny characters, mail
 cat $JOBID.* > combined.$JOBID.txt
-dos2unix combined.$JOBID.txt
-mailx -s "margo-regression (cooley, ofi)" sds-commits@lists.mcs.anl.gov < combined.$JOBID.txt
+#dos2unix combined.$JOBID.txt
+mailx -s "margo-regression (cooley, ofi)" carns@mcs.anl.gov < combined.$JOBID.txt
 
 cd /tmp
 rm -rf $SANDBOX
