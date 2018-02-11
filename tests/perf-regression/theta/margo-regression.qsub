@@ -9,6 +9,8 @@
 # XXX xalt module currently eating '-M' flag for mercury-runner...disabling for now
 module unload xalt
 
+module load craype-hugepages2M
+
 # NOTE: needed as of January 2018 to avoid conflicts between MPI and 
 #       libfabric GNI provider
 # NOTE: doing this with -e option to aprun
