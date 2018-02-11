@@ -45,7 +45,7 @@ struct options
     char* na_transport;
 };
 
-#define BW_TOTAL_MEM_SIZE 2097152UL
+#define BW_TOTAL_MEM_SIZE 2147483648UL
 
 static void parse_args(int argc, char **argv, struct options *opts);
 static void usage(void);
