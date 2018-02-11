@@ -14,6 +14,7 @@ JOBDIR=~/tmp/mochi-regression-job-$$
 # gcc
 module swap PrgEnv-intel PrgEnv-gnu
 module load boost/gnu
+module load craype-hugepages2M
 
 # need newer cmake
 module load cmake
