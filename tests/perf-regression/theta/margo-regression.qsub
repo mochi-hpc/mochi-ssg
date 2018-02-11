@@ -3,7 +3,7 @@
 #COBALT -t 20
 #COBALT --mode script
 #COBALT -A radix-io
-#COBALT -q debug-flat-quad
+#COBALT -q debug-cache-quad
 #COBALT -M carns@mcs.anl.gov
 
 # XXX xalt module currently eating '-M' flag for mercury-runner...disabling for now
