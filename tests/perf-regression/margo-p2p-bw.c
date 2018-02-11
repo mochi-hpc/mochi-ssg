@@ -627,7 +627,7 @@ static void bw_worker(void *_arg)
         ABT_mutex_spinlock(*arg->cur_off_mutex);
         my_off = *arg->cur_off;
         (*arg->cur_off) += g_opts.xfer_size;
-        if(*arg->cur_off > g_buffer_size)
+        if(((*arg->cur_off)+g_opts.xfer_size) > g_buffer_size)
             *arg->cur_off = 0;
         ABT_mutex_unlock(*arg->cur_off_mutex);
 
