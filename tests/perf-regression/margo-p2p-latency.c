@@ -14,9 +14,6 @@
 #include <mpi.h>
 
 #include <margo.h>
-#ifdef HAVE_ABT_SNOOZER
-#include <abt-snoozer.h>
-#endif
 #include <mercury.h>
 #include <abt.h>
 #include <ssg.h>
@@ -25,8 +22,6 @@
 struct options
 {
     int iterations;
-    int snoozer_flag_client;
-    int snoozer_flag_server;
     unsigned int mercury_timeout_client;
     unsigned int mercury_timeout_server;
     char* diag_file_name;
@@ -55,6 +50,7 @@ int main(int argc, char **argv)
     hg_class_t *hg_class;
     ABT_xstream xstream;
     ABT_pool pool;
+    ABT_sched sched;
     int ret;
     ssg_group_id_t gid;
     ssg_member_id_t self;
@@ -115,36 +111,17 @@ int main(int argc, char **argv)
         return(-1);
     }
 
-    if((rank == 0 && g_opts.snoozer_flag_client) || 
-        (rank == 1 && g_opts.snoozer_flag_server))
-    {
-#ifdef HAVE_ABT_SNOOZER
-        /* set primary ES to idle without polling in scheduler */
-        ret = ABT_snoozer_xstream_self_set();
-        if(ret != 0)
-        {
-            fprintf(stderr, "Error: ABT_snoozer_xstream_self_set()\n");
-            return(-1);
-        }
-#else
-        fprintf(stderr, "Error: abt-snoozer scheduler is not supported\n");
-        return(-1);
-#endif
-    }
-
-    /* get main pool for running mercury progress and RPC handlers */
+    /* set caller (self) ES to sleep when idle by using blocking pool */
+    ret = ABT_pool_create_basic(ABT_POOL_BLOCKING_FIFO,
+        ABT_POOL_ACCESS_MPMC, ABT_TRUE, &pool);
+    assert(ret == ABT_SUCCESS);
+    ret = ABT_sched_create_basic(ABT_SCHED_BASIC, 1, &pool, 
+        ABT_SCHED_CONFIG_NULL, &sched);
+    assert(ret == ABT_SUCCESS);
     ret = ABT_xstream_self(&xstream);
-    if(ret != 0)
-    {
-        fprintf(stderr, "Error: ABT_xstream_self()\n");
-        return(-1);
-    }   
-    ret = ABT_xstream_get_main_pools(xstream, 1, &pool);
-    if(ret != 0)
-    {
-        fprintf(stderr, "Error: ABT_xstream_get_main_pools()\n");
-        return(-1);
-    }
+    assert(ret == ABT_SUCCESS);
+    ret = ABT_xstream_set_main_sched(xstream, sched);
+    assert(ret == ABT_SUCCESS);
 
     /* actually start margo */
     mid = margo_init_pool(pool, pool, hg_context);
@@ -228,23 +205,14 @@ static void parse_args(int argc, char **argv, struct options *opts)
 {
     int opt;
     int ret;
-    char clientflag, serverflag;
 
     memset(opts, 0, sizeof(*opts));
 
-#ifdef HAVE_ABT_SNOOZER
-    /* default to enabling snoozer scheduler on both client and server */
-    opts->snoozer_flag_client = 1;
-    opts->snoozer_flag_server = 1;
-#else
-    opts->snoozer_flag_client = 0;
-    opts->snoozer_flag_server = 0;
-#endif
     /* default to using whatever the standard timeout is in margo */
     opts->mercury_timeout_client = UINT_MAX;
     opts->mercury_timeout_server = UINT_MAX; 
 
-    while((opt = getopt(argc, argv, "n:i:d:s:t:")) != -1)
+    while((opt = getopt(argc, argv, "n:i:d:t:")) != -1)
     {
         switch(opt)
         {
@@ -263,18 +231,6 @@ static void parse_args(int argc, char **argv, struct options *opts)
                     usage();
                     exit(EXIT_FAILURE);
                 }
-                break;
-            case 's':
-                ret = sscanf(optarg, "%c,%c", &clientflag, &serverflag);
-                if(ret != 2)
-                {
-                    usage();
-                    exit(EXIT_FAILURE);
-                }
-                if(clientflag == '0') opts->snoozer_flag_client = 0;
-                else if(clientflag == '1') opts->snoozer_flag_client = 1;
-                if(serverflag == '0') opts->snoozer_flag_server = 0;
-                else if(serverflag == '1') opts->snoozer_flag_server = 1;
                 break;
             case 't':
                 ret = sscanf(optarg, "%u,%u", &opts->mercury_timeout_client, &opts->mercury_timeout_server);
@@ -315,8 +271,6 @@ static void usage(void)
         "\t-i <iterations> - number of RPC iterations\n"
         "\t-n <na> - na transport\n"
         "\t[-d filename] - enable diagnostics output \n"
-        "\t[-s <bool,bool>] - specify if snoozer scheduler is used on client and server\n"
-        "\t\t(e.g., -s 0,1 means snoozer disabled on client and enabled on server)\n"
         "\t\texample: mpiexec -n 2 ./margo-p2p-latency -i 10000 -n verbs://\n"
         "\t\t(must be run with exactly 2 processes\n");
     
