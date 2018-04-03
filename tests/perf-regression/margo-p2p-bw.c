@@ -203,14 +203,12 @@ int main(int argc, char **argv)
     if(rank == 1 && g_opts.mercury_timeout_server != UINT_MAX)
         margo_set_param(mid, MARGO_PARAM_PROGRESS_TIMEOUT_UB, &g_opts.mercury_timeout_server);
 
-    g_bw_id = MARGO_REGISTER_MPLEX(
+    g_bw_id = MARGO_REGISTER(
         mid, 
         "bw_rpc", 
         bw_rpc_in_t,
         bw_rpc_out_t,
-        bw_ult,
-        MARGO_DEFAULT_MPLEX_ID,
-        NULL);
+        bw_ult);
 
     /* set up group */
     ret = ssg_init(mid);
