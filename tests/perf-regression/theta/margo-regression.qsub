@@ -2,7 +2,7 @@
 #COBALT -n 2
 #COBALT -t 20
 #COBALT --mode script
-#COBALT -A radix-io
+#COBALT -A ecp-testbed-01
 #COBALT -q debug-cache-quad
 #COBALT -M carns@mcs.anl.gov
 
