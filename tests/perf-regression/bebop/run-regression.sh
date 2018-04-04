@@ -78,13 +78,12 @@ export LD_LIBRARY_PATH=$PREFIX/usr/lib64:$LD_LIBRARY_PATH
 echo "=== BUILDING LIBFABRIC ==="
 cd $SANDBOX/libfabric
 # TODO: update this later
-# NOTE: check out an old commit before gcc atomic operations were added in 
-#       master
-git checkout f5950e3de95e8c02525bff97581ab5ad00bd520c
+# NOTE: current git master of libfabric requires atomic support that is 
+#       only available in gcc, so we build this library with gcc
 ./autogen.sh
 mkdir build
 cd build
-../configure --prefix=$PREFIX --enable-sockets --enable-psm2=$PREFIX/usr --enable-verbs
+../configure --prefix=$PREFIX --enable-sockets --enable-psm2=$PREFIX/usr --enable-verbs CC=gcc
 make -j 3
 make install
 

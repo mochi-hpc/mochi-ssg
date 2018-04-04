@@ -2,7 +2,7 @@
 #SBATCH -N 2
 #SBATCH -A radix
 #SBATCH --ntasks-per-node=1
-#SBATCH --time=20:00
+#SBATCH --time=15:00
 #SBATCH -p knlall
 
 export FI_PSM2_NAME_SERVER=1
