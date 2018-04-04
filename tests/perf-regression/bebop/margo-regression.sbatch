@@ -31,18 +31,18 @@ echo "## Margo OFI/PSM2 (bw, 8x concurrency, bdw, Hg busy spin):"
 mpirun ./margo-p2p-bw -x 1048576 -n psm2://ib0:5000 -c 8 -D 20 -t 0,0
 
 unset I_MPI_FABRICS
-
-echo "## Margo OFI/VERBS (round trip, bdw):"
-mpirun ./margo-p2p-latency -i 100000 -n verbs://ib0:5000
-echo "## Margo OFI/VERBS (bw, bdw):"
-mpirun ./margo-p2p-bw -x 1048576 -n verbs://ib0:5000 -c 1 -D 20
-echo "## Margo OFI/VERBS (bw, 8x concurrency, bdw):"
-mpirun ./margo-p2p-bw -x 1048576 -n verbs://ib0:5000 -c 8 -D 20
-
-echo "## Margo OFI/VERBS (round trip, bdw, Hg busy spin):"
-mpirun ./margo-p2p-latency -i 100000 -n verbs://ib0:5000 -t 0,0
-echo "## Margo OFI/VERBS (bw, bdw, Hg busy spin):"
-mpirun ./margo-p2p-bw -x 1048576 -n verbs://ib0:5000 -c 1 -D 20 -t 0,0
-echo "## Margo OFI/VERBS (bw, 8x concurrency, bdw, Hg busy spin):"
-mpirun ./margo-p2p-bw -x 1048576 -n verbs://ib0:5000 -c 8 -D 20 -t 0,0
-
+# 
+# echo "## Margo OFI/VERBS (round trip, bdw):"
+# mpirun ./margo-p2p-latency -i 100000 -n verbs://ib0:5000
+# echo "## Margo OFI/VERBS (bw, bdw):"
+# mpirun ./margo-p2p-bw -x 1048576 -n verbs://ib0:5000 -c 1 -D 20
+# echo "## Margo OFI/VERBS (bw, 8x concurrency, bdw):"
+# mpirun ./margo-p2p-bw -x 1048576 -n verbs://ib0:5000 -c 8 -D 20
+# 
+# echo "## Margo OFI/VERBS (round trip, bdw, Hg busy spin):"
+# mpirun ./margo-p2p-latency -i 100000 -n verbs://ib0:5000 -t 0,0
+# echo "## Margo OFI/VERBS (bw, bdw, Hg busy spin):"
+# mpirun ./margo-p2p-bw -x 1048576 -n verbs://ib0:5000 -c 1 -D 20 -t 0,0
+# echo "## Margo OFI/VERBS (bw, 8x concurrency, bdw, Hg busy spin):"
+# mpirun ./margo-p2p-bw -x 1048576 -n verbs://ib0:5000 -c 8 -D 20 -t 0,0
+# 
