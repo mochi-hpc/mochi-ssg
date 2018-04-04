@@ -80,6 +80,7 @@ cd $SANDBOX/libfabric
 # TODO: update this later
 # NOTE: current git master of libfabric requires atomic support that is 
 #       only available in gcc, so we build this library with gcc
+# See https://github.com/ofiwg/libfabric/issues/3995
 ./autogen.sh
 mkdir build
 cd build
