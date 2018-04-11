@@ -18,14 +18,17 @@ mpirun -f $COBALT_NODEFILE -n 2 ./margo-p2p-bw -x 1048576 -n "ofi+verbs;ofi_rxm:
 echo "## Margo OFI/VERBS (bw, 8x concurrency, Hg busy spin):"
 mpirun -f $COBALT_NODEFILE -n 2 ./margo-p2p-bw -x 1048576 -n "ofi+verbs;ofi_rxm://" -c 8 -D 20 -t 0,0
 
-sleep 1
-
-echo "## Margo OFI/VERBS (round trip):"
-mpirun -f $COBALT_NODEFILE -n 2 ./margo-p2p-latency -i 100000 -n "ofi+verbs;ofi_rxm://"
-echo "## Margo OFI/VERBS (bw):"
-mpirun -f $COBALT_NODEFILE -n 2 ./margo-p2p-bw -x 1048576 -n "ofi+verbs;ofi_rxm://" -c 1 -D 20
-echo "## Margo OFI/VERBS (bw, 8x concurrency):"
-mpirun -f $COBALT_NODEFILE -n 2 ./margo-p2p-bw -x 1048576 -n "ofi+verbs;ofi_rxm://" -c 8 -D 20
+# as of 2018-04-10 the "verbs;ofi_rxm" provider does not handle blocking mode
+# (wait objects) properly
+#
+# sleep 1
+# 
+# echo "## Margo OFI/VERBS (round trip):"
+# mpirun -f $COBALT_NODEFILE -n 2 ./margo-p2p-latency -i 100000 -n "ofi+verbs;ofi_rxm://"
+# echo "## Margo OFI/VERBS (bw):"
+# mpirun -f $COBALT_NODEFILE -n 2 ./margo-p2p-bw -x 1048576 -n "ofi+verbs;ofi_rxm://" -c 1 -D 20
+# echo "## Margo OFI/VERBS (bw, 8x concurrency):"
+# mpirun -f $COBALT_NODEFILE -n 2 ./margo-p2p-bw -x 1048576 -n "ofi+verbs;ofi_rxm://" -c 8 -D 20
 
 
 #echo "## Mercury-runner CCI/VERBS (round trip):"
