@@ -27,7 +27,7 @@ cp margo-regression-ofi-rxm.qsub $JOBDIR
 cd $SANDBOX
 git clone https://github.com/carns/argobots.git
 git clone https://github.com/ofiwg/libfabric.git
-git clone https://github.com/carns/mercury.git
+git clone https://github.com/mercury-hpc/mercury.git
 wget http://dist.schmorp.de/libev/libev-4.24.tar.gz
 tar -xvzf libev-4.24.tar.gz
 git clone https://xgitlab.cels.anl.gov/sds/abt-snoozer.git
@@ -72,7 +72,6 @@ make install
 # mercury
 echo "=== BUILDING MERCURY ==="
 cd $SANDBOX/mercury
-git checkout dev-verbs-rxm
 git submodule update --init
 mkdir build
 cd build
