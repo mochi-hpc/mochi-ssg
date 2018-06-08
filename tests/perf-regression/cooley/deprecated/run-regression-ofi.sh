@@ -32,7 +32,6 @@ git clone https://github.com/ofiwg/libfabric.git
 git clone https://github.com/mercury-hpc/mercury.git
 wget http://dist.schmorp.de/libev/libev-4.24.tar.gz
 tar -xvzf libev-4.24.tar.gz
-git clone https://xgitlab.cels.anl.gov/sds/abt-snoozer.git
 git clone https://xgitlab.cels.anl.gov/sds/margo.git
 git clone https://xgitlab.cels.anl.gov/sds/ssg.git
 wget http://mvapich.cse.ohio-state.edu/download/mvapich/osu-micro-benchmarks-5.3.2.tar.gz
@@ -105,17 +104,6 @@ cd $SANDBOX/libev-4.24
 mkdir build
 cd build
 ../configure --prefix=$PREFIX
-make -j 3
-make install
-
-# abt-snoozer
-echo "=== BUILDING ABT-SNOOZER ==="
-cd $SANDBOX/abt-snoozer
-libtoolize
-./prepare.sh
-mkdir build
-cd build
-../configure --prefix=$PREFIX 
 make -j 3
 make install
 

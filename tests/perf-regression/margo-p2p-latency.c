@@ -14,9 +14,6 @@
 #include <mpi.h>
 
 #include <margo.h>
-#ifdef HAVE_ABT_SNOOZER
-#include <abt-snoozer.h>
-#endif
 #include <mercury.h>
 #include <abt.h>
 #include <ssg.h>
@@ -25,8 +22,6 @@
 struct options
 {
     int iterations;
-    int snoozer_flag_client;
-    int snoozer_flag_server;
     unsigned int mercury_timeout_client;
     unsigned int mercury_timeout_server;
     char* diag_file_name;
@@ -54,6 +49,7 @@ int main(int argc, char **argv)
     hg_context_t *hg_context;
     hg_class_t *hg_class;
     ABT_xstream xstream;
+    ABT_sched sched;
     ABT_pool pool;
     int ret;
     ssg_group_id_t gid;
@@ -62,6 +58,18 @@ int main(int argc, char **argv)
     double *measurement_array;
     int namelen;
     char processor_name[MPI_MAX_PROCESSOR_NAME];
+
+    /* NOTE: Margo is very likely to create a single producer (the
+     * progress function), multiple consumer usage pattern that
+     * causes excess memory consumption in some versions of
+     * Argobots.  See
+     * https://xgitlab.cels.anl.gov/sds/margo/issues/40 for details.
+     * We therefore manually set the ABT_MEM_MAX_NUM_STACKS parameter 
+     * for Argobots to a low value so that RPC handler threads do not
+     * queue large numbers of stacks for reuse in per-ES data 
+     * structures.
+     */
+    putenv("ABT_MEM_MAX_NUM_STACKS=8");
 
     ABT_init(argc, argv);
     MPI_Init(&argc, &argv);
@@ -79,6 +87,37 @@ int main(int argc, char **argv)
 	rank, nranks, processor_name);
 
     parse_args(argc, argv, &g_opts);
+
+    /* boilerplate ABT initialization steps */
+    /****************************************/
+
+    /* get main pool for running mercury progress and RPC handlers */
+    /* NOTE: we use the ABT scheduler that idles while not busy */
+    ret = ABT_sched_create_basic(ABT_SCHED_BASIC_WAIT, 0, NULL,
+        ABT_SCHED_CONFIG_NULL, &sched);
+    if(ret != 0)
+    {
+        fprintf(stderr, "Error: ABT_sched_create_basic()\n");
+        return(-1);
+    }
+    ret = ABT_xstream_self(&xstream);
+    if(ret != 0)
+    {
+        fprintf(stderr, "Error: ABT_xstream_self()\n");
+        return(-1);
+    }
+    ret = ABT_xstream_set_main_sched(xstream, sched);
+    if(ret != 0)
+    {
+        fprintf(stderr, "Error: ABT_xstream_set_main_sched()\n");
+        return(-1);
+    }
+    ret = ABT_xstream_get_main_pools(xstream, 1, &pool);
+    if(ret != 0)
+    {
+        fprintf(stderr, "Error: ABT_xstream_get_main_pools()\n");
+        return(-1);
+    }
 
     /* boilerplate HG initialization steps */
     /***************************************/
@@ -112,37 +151,6 @@ int main(int argc, char **argv)
     {
         fprintf(stderr, "Error: HG_Context_create()\n");
         HG_Finalize(hg_class);
-        return(-1);
-    }
-
-    if((rank == 0 && g_opts.snoozer_flag_client) || 
-        (rank == 1 && g_opts.snoozer_flag_server))
-    {
-#ifdef HAVE_ABT_SNOOZER
-        /* set primary ES to idle without polling in scheduler */
-        ret = ABT_snoozer_xstream_self_set();
-        if(ret != 0)
-        {
-            fprintf(stderr, "Error: ABT_snoozer_xstream_self_set()\n");
-            return(-1);
-        }
-#else
-        fprintf(stderr, "Error: abt-snoozer scheduler is not supported\n");
-        return(-1);
-#endif
-    }
-
-    /* get main pool for running mercury progress and RPC handlers */
-    ret = ABT_xstream_self(&xstream);
-    if(ret != 0)
-    {
-        fprintf(stderr, "Error: ABT_xstream_self()\n");
-        return(-1);
-    }   
-    ret = ABT_xstream_get_main_pools(xstream, 1, &pool);
-    if(ret != 0)
-    {
-        fprintf(stderr, "Error: ABT_xstream_get_main_pools()\n");
         return(-1);
     }
 
@@ -226,23 +234,14 @@ static void parse_args(int argc, char **argv, struct options *opts)
 {
     int opt;
     int ret;
-    char clientflag, serverflag;
 
     memset(opts, 0, sizeof(*opts));
 
-#ifdef HAVE_ABT_SNOOZER
-    /* default to enabling snoozer scheduler on both client and server */
-    opts->snoozer_flag_client = 1;
-    opts->snoozer_flag_server = 1;
-#else
-    opts->snoozer_flag_client = 0;
-    opts->snoozer_flag_server = 0;
-#endif
     /* default to using whatever the standard timeout is in margo */
     opts->mercury_timeout_client = UINT_MAX;
     opts->mercury_timeout_server = UINT_MAX; 
 
-    while((opt = getopt(argc, argv, "n:i:d:s:t:")) != -1)
+    while((opt = getopt(argc, argv, "n:i:d:t:")) != -1)
     {
         switch(opt)
         {
@@ -261,18 +260,6 @@ static void parse_args(int argc, char **argv, struct options *opts)
                     usage();
                     exit(EXIT_FAILURE);
                 }
-                break;
-            case 's':
-                ret = sscanf(optarg, "%c,%c", &clientflag, &serverflag);
-                if(ret != 2)
-                {
-                    usage();
-                    exit(EXIT_FAILURE);
-                }
-                if(clientflag == '0') opts->snoozer_flag_client = 0;
-                else if(clientflag == '1') opts->snoozer_flag_client = 1;
-                if(serverflag == '0') opts->snoozer_flag_server = 0;
-                else if(serverflag == '1') opts->snoozer_flag_server = 1;
                 break;
             case 't':
                 ret = sscanf(optarg, "%u,%u", &opts->mercury_timeout_client, &opts->mercury_timeout_server);
@@ -313,8 +300,6 @@ static void usage(void)
         "\t-i <iterations> - number of RPC iterations\n"
         "\t-n <na> - na transport\n"
         "\t[-d filename] - enable diagnostics output \n"
-        "\t[-s <bool,bool>] - specify if snoozer scheduler is used on client and server\n"
-        "\t\t(e.g., -s 0,1 means snoozer disabled on client and enabled on server)\n"
         "\t\texample: mpiexec -n 2 ./margo-p2p-latency -i 10000 -n verbs://\n"
         "\t\t(must be run with exactly 2 processes\n");
     

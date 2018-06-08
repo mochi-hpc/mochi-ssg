@@ -53,5 +53,3 @@ packages:
 spack install --dirty ssg
 spack load -r ssg
 
-TODO: at this point ssg tests need to be updated to skip using abt-snoozer
-
