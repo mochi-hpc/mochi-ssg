@@ -33,7 +33,7 @@ typedef struct ssg_group_descriptor *ssg_group_id_t;
 
 /* SSG group member ID type */
 typedef uint64_t ssg_member_id_t;
-#define SSG_MEMBER_ID_INVALID UINT64_MAX
+#define SSG_MEMBER_ID_INVALID 0
 
 /* SSG group member update types */
 enum ssg_membership_update_type
