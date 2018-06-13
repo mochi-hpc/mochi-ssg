@@ -6,8 +6,16 @@
 
 export FI_FORK_UNSAFE=1
 
-echo "## MPI (one way, double the latency for round trip):"
-mpirun -f $COBALT_NODEFILE -n 2 ./osu_latency
+export SPACK_SHELL=bash
+
+. /home/carns/working/src/spack/share/spack/setup-env.sh
+spack load -r ssg 
+
+# TODO: why is this necessary?  We should be able to find gcc libraries...
+export LD_LIBRARY_PATH="/soft/compilers/gcc/7.1.0/lib64:$LD_LIBRARY_PATH"
+
+# echo "## MPI (one way, double the latency for round trip):"
+# mpirun -f $COBALT_NODEFILE -n 2 ./osu_latency
 
 sleep 1 
 
@@ -22,7 +30,7 @@ mpirun -f $COBALT_NODEFILE -n 2 ./margo-p2p-bw -x 1048576 -n "ofi+verbs;ofi_rxm:
 # (wait objects) properly
 #
 # sleep 1
-# 
+#
 # echo "## Margo OFI/VERBS (round trip):"
 # mpirun -f $COBALT_NODEFILE -n 2 ./margo-p2p-latency -i 100000 -n "ofi+verbs;ofi_rxm://"
 # echo "## Margo OFI/VERBS (bw):"
@@ -31,5 +39,5 @@ mpirun -f $COBALT_NODEFILE -n 2 ./margo-p2p-bw -x 1048576 -n "ofi+verbs;ofi_rxm:
 # mpirun -f $COBALT_NODEFILE -n 2 ./margo-p2p-bw -x 1048576 -n "ofi+verbs;ofi_rxm://" -c 8 -D 20
 
 
-#echo "## Mercury-runner CCI/VERBS (round trip):"
-#mpirun -f $COBALT_NODEFILE -n 2 ./mercury-runner -q -c 100000 -l 1 -m c -M -d `pwd` 1 h0=verbs;ofi_rxm:// h1
+# echo "## Mercury-runner CCI/VERBS (round trip):"
+# mpirun -f $COBALT_NODEFILE -n 2 ./mercury-runner -q -c 100000 -l 1 -m c -M -d `pwd` 1 h0=verbs;ofi_rxm:// h1

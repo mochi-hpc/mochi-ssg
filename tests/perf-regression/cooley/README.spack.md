@@ -12,7 +12,12 @@ To compile the full stack on cooley as of June 2018 using spack:
 # get spack repos:
 ```
 git clone https://github.com/spack/spack.git
-. spack/share/spack/setup-env.sh
+# as of 2018-06-12, need to pull in PR changes to allow SPACK_SHELL override
+cd spack
+git remote add jrood-nrel https://github.com/jrood-nrel/spack.git
+git fetch --all
+git merge jrood-nrel/fix_spack_shell_bootstrap
+. share/spack/setup-env.sh
 spack bootstrap
 git clone git@xgitlab.cels.anl.gov:sds/sds-repo
 spack repo add .

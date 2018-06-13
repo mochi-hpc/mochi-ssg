@@ -4,37 +4,46 @@
 # the ALCF, that will download, compile, and execute the ssg performance 
 # regression tests, including any dependencies
 
+# SEE README.spack.md for environment setup information!  This script will not
+#     work properly without properly configured spack environment, in
+#     particular with a fix for the SPACK_SHELL environment variable detection
+
 # exit on any error
 set -e
 
-SANDBOX=/tmp/mochi-regression-$$
+SANDBOX=~/tmp/mochi-regression-sandbox-$$
 PREFIX=~/tmp/mochi-regression-install-$$
 JOBDIR=~/tmp/mochi-regression-job-$$
 
 # less ancient gcc
-export CC=/soft/compilers/gcc/7.1.0/bin/gcc
 export CFLAGS="-O3"
-export PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig
-export PATH=/soft/buildtools/cmake/current/bin/:$PATH # working cmake version
 
 # scratch area to clone and build things
 mkdir $SANDBOX
+cp spack-shell.patch  $SANDBOX/
 
 # scratch area for job submission
 mkdir $JOBDIR
 cp margo-regression-ofi-rxm.qsub $JOBDIR
 
 cd $SANDBOX
-git clone https://github.com/carns/argobots.git
-git clone https://github.com/ofiwg/libfabric.git
-git clone https://github.com/mercury-hpc/mercury.git
-wget http://dist.schmorp.de/libev/libev-4.24.tar.gz
-tar -xvzf libev-4.24.tar.gz
-git clone https://xgitlab.cels.anl.gov/sds/margo.git
+git clone https://github.com/spack/spack.git
+git clone https://xgitlab.cels.anl.gov/sds/sds-repo.git
 git clone https://xgitlab.cels.anl.gov/sds/ssg.git
 wget http://mvapich.cse.ohio-state.edu/download/mvapich/osu-micro-benchmarks-5.3.2.tar.gz
 tar -xvzf osu-micro-benchmarks-5.3.2.tar.gz
 git clone https://github.com/pdlfs/mercury-runner.git
+
+# set up most of the libraries in spack
+echo "=== BUILD SPACK PACKAGES AND LOAD ==="
+cd $SANDBOX/spack
+patch -p1 < ../spack-shell.patch
+export SPACK_SHELL=bash
+$SANDBOX/spack/share/spack/setup-env.sh
+spack repo add $SANDBOX/sds-repo
+spack uninstall -R -y argobots mercury rdma-core libfabric || true
+spack install --dirty ssg
+spack load -r ssg
 
 # OSU MPI benchmarks
 echo "=== BUILDING OSU MICRO BENCHMARKS ==="
@@ -45,62 +54,8 @@ cd build
 make -j 3
 make install
 
-# argobots
-echo "=== BUILDING ARGOBOTS ==="
-cd $SANDBOX/argobots
-git checkout dev-get-dev-basic
-libtoolize
-./autogen.sh
-mkdir build
-cd build
-../configure --prefix=$PREFIX --enable-perf-opt
-make -j 3
-make install
- 
-# libfabric
-echo "=== BUILDING LIBFABRIC ==="
-cd $SANDBOX/libfabric
-libtoolize
-./autogen.sh
-mkdir build
-cd build
-../configure --prefix=$PREFIX --enable-sockets --enable-verbs --enable-rxm
-make -j 3
-make install
- 
-# mercury
-echo "=== BUILDING MERCURY ==="
-cd $SANDBOX/mercury
-git submodule update --init
-mkdir build
-cd build
-cmake -DNA_USE_OFI:BOOL=ON -DMERCURY_USE_BOOST_PP:BOOL=ON -DCMAKE_INSTALL_PREFIX=/$PREFIX -DBoost_NO_BOOST_CMAKE=TRUE -DBUILD_SHARED_LIBS:BOOL=ON -DMERCURY_USE_SELF_FORWARD:BOOL=ON -DNA_USE_SM:BOOL=OFF ../
-#cmake -DNA_USE_OFI:BOOL=ON -DNA_USE_CCI:BOOL=ON -DMERCURY_USE_BOOST_PP:BOOL=ON -DCMAKE_INSTALL_PREFIX=/$PREFIX -DBoost_NO_BOOST_CMAKE=TRUE -DBUILD_SHARED_LIBS:BOOL=ON -DMERCURY_USE_SELF_FORWARD:BOOL=ON -DNA_USE_SM:BOOL=OFF ../
-make -j 3
-make install
-
-# libev
-echo "=== BUILDING LIBEV ==="
-cd $SANDBOX/libev-4.24
-mkdir build
-cd build
-../configure --prefix=$PREFIX
-make -j 3
-make install
-
-# margo
-echo "=== BUILDING MARGO ==="
-cd $SANDBOX/margo
-libtoolize
-./prepare.sh
-mkdir build
-cd build
-../configure --prefix=$PREFIX 
-make -j 3
-make install
-
 # ssg
-echo "=== BUILDING SSG ==="
+echo "=== BUILDING SSG TEST PROGRAMS ==="
 cd $SANDBOX/ssg
 libtoolize
 ./prepare.sh
@@ -108,7 +63,6 @@ mkdir build
 cd build
 ../configure --prefix=$PREFIX CC=mpicc
 make -j 3
-make install
 make tests
 
 # mercury-runner benchmark
@@ -137,5 +91,6 @@ cat $JOBID.* > combined.$JOBID.txt
 mailx -s "margo-regression (cooley, ofi rxm)" sds-commits@lists.mcs.anl.gov < combined.$JOBID.txt
 
 cd /tmp
+spack repo rm $SANDBOX/sds-repo
 rm -rf $SANDBOX
 rm -rf $PREFIX
