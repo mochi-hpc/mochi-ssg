@@ -42,9 +42,12 @@ extern "C" {
 
 typedef struct ssg_member_state
 {
+    ssg_member_id_t id;
     char *addr_str;
     hg_addr_t addr;
-    int is_member;
+    int is_member; /* XXX remove */
+    struct ssg_member_state *next;
+    UT_hash_handle hh;
 } ssg_member_state_t;
 
 /* TODO: associate a version number with a descriptor */
@@ -60,7 +63,8 @@ typedef struct ssg_group_descriptor
 typedef struct ssg_group_view
 {
     unsigned int size;
-    ssg_member_state_t *member_states;
+    ssg_member_state_t *member_list;
+    ssg_member_state_t *member_map;
 } ssg_group_view_t;
 
 typedef struct ssg_group

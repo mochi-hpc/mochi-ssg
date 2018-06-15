@@ -36,6 +36,7 @@
 /* arguments for group lookup ULTs */
 struct ssg_group_lookup_ult_args
 {
+    ssg_group_view_t *view;
     ssg_member_state_t *member_state;
     hg_return_t out;
 };
@@ -49,8 +50,9 @@ static ssg_group_descriptor_t * ssg_group_descriptor_dup(
 static void ssg_group_descriptor_free(
     ssg_group_descriptor_t * descriptor);
 static int ssg_group_view_create(
-    const char * const group_addr_strs[], const char * self_addr_str,
-    int group_size, ssg_group_view_t * view, ssg_member_id_t * self_id);
+    const char * const group_addr_strs[], int group_size,
+    hg_addr_t self_addr, ssg_member_id_t * self_id,
+    ssg_group_view_t * view);
 static void ssg_group_view_destroy(
     ssg_group_view_t * view);
 static void ssg_group_destroy_internal(
@@ -133,8 +135,6 @@ ssg_group_id_t ssg_group_create(
     uint32_t upper, lower;
     uint64_t name_hash;
     hg_addr_t self_addr = HG_ADDR_NULL;
-    char *self_addr_str = NULL;
-    hg_size_t self_addr_str_size = 0;
     ssg_group_descriptor_t *tmp_descriptor;
     ssg_group_t *g = NULL;
     hg_return_t hret;
@@ -160,16 +160,6 @@ ssg_group_id_t ssg_group_create(
         goto fini;
     }
 
-    /* get my address */
-    hret = margo_addr_self(ssg_inst->mid, &self_addr);
-    if (hret != HG_SUCCESS) goto fini;
-    hret = margo_addr_to_string(ssg_inst->mid, NULL, &self_addr_str_size, self_addr);
-    if (hret != HG_SUCCESS) goto fini;
-    self_addr_str = malloc(self_addr_str_size);
-    if (self_addr_str == NULL) goto fini;
-    hret = margo_addr_to_string(ssg_inst->mid, self_addr_str, &self_addr_str_size, self_addr);
-    if (hret != HG_SUCCESS) goto fini;
-
     /* allocate an SSG group data structure and initialize some of it */
     g = malloc(sizeof(*g));
     if (!g) goto fini;
@@ -180,9 +170,13 @@ ssg_group_id_t ssg_group_create(
     g->update_cb = update_cb;
     g->update_cb_dat = update_cb_dat;
 
+    /* get my address */
+    hret = margo_addr_self(ssg_inst->mid, &self_addr);
+    if (hret != HG_SUCCESS) goto fini;
+
     /* initialize the group view */
-    sret = ssg_group_view_create(group_addr_strs, self_addr_str, group_size,
-        &g->view, &g->self_id);
+    sret = ssg_group_view_create(group_addr_strs, group_size, self_addr,
+        &g->self_id, &g->view);
     if (sret != SSG_SUCCESS) goto fini;
     if (g->self_id == SSG_MEMBER_ID_INVALID)
     {
@@ -191,7 +185,6 @@ ssg_group_id_t ssg_group_create(
             group_name);
         goto fini;
     }
-    g->view.member_states[g->self_id].addr = self_addr;
 
 #ifdef SSG_USE_SWIM_FD
     /* initialize swim failure detector */
@@ -213,12 +206,10 @@ ssg_group_id_t ssg_group_create(
 
     SSG_DEBUG(g, "group create successful (size=%d)\n", group_size);
 
-    /* don't free these pointers on success */
-    self_addr = HG_ADDR_NULL;
+    /* don't free group pointer on success */
     g = NULL;
 fini:
     if (self_addr != HG_ADDR_NULL) margo_addr_free(ssg_inst->mid, self_addr);
-    free(self_addr_str);
     if (g)
     {
         ssg_group_view_destroy(&g->view);
@@ -473,7 +464,8 @@ int ssg_group_attach(
     ag->descriptor->owner_status = SSG_OWNER_IS_ATTACHER;
 
     /* create the view for the group */
-    sret = ssg_group_view_create(addr_strs, NULL, group_size, &ag->view, NULL);
+    sret = ssg_group_view_create(addr_strs, group_size, HG_ADDR_NULL,
+        NULL, &ag->view);
     if (sret != SSG_SUCCESS) goto fini;
 
     /* add this group reference to our group table */
@@ -998,49 +990,43 @@ static void ssg_group_descriptor_free(
 }
 
 static int ssg_group_view_create(
-    const char * const group_addr_strs[], const char * self_addr_str,
-    int group_size, ssg_group_view_t * view, ssg_member_id_t * self_id)
+    const char * const group_addr_strs[], int group_size,
+    hg_addr_t self_addr, ssg_member_id_t * self_id,
+    ssg_group_view_t * view)
 {
     int i, j, r;
-    ABT_thread *lookup_ults;
-    struct ssg_group_lookup_ult_args *lookup_ult_args;
+    ABT_thread *lookup_ults = NULL;
+    struct ssg_group_lookup_ult_args *lookup_ult_args = NULL;
+    char *self_addr_str = NULL;
+    hg_size_t self_addr_str_size = 0;
     const char *self_addr_substr = NULL;
     const char *addr_substr = NULL;
+    ssg_member_state_t *tmp_ms;
+    hg_return_t hret;
     int aret;
-    int sret = SSG_SUCCESS;
+    int sret = SSG_FAILURE;
 
-    if (!view || (self_id != NULL && self_addr_str == NULL)) return SSG_FAILURE;
+    if (self_id)
+        *self_id = SSG_MEMBER_ID_INVALID;
+        
+    if ((self_id != NULL && self_addr == HG_ADDR_NULL) || !view) goto fini;
 
     /* allocate lookup ULTs */
     lookup_ults = malloc(group_size * sizeof(*lookup_ults));
-    if (lookup_ults == NULL) return SSG_FAILURE;
+    if (lookup_ults == NULL) goto fini;
+    for (i = 0; i < group_size; i++) lookup_ults[i] = ABT_THREAD_NULL;
     lookup_ult_args = malloc(group_size * sizeof(*lookup_ult_args));
-    if (lookup_ult_args == NULL)
-    {
-        free(lookup_ults);
-        return SSG_FAILURE;
-    }
+    if (lookup_ult_args == NULL) goto fini;
 
-    /* allocate and initialize the view */
-    view->size = group_size;
-    view->member_states = malloc(group_size * sizeof(*view->member_states));
-    if (!view->member_states)
+    if(self_addr)
     {
-        free(lookup_ults);
-        free(lookup_ult_args);
-        return SSG_FAILURE;
-    }
+        hret = margo_addr_to_string(ssg_inst->mid, NULL, &self_addr_str_size, self_addr);
+        if (hret != HG_SUCCESS) goto fini;
+        self_addr_str = malloc(self_addr_str_size);
+        if (self_addr_str == NULL) goto fini;
+        hret = margo_addr_to_string(ssg_inst->mid, self_addr_str, &self_addr_str_size, self_addr);
+        if (hret != HG_SUCCESS) goto fini;
 
-    for (i = 0; i < group_size; i++)
-    {
-        view->member_states[i].addr_str = NULL;
-        view->member_states[i].addr = HG_ADDR_NULL;
-        view->member_states[i].is_member = 0;
-        lookup_ults[i] = ABT_THREAD_NULL;
-    }
-
-    if (self_addr_str && self_id)
-    {
         /* strstr is used here b/c there may be inconsistencies in whether the class
          * is included in the address or not (it should not be in HG_Addr_to_string,
          * but it's possible that it is in the list of group address strings)
@@ -1050,11 +1036,10 @@ static int ssg_group_view_create(
             self_addr_substr = self_addr_str;
         else
             self_addr_substr += 3;
-
-        *self_id = SSG_MEMBER_ID_INVALID;
     }
 
-    /* kickoff ULTs to lookup the address of each group member */
+    /* construct view using ULTs to lookup the address of each group member */
+    view->size = group_size;
     r = rand() % view->size;
     for (i = 0; i < group_size; i++)
     {
@@ -1065,13 +1050,18 @@ static int ssg_group_view_create(
 
         if (group_addr_strs[j] == NULL || strlen(group_addr_strs[j]) == 0) continue;
 
-        view->member_states[j].addr_str = strdup(group_addr_strs[j]);
-        if (!view->member_states[j].addr_str)
-        {
-            sret = SSG_FAILURE;
-            goto fini;   
-        }
+        tmp_ms = malloc(sizeof(*tmp_ms));
+        if (!tmp_ms) goto fini;
 
+        /* generate a unique member ID for this address */
+        tmp_ms->id = ssg_gen_member_id(group_addr_strs[j]);
+        tmp_ms->addr_str = strdup(group_addr_strs[j]);
+        if (!tmp_ms->addr_str)
+        {
+            free(tmp_ms);
+            goto fini;
+        }
+        
         /* resolve self id in group if caller asked for it */
         if (self_addr_substr)
         {
@@ -1083,22 +1073,38 @@ static int ssg_group_view_create(
 
             if (strcmp(self_addr_substr, addr_substr) == 0)
             {
-                
-                *self_id = j;
-                continue; /* don't look up our own address, we already know it */
+                hret = margo_addr_dup(ssg_inst->mid, self_addr, &tmp_ms->addr);
+                if (hret != HG_SUCCESS)
+                {
+                    free(tmp_ms->addr_str);
+                    free(tmp_ms);
+                    goto fini;
+                }
+
+                if (self_id)               
+                    *self_id = tmp_ms->id;
+
+                /* add self state to membership view */
+                LL_PREPEND(view->member_list, tmp_ms);
+                HASH_ADD(hh, view->member_map, id, sizeof(ssg_member_id_t),
+
+                /* don't look up our own address, we already know it */
+                continue;
             }
         }
 
         /* XXX limit outstanding lookups to some max */
-        lookup_ult_args[j].member_state = &view->member_states[j];
+        lookup_ult_args[j].view = view;
+        lookup_ult_args[j].member_state = tmp_ms;
         ABT_pool pool;
         margo_get_handler_pool(ssg_inst->mid, &pool);
-        aret = ABT_thread_create(pool,
-            &ssg_group_lookup_ult, &lookup_ult_args[j], ABT_THREAD_ATTR_NULL,
+        aret = ABT_thread_create(pool, &ssg_group_lookup_ult,
+            &lookup_ult_args[j], ABT_THREAD_ATTR_NULL,
             &lookup_ults[j]);
         if (aret != ABT_SUCCESS)
         {
-            sret = SSG_FAILURE;
+            free(tmp_ms->addr_str);
+            free(tmp_ms);
             goto fini;
         }
     }
@@ -1111,20 +1117,18 @@ static int ssg_group_view_create(
         aret = ABT_thread_join(lookup_ults[i]);
         ABT_thread_free(&lookup_ults[i]);
         lookup_ults[i] = ABT_THREAD_NULL;
-        if (aret != ABT_SUCCESS)
-        {
-            sret = SSG_FAILURE;
-            break;
-        }
+        if (aret != ABT_SUCCESS) goto fini;
         else if (lookup_ult_args[i].out != HG_SUCCESS)
         {
             fprintf(stderr, "Error: SSG unable to lookup HG address for member %d"
-                "(err=%d)\n", i, lookup_ult_args[i].out);
-            sret = SSG_FAILURE;
-            break;
+                "(err=%d)\n", lookup_ult_args[i].member_state->id,
+                lookup_ult_args[i].out);
+            goto fini;
         }
-        view->member_states[i].is_member = 1;
     }
+
+    /* clean exit */
+    sret = SSG_SUCCESS;
 
 fini:
     if (sret != SSG_SUCCESS)
@@ -1141,9 +1145,17 @@ fini:
     }
     free(lookup_ults);
     free(lookup_ult_args);
+    free(self_addr_str);
 
     return sret;
 }
+
+static ssg_member_id_t ssg_gen_member_id(
+    const char * addr_str)
+{
+    return SSG_MEMBER_ID_INVALID;
+}
+
 
 static void ssg_group_lookup_ult(
     void * arg)
@@ -1153,20 +1165,32 @@ static void ssg_group_lookup_ult(
     /* XXX: should be a timeout here? */
     l->out = margo_addr_lookup(ssg_inst->mid, l->member_state->addr_str,
         &l->member_state->addr);
+    if (l->out == HG_SUCCESS)
+    {
+        LL_APPEND(l->view->member_list, l->member_state);
+        HASH_ADD(hh, l->view->member_map, id, sizeof(ssg_member_id_t),
+            l->member_state);
+    }
+
     return;
 }
 
 static void ssg_group_view_destroy(
     ssg_group_view_t * view)
 {
-    unsigned int i;
+    ssg_member_state_t *state, *tmp;
 
-    for (i = 0; i < view->size; i++)
+    /* destroy state for all group members */
+    LL_FOREACH_SAFE(view->member_list, state, tmp)
     {
-        free(view->member_states[i].addr_str);
-        margo_addr_free(ssg_inst->mid, view->member_states[i].addr);
+        LL_DELETE(view->member_list, state);
+        HASH_DEL(view->member_map, state);
+        free(state->addr_str);
+        margo_addr_free(ssg_inst->mid,  state->addr);
+        free(state);
     }
-    free(view->member_states);
+    view->member_list = NULL;
+    view->member_map = NULL;
 
     return;
 }
