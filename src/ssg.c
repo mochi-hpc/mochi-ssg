@@ -53,6 +53,8 @@ static int ssg_group_view_create(
     const char * const group_addr_strs[], int group_size,
     hg_addr_t self_addr, ssg_member_id_t * self_id,
     ssg_group_view_t * view);
+static ssg_member_id_t ssg_gen_member_id(
+    const char * addr_str);
 static void ssg_group_view_destroy(
     ssg_group_view_t * view);
 static void ssg_group_destroy_internal(
@@ -132,7 +134,6 @@ ssg_group_id_t ssg_group_create(
     ssg_membership_update_cb update_cb,
     void * update_cb_dat)
 {
-    uint32_t upper, lower;
     uint64_t name_hash;
     hg_addr_t self_addr = HG_ADDR_NULL;
     ssg_group_descriptor_t *tmp_descriptor;
@@ -143,8 +144,7 @@ ssg_group_id_t ssg_group_create(
 
     if (!ssg_inst) return group_id;
 
-    ssg_hashlittle2(group_name, strlen(group_name), &lower, &upper);
-    name_hash = lower + (((uint64_t)upper)<<32);
+    name_hash = ssg_hash64_str(group_name);
 
     /* generate a unique ID for this group  */
     tmp_descriptor = ssg_group_descriptor_create(name_hash, group_addr_strs[0],
@@ -1153,7 +1153,15 @@ fini:
 static ssg_member_id_t ssg_gen_member_id(
     const char * addr_str)
 {
-    return SSG_MEMBER_ID_INVALID;
+    char tmp[64] = {0};
+    ssg_member_id_t id = (ssg_member_id_t)ssg_hash64_str(addr_str);
+    while (id == SSG_MEMBER_ID_INVALID)
+    {
+        if (tmp[0] == 0) strncpy(tmp, addr_str, 63);
+        tmp[0]++;
+        id = (ssg_member_id_t)ssg_hash64_str(tmp);
+    }
+    return id;
 }
 
 

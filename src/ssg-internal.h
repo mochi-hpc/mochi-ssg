@@ -105,6 +105,13 @@ enum ssg_group_descriptor_owner_status
 
 #define ssg_hashlittle2 hashlittle2
 extern void hashlittle2(const void *key, size_t length, uint32_t *pc, uint32_t *pb);
+static inline ssg_hash64_str(const char * str)
+    uint32_t lower, upper;
+    uint64_t hash;
+    ssg_hashlittle2(__str, strlen(__str), &lower, &upper);
+    hash = lower + (((uint64_t)upper)<<32);
+    return hash;
+}
 
 void ssg_register_rpcs(
     void);
