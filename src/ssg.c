@@ -31,7 +31,6 @@
 #ifdef SSG_USE_SWIM_FD
 #include "swim-fd/swim-fd.h"
 #endif
-#include "uthash.h"
 
 /* arguments for group lookup ULTs */
 struct ssg_group_lookup_ult_args
@@ -591,8 +590,10 @@ hg_addr_t ssg_get_addr(
 {
     ssg_group_descriptor_t *group_descriptor = (ssg_group_descriptor_t *)group_id;
     ssg_group_view_t *group_view = NULL;
+    ssg_member_state_t *member_state;
 
-    if (!ssg_inst || group_id == SSG_GROUP_ID_NULL)
+    if (!ssg_inst || group_id == SSG_GROUP_ID_NULL ||
+            member_id == SSG_MEMBER_ID_INVALID)
         return HG_ADDR_NULL;
 
     if (group_descriptor->owner_status == SSG_OWNER_IS_MEMBER)
@@ -622,13 +623,12 @@ hg_addr_t ssg_get_addr(
 
     if (group_view)
     {
-        /* XXX for now we assume member ids are dense ranks and error out
-         * if they are not within allowable range for the group view size
-         */
-        if (member_id >= group_view->size)
+        HASH_FIND(hh, group_view->member_map, &member_id, sizeof(ssg_member_id_t),
+            member_state);
+        if (member_state)
+            return member_state->addr;
+        else
             return HG_ADDR_NULL;
-
-        return group_view->member_states[member_id].addr;
     }
     else
         return HG_ADDR_NULL;
@@ -865,7 +865,7 @@ void ssg_group_dump(
             group_view = &g->view;
             group_name = g->name;
             strcpy(group_role, "member");
-            sprintf(group_self_id, "%"PRIu64, g->self_id);
+            sprintf(group_self_id, "%lu", g->self_id);
         }
     }
     else if (group_descriptor->owner_status == SSG_OWNER_IS_ATTACHER)
@@ -890,7 +890,7 @@ void ssg_group_dump(
 
     if (group_view)
     {
-        unsigned int i;
+        ssg_member_state_t *member_state, *tmp_ms;
 
         printf("SSG membership information for group '%s':\n", group_name);
         printf("\trole: '%s'\n", group_role);
@@ -898,11 +898,10 @@ void ssg_group_dump(
             printf("\tself_id: %s\n", group_self_id);
         printf("\tsize: %d\n", group_view->size);
         printf("\tview:\n");
-        for (i = 0; i < group_view->size; i++)
+        HASH_ITER(hh, group_view->member_map, member_state, tmp_ms)
         {
-            if (group_view->member_states[i].is_member)
-                printf("\t\tid: %d\taddr: %s\n", i,
-                    group_view->member_states[i].addr_str);
+            printf("\t\tid: %lu\taddr: %s\n", member_state->id,
+                member_state->addr_str);
         }
     }
     else
@@ -920,15 +919,23 @@ void ssg_apply_membership_update(
     ssg_group_t *g,
     ssg_membership_update_t update)
 {
+    ssg_member_state_t *member_state;
+
     if(!ssg_inst || !g) return;
 
     if (update.type == SSG_MEMBER_REMOVE)
     {
-        margo_addr_free(ssg_inst->mid, g->view.member_states[update.member].addr);
-        free(g->view.member_states[update.member].addr_str);
-        g->view.member_states[update.member].addr_str = NULL;
-        g->view.member_states[update.member].is_member = 0;
-        /* XXX: need to update size ... g->view.size--; */
+        HASH_FIND(hh, g->view.member_map, &update.member, sizeof(ssg_member_id_t),
+            member_state);
+        if (member_state)
+        {
+            LL_DELETE(g->view.member_list, member_state);
+            HASH_DELETE(hh, g->view.member_map, member_state);
+            margo_addr_free(ssg_inst->mid, member_state->addr);
+            free(member_state->addr_str);
+            free(member_state);
+            g->view.size--;
+        }
     }
     else
     {
@@ -1086,7 +1093,7 @@ static int ssg_group_view_create(
 
                 /* add self state to membership view */
                 LL_PREPEND(view->member_list, tmp_ms);
-                HASH_ADD(hh, view->member_map, id, sizeof(ssg_member_id_t),
+                HASH_ADD(hh, view->member_map, id, sizeof(ssg_member_id_t), tmp_ms);
 
                 /* don't look up our own address, we already know it */
                 continue;
@@ -1120,7 +1127,7 @@ static int ssg_group_view_create(
         if (aret != ABT_SUCCESS) goto fini;
         else if (lookup_ult_args[i].out != HG_SUCCESS)
         {
-            fprintf(stderr, "Error: SSG unable to lookup HG address for member %d"
+            fprintf(stderr, "Error: SSG unable to lookup HG address for member %lu"
                 "(err=%d)\n", lookup_ult_args[i].member_state->id,
                 lookup_ult_args[i].out);
             goto fini;

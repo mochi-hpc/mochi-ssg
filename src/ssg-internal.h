@@ -16,6 +16,7 @@
 
 #include "ssg.h"
 #include "uthash.h"
+#include "utlist.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -45,7 +46,6 @@ typedef struct ssg_member_state
     ssg_member_id_t id;
     char *addr_str;
     hg_addr_t addr;
-    int is_member; /* XXX remove */
     struct ssg_member_state *next;
     UT_hash_handle hh;
 } ssg_member_state_t;
@@ -70,9 +70,9 @@ typedef struct ssg_group_view
 typedef struct ssg_group
 {
     char *name;
-    ssg_group_descriptor_t *descriptor;
     ssg_member_id_t self_id;
     ssg_group_view_t view;
+    ssg_group_descriptor_t *descriptor;
     void *fd_ctx; /* failure detector context (currently just SWIM) */
     ssg_membership_update_cb update_cb;
     void *update_cb_dat;
@@ -105,10 +105,11 @@ enum ssg_group_descriptor_owner_status
 
 #define ssg_hashlittle2 hashlittle2
 extern void hashlittle2(const void *key, size_t length, uint32_t *pc, uint32_t *pb);
-static inline ssg_hash64_str(const char * str)
+static inline uint64_t ssg_hash64_str(const char * str)
+{
     uint32_t lower, upper;
     uint64_t hash;
-    ssg_hashlittle2(__str, strlen(__str), &lower, &upper);
+    ssg_hashlittle2(str, strlen(str), &lower, &upper);
     hash = lower + (((uint64_t)upper)<<32);
     return hash;
 }

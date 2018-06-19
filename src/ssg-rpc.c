@@ -95,7 +95,7 @@ int ssg_group_attach_send(
 
     /* allocate a buffer of the given size to try to store the group view in */
     /* NOTE: We don't know if this buffer is big enough to store the complete
-     * view. If the buffers is not large enough, the group member we are
+     * view. If the buffer is not large enough, the group member we are
      * attaching too will send a NACK indicating the necessary buffer size
      */
     tmp_view_buf = malloc(tmp_view_buf_size);
@@ -248,48 +248,37 @@ DEFINE_MARGO_RPC_HANDLER(ssg_group_attach_recv_ult)
 static int ssg_group_view_serialize(
     ssg_group_view_t *view, void **buf, hg_size_t *buf_size)
 {
-    unsigned int i;
-    hg_size_t view_size = 0;
-    int tmp_size;
-    void *view_buf, *buf_p, *str_p;
+    ssg_member_state_t *member_state;
+    hg_size_t view_buf_size = 0;
+    void *view_buf;
+    void *buf_p, *str_p, *id_p;
 
     *buf = NULL;
     *buf_size = 0;
 
     /* first determine view size */
-    for (i = 0; i < view->size; i++)
+    LL_FOREACH(view->member_list, member_state)
     {
-        if (view->member_states[i].addr_str)
-            view_size += (strlen(view->member_states[i].addr_str) + 1);
-        else
-            view_size += 1;
+        view_buf_size += sizeof(ssg_member_id_t) + strlen(member_state->addr_str) + 1;
     }
 
-    view_buf = malloc(view_size);
+    view_buf = malloc(view_buf_size);
     if(!view_buf)
         return SSG_FAILURE;
 
     buf_p = view_buf;
-    for (i = 0; i < view->size; i++)
+    LL_FOREACH(view->member_list, member_state)
     {
-        char null = '\0';
-
-        if (view->member_states[i].addr_str)
-        {
-            tmp_size = strlen(view->member_states[i].addr_str) + 1;
-            str_p = view->member_states[i].addr_str;
-        }
-        else
-        {
-            tmp_size = 1;
-            str_p = &null;
-        }
-        memcpy(buf_p, str_p, tmp_size);
-        buf_p += tmp_size;
+        str_p = member_state->addr_str;
+        id_p = &member_state->id;
+        memcpy(buf_p, id_p, sizeof(ssg_member_id_t));
+        buf_p += sizeof(ssg_member_id_t);
+        strcpy(buf_p, str_p);
+        buf_p += strlen(member_state->addr_str) + 1;
     }
 
     *buf = view_buf;
-    *buf_size = view_size;
+    *buf_size = view_buf_size;
 
     return SSG_SUCCESS;
 }
