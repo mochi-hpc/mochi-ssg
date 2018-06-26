@@ -34,6 +34,7 @@ static void usage()
         "Usage: "
         "ssg-test-simple [-s <time>] <addr> <create mode> [config file]\n"
         "\t-s <time> - time to sleep between init/finalize\n"
+        "\t<addr> - Mercury address string\n"
         "\t<create mode> - \"mpi\" (if supported) or \"conf\"\n"
         "\tif \"conf\" is the mode, then [config file] is required\n");
 }
@@ -103,9 +104,9 @@ int main(int argc, char *argv[])
     int sleep_time = 0;
     const char *addr_str;
     const char *mode;
-    const char *conf_file;
+    const char *conf_file = NULL;
     const char *group_name = "simple_group";
-    ssg_group_id_t g_id;
+    ssg_group_id_t g_id = SSG_GROUP_ID_NULL;
     ssg_member_id_t my_id;
     int group_size;
     int sret;
@@ -134,16 +135,19 @@ int main(int argc, char *argv[])
 #endif
     DIE_IF(g_id == SSG_GROUP_ID_NULL, "ssg_group_create");
 
+    /* sleep to give all group members a chance to create the group */
+    if (sleep_time > 0) margo_thread_sleep(mid, sleep_time * 1000.0);
+
     /* get my group id and the size of the group */
     my_id = ssg_get_group_self_id(g_id);
     DIE_IF(my_id == SSG_MEMBER_ID_INVALID, "ssg_get_group_self_id");
     group_size = ssg_get_group_size(g_id);
     DIE_IF(group_size == 0, "ssg_get_group_size");
-    printf("group member %d of %d successfully created group\n",
-        (int)my_id, group_size);
+    printf("group member %lu successfully created group (size == %d)\n",
+        my_id, group_size);
 
-    /* sleep to give all group members a chance to create the group */
-    if (sleep_time > 0) margo_thread_sleep(mid, sleep_time * 1000.0);
+    /* print group at each member */
+    ssg_group_dump(g_id);
 
     /** cleanup **/
     ssg_group_destroy(g_id);
