@@ -251,7 +251,7 @@ static int ssg_group_view_serialize(
     ssg_member_state_t *member_state;
     hg_size_t view_buf_size = 0;
     void *view_buf;
-    void *buf_p, *str_p, *id_p;
+    void *buf_p, *str_p;
 
     *buf = NULL;
     *buf_size = 0;
@@ -259,7 +259,7 @@ static int ssg_group_view_serialize(
     /* first determine view size */
     LL_FOREACH(view->member_list, member_state)
     {
-        view_buf_size += sizeof(ssg_member_id_t) + strlen(member_state->addr_str) + 1;
+        view_buf_size += strlen(member_state->addr_str) + 1;
     }
 
     view_buf = malloc(view_buf_size);
@@ -270,9 +270,6 @@ static int ssg_group_view_serialize(
     LL_FOREACH(view->member_list, member_state)
     {
         str_p = member_state->addr_str;
-        id_p = &member_state->id;
-        memcpy(buf_p, id_p, sizeof(ssg_member_id_t));
-        buf_p += sizeof(ssg_member_id_t);
         strcpy(buf_p, str_p);
         buf_p += strlen(member_state->addr_str) + 1;
     }
