@@ -32,7 +32,6 @@
 
 
 DECLARE_MARGO_RPC_HANDLER(group_id_forward_recv_ult)
-static void group_update_cb(ssg_membership_update_t update, void * cb_dat);
 
 static void usage()
 {
@@ -150,8 +149,7 @@ int main(int argc, char *argv[])
 
     if (!is_attacher)
     {
-        g_id = ssg_group_create_mpi(group_name, ssg_comm, &group_update_cb,
-            &my_world_rank);
+        g_id = ssg_group_create_mpi(group_name, ssg_comm, NULL, NULL);
         DIE_IF(g_id == SSG_GROUP_ID_NULL, "ssg_group_create");
 
         if (my_world_rank == 1)
@@ -250,15 +248,3 @@ static void group_id_forward_recv_ult(hg_handle_t handle)
     return;
 }
 DEFINE_MARGO_RPC_HANDLER(group_id_forward_recv_ult)
-
-static void group_update_cb(ssg_membership_update_t update, void * cb_dat)
-{
-    int my_world_rank = *(int *)cb_dat;
-
-    if (update.type == SSG_MEMBER_ADD)
-        printf("%d SSG update: ADD member %"PRIu64"\n", my_world_rank, update.member);
-    else if (update.type == SSG_MEMBER_REMOVE)
-        printf("%d SSG update: REMOVE member %"PRIu64"\n", my_world_rank, update.member);
-
-    return;
-}
