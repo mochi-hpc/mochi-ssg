@@ -900,7 +900,7 @@ void ssg_group_dump(
         printf("\tview:\n");
         HASH_ITER(hh, group_view->member_map, member_state, tmp_ms)
         {
-            printf("\t\tid: %lu\taddr: %s\n", member_state->id,
+            printf("\t\tid: %20lu\taddr: %s\n", member_state->id,
                 member_state->addr_str);
         }
     }
