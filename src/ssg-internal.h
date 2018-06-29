@@ -15,6 +15,7 @@
 #include <margo.h>
 
 #include "ssg.h"
+#include "swim-fd/swim-fd.h"
 #include "uthash.h"
 #include "utlist.h"
 
@@ -73,7 +74,7 @@ typedef struct ssg_group
     ssg_member_id_t self_id;
     ssg_group_view_t view;
     ssg_group_descriptor_t *descriptor;
-    void *fd_ctx; /* failure detector context (currently just SWIM) */
+    swim_context_t *swim_ctx;
     ssg_membership_update_cb update_cb;
     void *update_cb_dat;
     UT_hash_handle hh;

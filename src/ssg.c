@@ -28,9 +28,6 @@
 #include "ssg-mpi.h"
 #endif
 #include "ssg-internal.h"
-#ifdef SSG_USE_SWIM_FD
-#include "swim-fd/swim-fd.h"
-#endif
 
 /* arguments for group lookup ULTs */
 struct ssg_group_lookup_ult_args
@@ -185,13 +182,11 @@ ssg_group_id_t ssg_group_create(
         goto fini;
     }
 
-#ifdef SSG_USE_SWIM_FD
     /* initialize swim failure detector */
     // TODO: we should probably barrier or sync somehow to avoid rpc failures
     // due to timing skew of different ranks initializing swim
-    g->fd_ctx = (void *)swim_init(g, 1);
-    if (g->fd_ctx == NULL) goto fini;
-#endif
+    g->swim_ctx = swim_init(g, 1);
+    if (g->swim_ctx == NULL) goto fini;
 
     /* everything successful -- set the output group identifier, which is just
      * an opaque pointer to the group descriptor structure
@@ -1215,11 +1210,9 @@ static void ssg_group_destroy_internal(
 {
     /* TODO: send a leave message to the group ? */
 
-#ifdef SSG_USE_SWIM_FD
-    /* free up failure detector state */
-    if(g->fd_ctx)
-        swim_finalize(g->fd_ctx);
-#endif
+    /* free up SWIM state */
+    if(g->swim_ctx)
+        swim_finalize(g->swim_ctx);
 
     /* destroy group state */
     ssg_group_view_destroy(&g->view);
