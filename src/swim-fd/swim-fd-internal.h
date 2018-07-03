@@ -6,8 +6,6 @@
 
 #pragma once
 
-#include <ssg.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -20,16 +18,7 @@ extern "C" {
 #define SWIM_MAX_PIGGYBACK_ENTRIES      8
 #define SWIM_MAX_PIGGYBACK_TX_COUNT     50
 
-typedef uint8_t swim_member_status_t;
-typedef uint32_t swim_member_inc_nr_t;
 typedef struct swim_member_update swim_member_update_t;
-
-enum swim_member_status
-{
-    SWIM_MEMBER_ALIVE = 0,
-    SWIM_MEMBER_SUSPECT,
-    SWIM_MEMBER_DEAD
-};
 
 struct swim_member_update
 {

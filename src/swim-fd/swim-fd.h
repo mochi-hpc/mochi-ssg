@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include "ssg.h"
-#include "ssg-internal.h"
+#include <stdint.h>
+#include <inttypes.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -16,10 +16,27 @@ extern "C" {
 /* opaque swim context type */
 typedef struct swim_context swim_context_t;
 
+/* swim member specific types */
+typedef uint32_t swim_member_inc_nr_t;
+typedef enum swim_member_status
+{
+    SWIM_MEMBER_ALIVE = 0,
+    SWIM_MEMBER_SUSPECT,
+    SWIM_MEMBER_DEAD
+} swim_member_status_t;
+
+typedef struct swim_member_state
+{
+    swim_member_inc_nr_t inc_nr;
+    swim_member_status_t status;
+} swim_member_state_t;
+
+/* Initialize SWIM */
 swim_context_t * swim_init(
-    ssg_group_t * g,
+    void * group_data,
     int active);
 
+/* Finalize SWIM */
 void swim_finalize(
     swim_context_t * swim_ctx);
 

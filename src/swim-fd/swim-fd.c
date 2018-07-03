@@ -14,8 +14,6 @@
 #include <abt.h>
 #include <margo.h>
 
-#include "ssg.h"
-#include "ssg-internal.h"
 #include "swim-fd.h"
 #include "swim-fd-internal.h"
 
@@ -61,34 +59,24 @@ static int swim_get_rand_group_member_set(
  ******************************************************/
 
 swim_context_t * swim_init(
-    ssg_group_t * g,
+    void * group_data,
     int active)
 {
     swim_context_t *swim_ctx;
     int i, ret;
-
-    if (g == NULL) return NULL;
 
     /* allocate structure for storing swim context */
     swim_ctx = malloc(sizeof(*swim_ctx));
     if (!swim_ctx) return NULL;
     memset(swim_ctx, 0, sizeof(*swim_ctx));
 
+#if 0
     /* initialize SWIM context */
     margo_get_handler_pool(ssg_inst->mid, &swim_ctx->prot_pool);
     swim_ctx->ping_target = SSG_MEMBER_ID_INVALID;
     for(i = 0; i < SWIM_MAX_SUBGROUP_SIZE; i++)
         swim_ctx->subgroup_members[i] = SSG_MEMBER_ID_INVALID;
-
-    swim_ctx->member_inc_nrs = malloc(g->view.size *
-        sizeof(*(swim_ctx->member_inc_nrs)));
-    if (!swim_ctx->member_inc_nrs)
-    {
-        free(swim_ctx);
-        return NULL;
-    }
-    memset(swim_ctx->member_inc_nrs, 0, g->view.size *
-        sizeof(*(swim_ctx->member_inc_nrs)));
+#endif
 
     /* set protocol parameters */
     swim_ctx->prot_period_len = SWIM_DEF_PROTOCOL_PERIOD_LEN;

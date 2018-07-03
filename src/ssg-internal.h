@@ -47,6 +47,7 @@ typedef struct ssg_member_state
     ssg_member_id_t id;
     char *addr_str;
     hg_addr_t addr;
+    swim_member_state_t swim_state;
     struct ssg_member_state *next;
     UT_hash_handle hh;
 } ssg_member_state_t;
