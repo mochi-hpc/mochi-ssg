@@ -31,6 +31,11 @@ typedef struct swim_member_state
     swim_member_status_t status;
 } swim_member_state_t;
 
+#define SWIM_MEMBER_STATE_INIT(__ms) do { \
+    __ms.inc_nr = 0; \
+    __ms.status = SWIM_MEMBER_ALIVE; \
+} while(0)
+
 /* Initialize SWIM */
 swim_context_t * swim_init(
     margo_instance_id mid,

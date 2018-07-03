@@ -1063,6 +1063,7 @@ static int ssg_group_view_create(
             free(tmp_ms);
             goto fini;
         }
+        SWIM_MEMBER_STATE_INIT(tmp_ms->swim_state);
         
         /* resolve self id in group if caller asked for it */
         if (self_addr_substr)
@@ -1180,6 +1181,10 @@ static void ssg_group_lookup_ult(
         LL_APPEND(l->view->member_list, l->member_state);
         HASH_ADD(hh, l->view->member_map, id, sizeof(ssg_member_id_t),
             l->member_state);
+    }
+    else
+    {
+        /* XXX */
     }
 
     return;
