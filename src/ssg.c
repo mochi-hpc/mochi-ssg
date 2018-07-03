@@ -123,6 +123,21 @@ int ssg_finalize()
  *** SSG group management routines ***
  *************************************/
 
+/* XXX */
+static int ssg_get_swim_dping_target(
+    void *group_data,
+    hg_addr_t *target_addr,
+    swim_member_state_t *target_ms)
+{
+    ssg_group_t *g = (ssg_group_t *)group_data;
+
+    assert(g != NULL);
+
+    /* get a random group member, return addr and state */
+
+    return 0;
+}
+
 ssg_group_id_t ssg_group_create(
     const char * group_name,
     const char * const group_addr_strs[],
@@ -185,7 +200,10 @@ ssg_group_id_t ssg_group_create(
     /* initialize swim failure detector */
     // TODO: we should probably barrier or sync somehow to avoid rpc failures
     // due to timing skew of different ranks initializing swim
-    g->swim_ctx = swim_init(ssg_inst->mid, g, 1);
+    swim_group_mgmt_callbacks_t swim_callbacks = {
+        .get_dping_target = &ssg_get_swim_dping_target,
+    };
+    g->swim_ctx = swim_init(ssg_inst->mid, g, swim_callbacks, 1);
     if (g->swim_ctx == NULL) goto fini;
 
     /* everything successful -- set the output group identifier, which is just

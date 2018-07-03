@@ -9,6 +9,8 @@
 #include <abt.h>
 #include <margo.h>
 
+#include "swim-fd.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -27,6 +29,8 @@ struct swim_context
     margo_instance_id mid;
     /* void pointer to user group data */
     void *group_data;
+    /* XXX group mgmt callbacks */
+    swim_group_mgmt_callbacks_t swim_callbacks;
     /* argobots pool for launching SWIM threads */
     ABT_pool swim_pool;
     /* swim protocol ULT handle */
@@ -37,12 +41,12 @@ struct swim_context
     int prot_subgroup_sz;
     /* SWIM internal state */
     int shutdown_flag;
-#if 0
-    //ssg_member_id_t ping_target;
-    //swim_member_inc_nr_t ping_target_inc_nr;
-    int ping_target_acked;
+    hg_addr_t dping_target_addr;
+    swim_member_state_t dping_target_state;
+    int dping_target_acked;
     double dping_timeout;
-    //ssg_member_id_t subgroup_members[SWIM_MAX_SUBGROUP_SIZE];
+    hg_addr_t iping_subgroup_addrs[SWIM_MAX_SUBGROUP_SIZE];
+#if 0
     /* current membership state */
     void *suspect_list;
     void *recent_update_list;

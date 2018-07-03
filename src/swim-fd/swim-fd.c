@@ -64,6 +64,7 @@ static int swim_get_rand_group_member_set(
 swim_context_t * swim_init(
     margo_instance_id mid,
     void * group_data,
+    swim_group_mgmt_callbacks_t swim_callbacks,
     int active)
 {
     swim_context_t *swim_ctx;
@@ -75,21 +76,23 @@ swim_context_t * swim_init(
     memset(swim_ctx, 0, sizeof(*swim_ctx));
     swim_ctx->mid = mid;
     swim_ctx->group_data = group_data;
+    swim_ctx->swim_callbacks = swim_callbacks;
 
     /* initialize SWIM context */
     margo_get_handler_pool(swim_ctx->mid, &swim_ctx->swim_pool);
-#if 0
-    swim_ctx->ping_target = SSG_MEMBER_ID_INVALID;
+    swim_ctx->dping_target_addr = HG_ADDR_NULL;
     for(i = 0; i < SWIM_MAX_SUBGROUP_SIZE; i++)
-        swim_ctx->subgroup_members[i] = SSG_MEMBER_ID_INVALID;
-#endif
+        swim_ctx->iping_subgroup_addrs[i] = HG_ADDR_NULL;
 
     /* set protocol parameters */
     swim_ctx->prot_period_len = SWIM_DEF_PROTOCOL_PERIOD_LEN;
     swim_ctx->prot_susp_timeout = SWIM_DEF_SUSPECT_TIMEOUT;
     swim_ctx->prot_subgroup_sz = SWIM_DEF_SUBGROUP_SIZE;
 
-    //swim_register_ping_rpcs(g);
+    /* XXX */
+#if 0
+    swim_register_ping_rpcs(g);
+#endif
 
     if(active)
     {
@@ -161,22 +164,27 @@ static void swim_tick_ult(
         /* no response from direct/indirect pings, suspect this member */
         swim_suspect_member(g, swim_ctx->ping_target, swim_ctx->ping_target_inc_nr);
     }
+#endif
 
     /* pick a random member from view and ping */
-    if(swim_get_rand_group_member(g, &(swim_ctx->ping_target)) == 0)
+    ret = swim_ctx->swim_callbacks.get_dping_target(swim_ctx->group_data,
+        &swim_ctx->dping_target_addr, &swim_ctx->dping_target_state);
+    if(ret != 0)
     {
         /* no available members, back out */
+#if 0
         SSG_DEBUG(g, "SWIM: no group members available to dping\n");
+#endif
         return;
     }
 
     /* TODO: calculate estimated RTT using sliding window of past RTTs */
     swim_ctx->dping_timeout = 250.0;
 
+#if 0
     /* kick off dping request ULT */
-    swim_ctx->ping_target_inc_nr = swim_ctx->member_inc_nrs[swim_ctx->ping_target];
     swim_ctx->ping_target_acked = 0;
-    ret = ABT_thread_create(swim_ctx->prot_pool, swim_dping_send_ult, g,
+    ret = ABT_thread_create(swim_ctx->swim_pool, swim_dping_send_ult, swim_ctx,
         ABT_THREAD_ATTR_NULL, NULL);
     if(ret != ABT_SUCCESS)
     {

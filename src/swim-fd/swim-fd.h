@@ -36,10 +36,22 @@ typedef struct swim_member_state
     __ms.status = SWIM_MEMBER_ALIVE; \
 } while(0)
 
+/* XXX rename once more clear what all is here */
+typedef struct swim_group_mgmt_callbacks
+{
+    int (*get_dping_target)(
+            void *group_data,
+            hg_addr_t *target_addr,
+            swim_member_state_t *target_ms
+            );
+    /* get_rand_iping_subgroup */
+} swim_group_mgmt_callbacks_t;
+
 /* Initialize SWIM */
 swim_context_t * swim_init(
     margo_instance_id mid,
     void * group_data,
+    swim_group_mgmt_callbacks_t swim_callbacks,
     int active);
 
 /* Finalize SWIM */
