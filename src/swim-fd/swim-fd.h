@@ -33,6 +33,7 @@ typedef struct swim_member_state
 
 /* Initialize SWIM */
 swim_context_t * swim_init(
+    margo_instance_id mid,
     void * group_data,
     int active);
 

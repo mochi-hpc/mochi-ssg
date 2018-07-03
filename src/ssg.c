@@ -185,7 +185,7 @@ ssg_group_id_t ssg_group_create(
     /* initialize swim failure detector */
     // TODO: we should probably barrier or sync somehow to avoid rpc failures
     // due to timing skew of different ranks initializing swim
-    g->swim_ctx = swim_init(g, 1);
+    g->swim_ctx = swim_init(ssg_inst->mid, g, 1);
     if (g->swim_ctx == NULL) goto fini;
 
     /* everything successful -- set the output group identifier, which is just
