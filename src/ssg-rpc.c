@@ -248,7 +248,7 @@ DEFINE_MARGO_RPC_HANDLER(ssg_group_attach_recv_ult)
 static int ssg_group_view_serialize(
     ssg_group_view_t *view, void **buf, hg_size_t *buf_size)
 {
-    ssg_member_state_t *member_state;
+    ssg_member_state_t *member_state, *tmp;
     hg_size_t view_buf_size = 0;
     void *view_buf;
     void *buf_p, *str_p;
@@ -257,7 +257,7 @@ static int ssg_group_view_serialize(
     *buf_size = 0;
 
     /* first determine view size */
-    LL_FOREACH(view->member_list, member_state)
+    HASH_ITER(hh, view->member_map, member_state, tmp)
     {
         view_buf_size += strlen(member_state->addr_str) + 1;
     }
@@ -267,7 +267,7 @@ static int ssg_group_view_serialize(
         return SSG_FAILURE;
 
     buf_p = view_buf;
-    LL_FOREACH(view->member_list, member_state)
+    HASH_ITER(hh, view->member_map, member_state, tmp)
     {
         str_p = member_state->addr_str;
         strcpy(buf_p, str_p);

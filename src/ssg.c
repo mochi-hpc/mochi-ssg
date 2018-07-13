@@ -123,19 +123,49 @@ int ssg_finalize()
  *** SSG group management routines ***
  *************************************/
 
-/* XXX */
 static int ssg_get_swim_dping_target(
     void *group_data,
     hg_addr_t *target_addr,
-    swim_member_state_t *target_ms)
+    swim_member_state_t *target_swim_ms);
+static void ssg_gen_rand_member_list(
+    ssg_group_t *g);
+
+static int ssg_get_swim_dping_target(
+    void *group_data,
+    hg_addr_t *target_addr,
+    swim_member_state_t *target_swim_ms)
 {
     ssg_group_t *g = (ssg_group_t *)group_data;
+    ssg_member_state_t *target_ms;
 
     assert(g != NULL);
 
-    /* get a random group member, return addr and state */
+    /* if current member list is empty, generate a new random one */
+    if (g->member_list == NULL)
+        ssg_gen_rand_member_list(g);
+
+    /* pull random member off head of list and return addr */
+    target_ms = g->member_list;
+    LL_DELETE(g->member_list, target_ms);
+    *target_addr = target_ms->addr;
+    *target_swim_ms = target_ms->swim_state;
+
+    printf("%lu: pinging %lu\n", g->self_id, target_ms->id);
 
     return 0;
+}
+
+static void ssg_gen_rand_member_list(ssg_group_t *g)
+{
+    ssg_member_state_t *ms, *tmp;
+
+    /* XXX generate random LL permutation from membership map */
+    HASH_ITER(hh, g->view.member_map, ms, tmp)
+    {
+        LL_APPEND(g->member_list, ms);
+    }
+
+    return;
 }
 
 ssg_group_id_t ssg_group_create(
@@ -196,6 +226,9 @@ ssg_group_id_t ssg_group_create(
             group_name);
         goto fini;
     }
+
+    /* generate random list permutation of the member map */
+    ssg_gen_rand_member_list(g);
 
     /* initialize swim failure detector */
     // TODO: we should probably barrier or sync somehow to avoid rpc failures
@@ -942,7 +975,6 @@ void ssg_apply_membership_update(
             member_state);
         if (member_state)
         {
-            LL_DELETE(g->view.member_list, member_state);
             HASH_DELETE(hh, g->view.member_map, member_state);
             margo_addr_free(ssg_inst->mid, member_state->addr);
             free(member_state->addr_str);
@@ -1105,9 +1137,8 @@ static int ssg_group_view_create(
                 if (self_id)               
                     *self_id = tmp_ms->id;
 
-                /* add self state to membership view */
-                LL_PREPEND(view->member_list, tmp_ms);
-                HASH_ADD(hh, view->member_map, id, sizeof(ssg_member_id_t), tmp_ms);
+                /* XXX: add self state to membership view? or somewhere static? */
+                //HASH_ADD(hh, view->member_map, id, sizeof(ssg_member_id_t), tmp_ms);
 
                 /* don't look up our own address, we already know it */
                 continue;
@@ -1196,7 +1227,6 @@ static void ssg_group_lookup_ult(
         &l->member_state->addr);
     if (l->out == HG_SUCCESS)
     {
-        LL_APPEND(l->view->member_list, l->member_state);
         HASH_ADD(hh, l->view->member_map, id, sizeof(ssg_member_id_t),
             l->member_state);
     }
@@ -1214,15 +1244,13 @@ static void ssg_group_view_destroy(
     ssg_member_state_t *state, *tmp;
 
     /* destroy state for all group members */
-    LL_FOREACH_SAFE(view->member_list, state, tmp)
+    HASH_ITER(hh, view->member_map, state, tmp)
     {
-        LL_DELETE(view->member_list, state);
         HASH_DEL(view->member_map, state);
         free(state->addr_str);
         margo_addr_free(ssg_inst->mid,  state->addr);
         free(state);
     }
-    view->member_list = NULL;
     view->member_map = NULL;
 
     return;

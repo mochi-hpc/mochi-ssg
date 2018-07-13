@@ -4,8 +4,6 @@
  * See COPYRIGHT in top-level directory.
  */
 
-#include <ssg-config.h>
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -50,11 +48,6 @@ static void swim_update_suspected_members(
     ssg_group_t *g, double susp_timeout);
 static void swim_add_recent_member_update(
     ssg_group_t *g, swim_member_update_t update);
-static int swim_get_rand_group_member(
-    ssg_group_t *g, ssg_member_id_t *member_id);
-static int swim_get_rand_group_member_set(
-    ssg_group_t *g, ssg_member_id_t *member_ids, int num_members,
-    ssg_member_id_t excluded_id);
 #endif
 
 /******************************************************
@@ -603,53 +596,5 @@ static void swim_add_recent_member_update(
     LL_APPEND(*recent_update_list_p, update_link);
 
     return;
-}
-
-static int swim_get_rand_group_member(
-    ssg_group_t *g, ssg_member_id_t *member_id)
-{
-    int ret = swim_get_rand_group_member_set(g, member_id, 1,
-        SSG_MEMBER_ID_INVALID);
-
-    return(ret);
-}
-
-static int swim_get_rand_group_member_set(
-    ssg_group_t *g, ssg_member_id_t *member_ids, int num_members,
-    ssg_member_id_t excluded_id)
-{
-    unsigned int i, j, rand_ndx = 0;
-    ssg_member_id_t r, rand_member;
-
-    if(num_members == 0)
-        return(0);
-
-    /* TODO: what data structure could we use to avoid looping to look
-     * for a set of random ranks
-     */
-    do
-    {
-        r = rand() % g->view.size;
-        for(i = 0; i < g->view.size; i++)
-        {
-            rand_member = (r + i) % g->view.size;
-            if(rand_member == g->self_id || rand_member == excluded_id ||
-                !(g->view.member_states[rand_member].is_member))
-                continue;
-            for(j = 0; j < rand_ndx; j++)
-            {
-                if(rand_member == member_ids[j])
-                    break;
-            }
-            if(j == rand_ndx)
-                break;
-        }
-        if(i == g->view.size)
-            break;
-
-        member_ids[rand_ndx++] = rand_member;
-    } while((int)rand_ndx < num_members);
-
-    return(rand_ndx);
 }
 #endif

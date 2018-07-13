@@ -65,7 +65,6 @@ typedef struct ssg_group_descriptor
 typedef struct ssg_group_view
 {
     unsigned int size;
-    ssg_member_state_t *member_list;
     ssg_member_state_t *member_map;
 } ssg_group_view_t;
 
@@ -76,6 +75,7 @@ typedef struct ssg_group
     ssg_group_view_t view;
     ssg_group_descriptor_t *descriptor;
     swim_context_t *swim_ctx;
+    ssg_member_state_t *member_list;
     ssg_membership_update_cb update_cb;
     void *update_cb_dat;
     UT_hash_handle hh;

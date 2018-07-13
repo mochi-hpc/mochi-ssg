@@ -18,6 +18,8 @@
 #include "swim-fd.h"
 #include "swim-fd-internal.h"
 
+#if 0
+
 /* NOTE these defines must be kept in sync with defs in
  * ssg.h & swim-internal.h
  */
@@ -443,3 +445,4 @@ static hg_return_t hg_proc_swim_message_t(hg_proc_t proc, void *data)
 
     return(hret);
 }
+#endif
