@@ -3,7 +3,6 @@
  *
  * See COPYRIGHT in top-level directory.
  */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -57,6 +56,7 @@ static void swim_add_recent_member_update(
 swim_context_t * swim_init(
     margo_instance_id mid,
     void * group_data,
+    swim_member_id_t self_id,
     swim_group_mgmt_callbacks_t swim_callbacks,
     int active)
 {
@@ -69,11 +69,12 @@ swim_context_t * swim_init(
     memset(swim_ctx, 0, sizeof(*swim_ctx));
     swim_ctx->mid = mid;
     swim_ctx->group_data = group_data;
+    swim_ctx->self_id = self_id;
+    swim_ctx->self_inc_nr = 0;
     swim_ctx->swim_callbacks = swim_callbacks;
 
     /* initialize SWIM context */
     margo_get_handler_pool(swim_ctx->mid, &swim_ctx->swim_pool);
-    swim_ctx->dping_target_addr = HG_ADDR_NULL;
     for(i = 0; i < SWIM_MAX_SUBGROUP_SIZE; i++)
         swim_ctx->iping_subgroup_addrs[i] = HG_ADDR_NULL;
 
@@ -82,10 +83,7 @@ swim_context_t * swim_init(
     swim_ctx->prot_susp_timeout = SWIM_DEF_SUSPECT_TIMEOUT;
     swim_ctx->prot_subgroup_sz = SWIM_DEF_SUBGROUP_SIZE;
 
-    /* XXX */
-#if 0
-    swim_register_ping_rpcs(g);
-#endif
+    swim_register_ping_rpcs(swim_ctx);
 
     if(active)
     {
@@ -110,11 +108,11 @@ static void swim_prot_ult(
 
     assert(swim_ctx != NULL);
 
-#if 0
-    SSG_DEBUG(g, "SWIM: protocol start (period_len=%.4f, susp_timeout=%d, subgroup_size=%d)\n",
+    SWIM_DEBUG(swim_ctx,
+        "protocol start (period_len=%.4f, susp_timeout=%d, subgroup_size=%d)\n",
         swim_ctx->prot_period_len, swim_ctx->prot_susp_timeout,
         swim_ctx->prot_subgroup_sz);
-#endif
+
     while(!(swim_ctx->shutdown_flag))
     {
         /* spawn a ULT to run this tick */
@@ -128,9 +126,9 @@ static void swim_prot_ult(
         /* sleep for a protocol period length */
         margo_thread_sleep(swim_ctx->mid, swim_ctx->prot_period_len);
     }
-#if 0
-    SSG_DEBUG(g, "SWIM: protocol shutdown\n");
-#endif
+
+    SWIM_DEBUG(swim_ctx, "protocol shutdown\n");
+
     return;
 }
 
@@ -160,23 +158,21 @@ static void swim_tick_ult(
 #endif
 
     /* pick a random member from view and ping */
-    ret = swim_ctx->swim_callbacks.get_dping_target(swim_ctx->group_data,
-        &swim_ctx->dping_target_addr, &swim_ctx->dping_target_state);
+    ret = swim_ctx->swim_callbacks.get_dping_target(
+            swim_ctx->group_data,
+            &swim_ctx->dping_target_info);
     if(ret != 0)
     {
         /* no available members, back out */
-#if 0
-        SSG_DEBUG(g, "SWIM: no group members available to dping\n");
-#endif
+        SWIM_DEBUG(swim_ctx, "no group members available to dping\n");
         return;
     }
 
     /* TODO: calculate estimated RTT using sliding window of past RTTs */
     swim_ctx->dping_timeout = 250.0;
 
-#if 0
     /* kick off dping request ULT */
-    swim_ctx->ping_target_acked = 0;
+    swim_ctx->dping_target_acked = 0;
     ret = ABT_thread_create(swim_ctx->swim_pool, swim_dping_send_ult, swim_ctx,
         ABT_THREAD_ATTR_NULL, NULL);
     if(ret != ABT_SUCCESS)
@@ -186,8 +182,9 @@ static void swim_tick_ult(
     }
 
     /* sleep for an RTT and wait for an ack for this dping req */
-    margo_thread_sleep(ssg_inst->mid, swim_ctx->dping_timeout);
+    margo_thread_sleep(swim_ctx->mid, swim_ctx->dping_timeout);
 
+#if 0
     /* if we don't hear back from the target after an RTT, kick off
      * a set of indirect pings to a subgroup of group members
      */

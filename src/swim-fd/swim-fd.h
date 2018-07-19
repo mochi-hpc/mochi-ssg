@@ -17,6 +17,7 @@ extern "C" {
 typedef struct swim_context swim_context_t;
 
 /* swim member specific types */
+typedef uint64_t swim_member_id_t;
 typedef uint32_t swim_member_inc_nr_t;
 typedef enum swim_member_status
 {
@@ -31,6 +32,13 @@ typedef struct swim_member_state
     swim_member_status_t status;
 } swim_member_state_t;
 
+typedef struct swim_dping_target_info
+{
+    swim_member_id_t id;
+    hg_addr_t addr;
+    swim_member_state_t swim_state;
+} swim_dping_target_info_t;
+
 #define SWIM_MEMBER_STATE_INIT(__ms) do { \
     __ms.inc_nr = 0; \
     __ms.status = SWIM_MEMBER_ALIVE; \
@@ -41,8 +49,7 @@ typedef struct swim_group_mgmt_callbacks
 {
     int (*get_dping_target)(
             void *group_data,
-            hg_addr_t *target_addr,
-            swim_member_state_t *target_ms
+            swim_dping_target_info_t *target_info
             );
     /* get_rand_iping_subgroup */
 } swim_group_mgmt_callbacks_t;
@@ -51,6 +58,7 @@ typedef struct swim_group_mgmt_callbacks
 swim_context_t * swim_init(
     margo_instance_id mid,
     void * group_data,
+    swim_member_id_t self_id,
     swim_group_mgmt_callbacks_t swim_callbacks,
     int active);
 

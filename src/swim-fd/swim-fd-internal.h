@@ -23,12 +23,31 @@ extern "C" {
 #define SWIM_MAX_PIGGYBACK_ENTRIES      8
 #define SWIM_MAX_PIGGYBACK_TX_COUNT     50
 
+/* debug printing macro for SSG */
+#ifdef DEBUG
+#define SWIM_DEBUG(__swim_ctx, __fmt, ...) do { \
+    double __now = ABT_get_wtime(); \
+    fprintf(stdout, "%.6lf <%020"PRIu64">: SWIM: " __fmt, __now, \
+        __swim_ctx->self_id, ## __VA_ARGS__); \
+    fflush(stdout); \
+} while(0)
+#else
+#define SWIM_DEBUG(__swim_ctx, __fmt, ...) do { \
+} while(0)
+#endif
+
 /* internal swim context implementation */
 struct swim_context
 {
     margo_instance_id mid;
     /* void pointer to user group data */
     void *group_data;
+    /* XXX other state */
+    swim_member_id_t self_id;
+    swim_member_inc_nr_t self_inc_nr;
+    swim_dping_target_info_t dping_target_info;
+    int dping_target_acked;
+    double dping_timeout;
     /* XXX group mgmt callbacks */
     swim_group_mgmt_callbacks_t swim_callbacks;
     /* argobots pool for launching SWIM threads */
@@ -41,10 +60,6 @@ struct swim_context
     int prot_subgroup_sz;
     /* SWIM internal state */
     int shutdown_flag;
-    hg_addr_t dping_target_addr;
-    swim_member_state_t dping_target_state;
-    int dping_target_acked;
-    double dping_timeout;
     hg_addr_t iping_subgroup_addrs[SWIM_MAX_SUBGROUP_SIZE];
 #if 0
     /* current membership state */
@@ -62,12 +77,14 @@ struct swim_member_update
     swim_member_status_t status;
     swim_member_inc_nr_t inc_nr;
 };
+#endif
 
 /* SWIM ping function prototypes */
 void swim_register_ping_rpcs(
-    ssg_group_t * g);
+    swim_context_t * swim_ctx);
 void swim_dping_send_ult(
     void * t_arg);
+#if 0
 void swim_iping_send_ult(
     void * t_arg);
 

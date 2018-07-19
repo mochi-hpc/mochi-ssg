@@ -125,15 +125,13 @@ int ssg_finalize()
 
 static int ssg_get_swim_dping_target(
     void *group_data,
-    hg_addr_t *target_addr,
-    swim_member_state_t *target_swim_ms);
+    swim_dping_target_info_t *target_info);
 static void ssg_gen_rand_member_list(
     ssg_group_t *g);
 
 static int ssg_get_swim_dping_target(
     void *group_data,
-    hg_addr_t *target_addr,
-    swim_member_state_t *target_swim_ms)
+    swim_dping_target_info_t *target_info)
 {
     ssg_group_t *g = (ssg_group_t *)group_data;
     ssg_member_state_t *target_ms;
@@ -147,10 +145,9 @@ static int ssg_get_swim_dping_target(
     /* pull random member off head of list and return addr */
     target_ms = g->member_list;
     LL_DELETE(g->member_list, target_ms);
-    *target_addr = target_ms->addr;
-    *target_swim_ms = target_ms->swim_state;
-
-    printf("%lu: pinging %lu\n", g->self_id, target_ms->id);
+    target_info->id = (swim_member_id_t)target_ms->id;
+    target_info->addr = target_ms->addr;
+    target_info->swim_state = target_ms->swim_state;
 
     return 0;
 }
@@ -236,7 +233,8 @@ ssg_group_id_t ssg_group_create(
     swim_group_mgmt_callbacks_t swim_callbacks = {
         .get_dping_target = &ssg_get_swim_dping_target,
     };
-    g->swim_ctx = swim_init(ssg_inst->mid, g, swim_callbacks, 1);
+    g->swim_ctx = swim_init(ssg_inst->mid, g, (swim_member_id_t)g->self_id,
+        swim_callbacks, 1);
     if (g->swim_ctx == NULL) goto fini;
 
     /* everything successful -- set the output group identifier, which is just
