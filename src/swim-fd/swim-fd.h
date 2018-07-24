@@ -32,13 +32,6 @@ typedef struct swim_member_state
     swim_member_status_t status;
 } swim_member_state_t;
 
-typedef struct swim_dping_target_info
-{
-    swim_member_id_t id;
-    hg_addr_t addr;
-    swim_member_state_t swim_state;
-} swim_dping_target_info_t;
-
 #define SWIM_MEMBER_STATE_INIT(__ms) do { \
     __ms.inc_nr = 0; \
     __ms.status = SWIM_MEMBER_ALIVE; \
@@ -47,11 +40,28 @@ typedef struct swim_dping_target_info
 /* XXX rename once more clear what all is here */
 typedef struct swim_group_mgmt_callbacks
 {
+    /* XXX RET VALS */
     int (*get_dping_target)(
             void *group_data,
-            swim_dping_target_info_t *target_info
+            swim_member_id_t *target_id,
+            swim_member_inc_nr_t *inc_nr,
+            hg_addr_t *target_addr
             );
-    /* get_rand_iping_subgroup */
+    int (*get_iping_targets)(
+            void *group_data,
+            swim_member_id_t *target_ids,
+            hg_addr_t *target_addrs
+            );
+    void (*get_member_addr)(
+            void *group_data,
+            swim_member_id_t id,
+            hg_addr_t *addr
+            );
+    void (*get_member_state)(
+            void *group_data,
+            swim_member_id_t id,
+            swim_member_state_t **state
+            );
 } swim_group_mgmt_callbacks_t;
 
 /* Initialize SWIM */

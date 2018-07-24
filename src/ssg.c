@@ -125,13 +125,30 @@ int ssg_finalize()
 
 static int ssg_get_swim_dping_target(
     void *group_data,
-    swim_dping_target_info_t *target_info);
+    swim_member_id_t *target_id,
+    swim_member_inc_nr_t *target_inc_nr,
+    hg_addr_t *target_addr);
+static int ssg_get_swim_iping_targets(
+    void *group_data,
+    swim_member_id_t *target_ids,
+    hg_addr_t *target_addrs);
+static void ssg_get_swim_member_addr(
+    void *group_data,
+    swim_member_id_t id,
+    hg_addr_t *target_addr);
+static void ssg_get_swim_member_state(
+    void *group_data,
+    swim_member_id_t id,
+    swim_member_state_t *state);
+
 static void ssg_gen_rand_member_list(
     ssg_group_t *g);
 
 static int ssg_get_swim_dping_target(
     void *group_data,
-    swim_dping_target_info_t *target_info)
+    swim_member_id_t *target_id,
+    swim_member_inc_nr_t *target_inc_nr,
+    hg_addr_t *target_addr)
 {
     ssg_group_t *g = (ssg_group_t *)group_data;
     ssg_member_state_t *target_ms;
@@ -145,9 +162,21 @@ static int ssg_get_swim_dping_target(
     /* pull random member off head of list and return addr */
     target_ms = g->member_list;
     LL_DELETE(g->member_list, target_ms);
-    target_info->id = (swim_member_id_t)target_ms->id;
-    target_info->addr = target_ms->addr;
-    target_info->swim_state = target_ms->swim_state;
+    *target_id = (swim_member_id_t)target_ms->id;
+    *target_inc_nr = target_ms->swim_state.inc_nr;
+    *target_addr = target_ms->addr;
+
+    return 0;
+}
+
+static int ssg_get_swim_iping_targets(
+    void *group_data,
+    swim_member_id_t *target_id,
+    hg_addr_t *target_addrs)
+{
+    ssg_group_t *g = (ssg_group_t *)group_data;
+
+    assert(g != NULL);
 
     return 0;
 }
@@ -161,6 +190,44 @@ static void ssg_gen_rand_member_list(ssg_group_t *g)
     {
         LL_APPEND(g->member_list, ms);
     }
+
+    return;
+}
+
+static void ssg_get_swim_member_addr(
+    void *group_data,
+    swim_member_id_t id,
+    hg_addr_t *addr)
+{
+    ssg_group_t *g = (ssg_group_t *)group_data;
+    ssg_member_id_t ssg_id = (ssg_member_id_t)id;
+    ssg_member_state_t *ms;
+
+    assert(g != NULL);
+
+    HASH_FIND(hh, g->view.member_map, &ssg_id, sizeof(ssg_member_id_t), ms);
+    /* XXX ASSERT */
+
+    *addr = ms->addr;
+
+    return;
+}
+
+static void ssg_get_swim_member_state(
+    void *group_data,
+    swim_member_id_t id,
+    swim_member_state_t *state)
+{
+    ssg_group_t *g = (ssg_group_t *)group_data;
+    ssg_member_id_t ssg_id = (ssg_member_id_t)id;
+    ssg_member_state_t *ms;
+
+    assert(g != NULL);
+
+    HASH_FIND(hh, g->view.member_map, &ssg_id, sizeof(ssg_member_id_t), ms);
+    /* XXX ASSERT */
+
+    *state = ms->swim_state;
 
     return;
 }
@@ -232,6 +299,9 @@ ssg_group_id_t ssg_group_create(
     // due to timing skew of different ranks initializing swim
     swim_group_mgmt_callbacks_t swim_callbacks = {
         .get_dping_target = &ssg_get_swim_dping_target,
+        .get_iping_targets = &ssg_get_swim_iping_targets,
+        .get_member_addr = ssg_get_swim_member_addr,
+        .get_member_state = ssg_get_swim_member_state,
     };
     g->swim_ctx = swim_init(ssg_inst->mid, g, (swim_member_id_t)g->self_id,
         swim_callbacks, 1);

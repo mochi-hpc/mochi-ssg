@@ -14,13 +14,14 @@
 #include "swim-fd.h"
 #include "swim-fd-internal.h"
 
-#if 0
 typedef struct swim_suspect_member_link
 {
+    swim_member_id_t member_id;
     double susp_start;
     struct swim_suspect_member_link *next;
 } swim_suspect_member_link_t;
 
+#if 0
 typedef struct swim_member_update_link
 {
     swim_member_update_t update;
@@ -35,10 +36,11 @@ static void swim_prot_ult(
 static void swim_tick_ult(
     void *t_arg);
 
-#if 0
 /* SWIM group membership utility function prototypes */
 static void swim_suspect_member(
-    ssg_group_t *g, ssg_member_id_t member_id, swim_member_inc_nr_t inc_nr);
+    swim_context_t *swim_ctx, swim_member_id_t member_id,
+    swim_member_inc_nr_t inc_nr);
+#if 0
 static void swim_unsuspect_member(
     ssg_group_t *g, ssg_member_id_t member_id, swim_member_inc_nr_t inc_nr);
 static void swim_kill_member(
@@ -61,7 +63,7 @@ swim_context_t * swim_init(
     int active)
 {
     swim_context_t *swim_ctx;
-    int i, ret;
+    int ret;
 
     /* allocate structure for storing swim context */
     swim_ctx = malloc(sizeof(*swim_ctx));
@@ -72,16 +74,17 @@ swim_context_t * swim_init(
     swim_ctx->self_id = self_id;
     swim_ctx->self_inc_nr = 0;
     swim_ctx->swim_callbacks = swim_callbacks;
-
-    /* initialize SWIM context */
     margo_get_handler_pool(swim_ctx->mid, &swim_ctx->swim_pool);
-    for(i = 0; i < SWIM_MAX_SUBGROUP_SIZE; i++)
-        swim_ctx->iping_subgroup_addrs[i] = HG_ADDR_NULL;
 
     /* set protocol parameters */
     swim_ctx->prot_period_len = SWIM_DEF_PROTOCOL_PERIOD_LEN;
     swim_ctx->prot_susp_timeout = SWIM_DEF_SUSPECT_TIMEOUT;
     swim_ctx->prot_subgroup_sz = SWIM_DEF_SUBGROUP_SIZE;
+
+    /* NOTE: set this flag so we don't inadvertently suspect a member
+     * on the first iteration of the protocol
+     */
+    swim_ctx->ping_target_acked = 1;
 
     swim_register_ping_rpcs(swim_ctx);
 
@@ -149,18 +152,18 @@ static void swim_tick_ult(
     /* check whether the ping target from the previous protocol tick
      * ever successfully acked a (direct/indirect) ping request
      */
-    if((swim_ctx->ping_target != SSG_MEMBER_ID_INVALID) &&
-        !(swim_ctx->ping_target_acked))
+    if(!(swim_ctx->ping_target_acked))
     {
         /* no response from direct/indirect pings, suspect this member */
-        swim_suspect_member(g, swim_ctx->ping_target, swim_ctx->ping_target_inc_nr);
+        swim_suspect_member(swim_ctx, swim_ctx->dping_target_id,
+            swim_ctx->dping_target_inc_nr);
     }
 #endif
 
-    /* pick a random member from view and ping */
+    /* pick a random member from view to ping */
     ret = swim_ctx->swim_callbacks.get_dping_target(
-            swim_ctx->group_data,
-            &swim_ctx->dping_target_info);
+        swim_ctx->group_data, &swim_ctx->dping_target_id,
+        &swim_ctx->dping_target_inc_nr, &swim_ctx->dping_target_addr);
     if(ret != 0)
     {
         /* no available members, back out */
@@ -172,7 +175,7 @@ static void swim_tick_ult(
     swim_ctx->dping_timeout = 250.0;
 
     /* kick off dping request ULT */
-    swim_ctx->dping_target_acked = 0;
+    swim_ctx->ping_target_acked = 0;
     ret = ABT_thread_create(swim_ctx->swim_pool, swim_dping_send_ult, swim_ctx,
         ABT_THREAD_ATTR_NULL, NULL);
     if(ret != ABT_SUCCESS)
@@ -184,27 +187,26 @@ static void swim_tick_ult(
     /* sleep for an RTT and wait for an ack for this dping req */
     margo_thread_sleep(swim_ctx->mid, swim_ctx->dping_timeout);
 
-#if 0
     /* if we don't hear back from the target after an RTT, kick off
      * a set of indirect pings to a subgroup of group members
      */
     if(!(swim_ctx->ping_target_acked) && (swim_ctx->prot_subgroup_sz > 0))
     {
         /* get a random subgroup of members to send indirect pings to */
-        int this_subgroup_sz = swim_get_rand_group_member_set(g,
-            swim_ctx->subgroup_members, swim_ctx->prot_subgroup_sz,
-            swim_ctx->ping_target);
-        if(this_subgroup_sz == 0)
+        int iping_target_count = swim_ctx->swim_callbacks.get_iping_targets(
+            swim_ctx->group_data, swim_ctx->iping_target_ids, swim_ctx->iping_target_addrs);
+        if(iping_target_count == 0)
         {
             /* no available subgroup members, back out */
-            SSG_DEBUG(g, "SWIM: no subgroup members available to iping\n");
+            SWIM_DEBUG(swim_ctx, "no subgroup members available to iping\n");
             return;
         }
 
-        for(i = 0; i < this_subgroup_sz; i++)
+        swim_ctx->iping_target_ndx = 0;
+        for(i = 0; i < iping_target_count; i++)
         {
-            ret = ABT_thread_create(swim_ctx->prot_pool, swim_iping_send_ult, g,
-                ABT_THREAD_ATTR_NULL, NULL);
+            ret = ABT_thread_create(swim_ctx->swim_pool, swim_iping_send_ult,
+                swim_ctx, ABT_THREAD_ATTR_NULL, NULL);
             if(ret != ABT_SUCCESS)
             {
                 fprintf(stderr, "Error: unable to create ULT for SWIM iping send\n");
@@ -212,7 +214,6 @@ static void swim_tick_ult(
             }
         }
     }
-#endif
 
     return;
 }
@@ -345,33 +346,48 @@ void swim_apply_membership_updates(
 
     return;
 }
+#endif
 
 /*******************************************
  * SWIM group membership utility functions *
  *******************************************/
 
+#if 0
 static void swim_suspect_member(
-    ssg_group_t *g, ssg_member_id_t member_id, swim_member_inc_nr_t inc_nr)
+    swim_context_t *swim_ctx, swim_member_id_t member_id, swim_member_inc_nr_t inc_nr)
 {
-    swim_context_t *swim_ctx = g->swim_ctx;
+    swim_member_state_t *cur_swim_state;
     swim_suspect_member_link_t *iter, *tmp;
     swim_suspect_member_link_t *suspect_link = NULL;
     swim_suspect_member_link_t *suspect_list_p =
         (swim_suspect_member_link_t *)swim_ctx->suspect_list;
     swim_member_update_t update;
 
-    /* ignore updates for dead members */
+    /* if there is no suspicion timeout, just kill the member */
+    if(swim_ctx->prot_susp_timeout == 0)
+    {
 #if 0
-    if(!(g->view.member_states[member_id].is_member))
-        return;
+        swim_kill_member(g, member_id, inc_nr);
 #endif
+        return;
+    }
+
+    /* XXX MUTEX */
+
+    /* get current swim state for member */
+    swim_ctx->swim_callbacks.get_member_state(
+        swim_ctx, member_id, &cur_swim_state);
+
+    /* ignore updates for dead members */
+    if(cur_swim_state.status == SWIM_MEMBER_DEAD)
+        return;
 
     /* determine if this member is already suspected */
     LL_FOREACH_SAFE(suspect_list_p, iter, tmp)
     {
         if(iter->member_id == member_id)
         {
-            if(inc_nr <= swim_ctx->member_inc_nrs[member_id])
+            if(inc_nr <= cur_swim_state.inc_nr)
             {
                 /* ignore a suspicion in an incarnation number less than
                  * or equal to the current suspicion's incarnation
@@ -388,18 +404,10 @@ static void swim_suspect_member(
     }
 
     /* ignore suspicions for a member that is alive in a newer incarnation */
-    if((suspect_link == NULL) && (inc_nr < swim_ctx->member_inc_nrs[member_id]))
+    if((suspect_link == NULL) && (inc_nr < cur_swim_state.inc_nr))
         return;
 
-    /* if there is no suspicion timeout, just kill the member */
-    if(swim_ctx->prot_susp_timeout == 0)
-    {
-        swim_kill_member(g, member_id, inc_nr);
-        return;
-    }
-
-    SSG_DEBUG(g, "SWIM: member %d SUSPECT (inc_nr=%d)\n",
-        (int)member_id, (int)inc_nr);
+    SWIM_DEBUG(swim_ctx, "member %lu SUSPECT (inc_nr=%lu)\n", member_id, inc_nr);
 
     if(suspect_link == NULL)
     {
@@ -417,9 +425,10 @@ static void swim_suspect_member(
     /* add to end of suspect list */
     LL_APPEND(suspect_list_p, suspect_link);
 
-    /* update swim membership state */
+    /* XXX XXX XXX XXX update swim membership state */
     swim_ctx->member_inc_nrs[member_id] = inc_nr;
 
+#if 0
     /* add this update to recent update list so it will be piggybacked
      * on future protocol messages
      */
@@ -427,6 +436,7 @@ static void swim_suspect_member(
     update.status = SWIM_MEMBER_SUSPECT;
     update.inc_nr = inc_nr;
     swim_add_recent_member_update(g, update);
+#endif
 
     return;
 }
