@@ -371,7 +371,7 @@ static hg_return_t hg_proc_swim_message_t(hg_proc_t proc, void *data)
 {
     swim_message_t *msg = (swim_message_t *)data;
     hg_return_t hret = HG_PROTOCOL_ERROR;
-    int i;
+    hg_size_t i;
 
     switch(hg_proc_get_op(proc))
     {
@@ -388,7 +388,13 @@ static hg_return_t hg_proc_swim_message_t(hg_proc_t proc, void *data)
                 hret = HG_PROTOCOL_ERROR;
                 return hret;
             }
-            for(i = 0; i < SWIM_MAX_PIGGYBACK_ENTRIES; i++)
+            hret = hg_proc_hg_size_t(proc, &(msg->pb_buf_count));
+            if(hret != HG_SUCCESS)
+            {
+                hret = HG_PROTOCOL_ERROR;
+                return hret;
+            }
+            for(i = 0; i < msg->pb_buf_count; i++)
             {
                 hret = hg_proc_swim_member_update_t(proc, &(msg->pb_buf[i]));
                 if(hret != HG_SUCCESS)
@@ -411,7 +417,13 @@ static hg_return_t hg_proc_swim_message_t(hg_proc_t proc, void *data)
                 hret = HG_PROTOCOL_ERROR;
                 return hret;
             }
-            for(i = 0; i < SWIM_MAX_PIGGYBACK_ENTRIES; i++)
+            hret = hg_proc_hg_size_t(proc, &(msg->pb_buf_count));
+            if(hret != HG_SUCCESS)
+            {
+                hret = HG_PROTOCOL_ERROR;
+                return hret;
+            }
+            for(i = 0; i < msg->pb_buf_count; i++)
             {
                 hret = hg_proc_swim_member_update_t(proc, &(msg->pb_buf[i]));
                 if(hret != HG_SUCCESS)
