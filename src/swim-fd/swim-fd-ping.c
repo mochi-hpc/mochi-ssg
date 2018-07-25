@@ -31,6 +31,7 @@ typedef struct swim_message_s
 {
     swim_member_id_t source_id;
     swim_member_inc_nr_t source_inc_nr;
+    hg_size_t pb_buf_count;
     swim_member_update_t pb_buf[SWIM_MAX_PIGGYBACK_ENTRIES]; //TODO: dynamic array?
 } swim_message_t;
 
@@ -342,28 +343,25 @@ static void swim_pack_message(swim_context_t *swim_ctx, swim_message_t *msg)
     msg->source_id = swim_ctx->self_id;
     msg->source_inc_nr = swim_ctx->self_inc_nr;
 
-#if 0
     /* piggyback a set of membership states on this message */
-    swim_retrieve_membership_updates(g, msg->pb_buf, SWIM_MAX_PIGGYBACK_ENTRIES);
-#endif
+    msg->pb_buf_count = SWIM_MAX_PIGGYBACK_ENTRIES;
+    swim_retrieve_membership_updates(swim_ctx, msg->pb_buf, &msg->pb_buf_count);
 
     return;
 }
 
 static void swim_unpack_message(swim_context_t *swim_ctx, swim_message_t *msg)
 {
-#if 0
     swim_member_update_t sender_update;
 
     /* apply (implicit) sender update */
     sender_update.id = msg->source_id;
     sender_update.status = SWIM_MEMBER_ALIVE;
     sender_update.inc_nr = msg->source_inc_nr;
-    swim_apply_membership_updates(g, &sender_update, 1);
+    swim_apply_membership_updates(swim_ctx, &sender_update, 1);
 
     /* update membership status using piggybacked membership updates */
-    swim_apply_membership_updates(g, msg->pb_buf, SWIM_MAX_PIGGYBACK_ENTRIES);
-#endif
+    swim_apply_membership_updates(swim_ctx, msg->pb_buf, msg->pb_buf_count);
 
     return;
 }

@@ -139,7 +139,7 @@ static void ssg_get_swim_member_addr(
 static void ssg_get_swim_member_state(
     void *group_data,
     swim_member_id_t id,
-    swim_member_state_t *state);
+    swim_member_state_t **state);
 
 static void ssg_gen_rand_member_list(
     ssg_group_t *g);
@@ -216,7 +216,7 @@ static void ssg_get_swim_member_addr(
 static void ssg_get_swim_member_state(
     void *group_data,
     swim_member_id_t id,
-    swim_member_state_t *state)
+    swim_member_state_t **state)
 {
     ssg_group_t *g = (ssg_group_t *)group_data;
     ssg_member_id_t ssg_id = (ssg_member_id_t)id;
@@ -227,7 +227,7 @@ static void ssg_get_swim_member_state(
     HASH_FIND(hh, g->view.member_map, &ssg_id, sizeof(ssg_member_id_t), ms);
     /* XXX ASSERT */
 
-    *state = ms->swim_state;
+    *state = &ms->swim_state;
 
     return;
 }

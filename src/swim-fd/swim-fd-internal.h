@@ -58,6 +58,8 @@ struct swim_context
     int ping_target_acked;
     /* argobots pool for launching SWIM threads */
     ABT_pool swim_pool;
+    /* mutex for modifying SWIM group state */
+    ABT_mutex swim_mutex;
     /* swim protocol ULT handle */
     ABT_thread prot_thread;
     /* SWIM protocol parameters */
@@ -66,9 +68,7 @@ struct swim_context
     int prot_subgroup_sz;
     /* current membership state */
     void *suspect_list;
-#if 0
     void *recent_update_list;
-#endif
     /* XXX */
     int shutdown_flag;
 };
@@ -88,17 +88,15 @@ void swim_dping_send_ult(
 void swim_iping_send_ult(
     void * t_arg);
 
-#if 0
 /* SWIM membership update function prototypes */
 void swim_retrieve_membership_updates(
-    ssg_group_t * g,
-    swim_member_update_t * updates,
-    int update_count);
+    swim_context_t *swim_ctx,
+    swim_member_update_t *updates,
+    hg_size_t *update_count);
 void swim_apply_membership_updates(
-    ssg_group_t * g,
-    swim_member_update_t * updates,
-    int update_count);
-#endif
+    swim_context_t *swim_ctx,
+    swim_member_update_t *updates,
+    hg_size_t update_count);
 
 #ifdef __cplusplus
 }
