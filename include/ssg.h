@@ -42,14 +42,14 @@ enum ssg_membership_update_type
     SSG_MEMBER_REMOVE
 };
 
-typedef struct ssg_membership_update
+typedef struct ssg_member_update
 {
-    ssg_member_id_t member;
+    ssg_member_id_t id;
     int type;
-} ssg_membership_update_t;
+} ssg_member_update_t;
 
 typedef void (*ssg_membership_update_cb)(
-    ssg_membership_update_t, void *);
+    ssg_member_update_t, void *);
 
 /* HG proc routine prototypes for SSG types */
 #define hg_proc_ssg_member_id_t hg_proc_int64_t

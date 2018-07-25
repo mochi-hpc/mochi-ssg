@@ -123,9 +123,6 @@ int ssg_group_attach_send(
     char ** group_name,
     int * group_size, 
     void ** view_buf);
-void ssg_apply_membership_update(
-    ssg_group_t *g,
-    ssg_membership_update_t update);
 
 /* XXX: is this right? can this be a global? */
 extern ssg_instance_t *ssg_inst; 

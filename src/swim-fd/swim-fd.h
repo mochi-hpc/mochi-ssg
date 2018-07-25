@@ -32,6 +32,12 @@ typedef struct swim_member_state
     swim_member_status_t status;
 } swim_member_state_t;
 
+typedef struct swim_member_update
+{
+    swim_member_id_t id;
+    swim_member_state_t state;
+} swim_member_update_t;
+
 #define SWIM_MEMBER_STATE_INIT(__ms) do { \
     __ms.inc_nr = 0; \
     __ms.status = SWIM_MEMBER_ALIVE; \
@@ -61,6 +67,10 @@ typedef struct swim_group_mgmt_callbacks
             void *group_data,
             swim_member_id_t id,
             swim_member_state_t **state
+            );
+    void (*apply_member_update)(
+            void *group_data,
+            swim_member_update_t update
             );
 } swim_group_mgmt_callbacks_t;
 

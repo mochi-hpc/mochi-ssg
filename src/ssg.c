@@ -140,6 +140,9 @@ static void ssg_get_swim_member_state(
     void *group_data,
     swim_member_id_t id,
     swim_member_state_t **state);
+static void ssg_apply_swim_member_update(
+    void *group_data,
+    swim_member_update_t update);
 
 static void ssg_gen_rand_member_list(
     ssg_group_t *g);
@@ -232,6 +235,42 @@ static void ssg_get_swim_member_state(
     return;
 }
 
+static void ssg_apply_swim_member_update(
+    void *group_data,
+    swim_member_update_t update)
+{
+    ssg_group_t *g = (ssg_group_t *)group_data;
+    ssg_member_id_t ssg_id = (ssg_member_id_t)update.id;
+    ssg_member_state_t *ms;
+    ssg_member_update_t ssg_update;
+
+    assert(g != NULL);
+
+    if (update.state.status == SWIM_MEMBER_DEAD)
+    {
+        HASH_FIND(hh, g->view.member_map, &ssg_id, sizeof(ssg_member_id_t), ms);
+        if (ms)
+        {
+            /* update group, but don't completely remove state */
+            LL_DELETE(g->member_list, ms);
+            margo_addr_free(ssg_inst->mid, ms->addr);
+            g->view.size--;
+            ssg_update.id = ssg_id;
+            ssg_update.type = SSG_MEMBER_REMOVE;
+        }
+    }
+    else
+    {
+        assert(0); /* XXX: dynamic group joins aren't possible yet */
+    }
+
+    /* execute user-supplied membership update callback, if given */
+    if (g->update_cb)
+        g->update_cb(ssg_update, g->update_cb_dat);
+
+    return;
+}
+
 ssg_group_id_t ssg_group_create(
     const char * group_name,
     const char * const group_addr_strs[],
@@ -302,6 +341,7 @@ ssg_group_id_t ssg_group_create(
         .get_iping_targets = &ssg_get_swim_iping_targets,
         .get_member_addr = ssg_get_swim_member_addr,
         .get_member_state = ssg_get_swim_member_state,
+        .apply_member_update = ssg_apply_swim_member_update,
     };
     g->swim_ctx = swim_init(ssg_inst->mid, g, (swim_member_id_t)g->self_id,
         swim_callbacks, 1);
@@ -1028,39 +1068,6 @@ void ssg_group_dump(
 /************************************
  *** SSG internal helper routines ***
  ************************************/
-
-void ssg_apply_membership_update(
-    ssg_group_t *g,
-    ssg_membership_update_t update)
-{
-    ssg_member_state_t *member_state;
-
-    if(!ssg_inst || !g) return;
-
-    if (update.type == SSG_MEMBER_REMOVE)
-    {
-        HASH_FIND(hh, g->view.member_map, &update.member, sizeof(ssg_member_id_t),
-            member_state);
-        if (member_state)
-        {
-            HASH_DELETE(hh, g->view.member_map, member_state);
-            margo_addr_free(ssg_inst->mid, member_state->addr);
-            free(member_state->addr_str);
-            free(member_state);
-            g->view.size--;
-        }
-    }
-    else
-    {
-        assert(0); /* XXX: dynamic group joins aren't possible yet */
-    }
-
-    /* execute user-supplied membership update callback, if given */
-    if (g->update_cb)
-        g->update_cb(update, g->update_cb_dat);
-
-    return;
-}
 
 static ssg_group_descriptor_t * ssg_group_descriptor_create(
     uint64_t name_hash, const char * leader_addr_str, int owner_status)

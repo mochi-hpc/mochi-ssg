@@ -279,12 +279,12 @@ void swim_apply_membership_updates(
 
     for(i = 0; i < update_count; i++)
     {
-        switch(updates[i].status)
+        switch(updates[i].state.status)
         {
             case SWIM_MEMBER_ALIVE:
                 /* ignore alive updates for self */
                 if(updates[i].id != swim_ctx->self_id)
-                    swim_unsuspect_member(swim_ctx, updates[i].id, updates[i].inc_nr);
+                    swim_unsuspect_member(swim_ctx, updates[i].id, updates[i].state.inc_nr);
                 break;
             case SWIM_MEMBER_SUSPECT:
                 if(updates[i].id == swim_ctx->self_id)
@@ -292,7 +292,7 @@ void swim_apply_membership_updates(
                     /* increment our incarnation number if we are suspected
                      * in the current incarnation
                      */
-                    if(updates[i].inc_nr == swim_ctx->self_inc_nr)
+                    if(updates[i].state.inc_nr == swim_ctx->self_inc_nr)
                     {
                         swim_ctx->self_inc_nr++;
                         SWIM_DEBUG(swim_ctx, "self SUSPECT received (new inc_nr=%u)\n",
@@ -301,7 +301,7 @@ void swim_apply_membership_updates(
                 }
                 else
                 {
-                    swim_suspect_member(swim_ctx, updates[i].id, updates[i].inc_nr);
+                    swim_suspect_member(swim_ctx, updates[i].id, updates[i].state.inc_nr);
                 }
                 break;
             case SWIM_MEMBER_DEAD:
@@ -309,13 +309,13 @@ void swim_apply_membership_updates(
                 if(updates[i].id == swim_ctx->self_id)
                 {
                     SWIM_DEBUG(swim_ctx, "self confirmed DEAD (inc_nr=%u)\n",
-                        updates[i].inc_nr);
+                        updates[i].state.inc_nr);
                     swim_finalize(swim_ctx);
                     return;
                 }
                 else
                 {
-                    swim_kill_member(swim_ctx, updates[i].id, updates[i].inc_nr);
+                    swim_kill_member(swim_ctx, updates[i].id, updates[i].state.inc_nr);
                 }
                 break;
             default:
@@ -420,8 +420,8 @@ static void swim_suspect_member(
      * on future protocol messages
      */
     update.id = member_id;
-    update.status = SWIM_MEMBER_SUSPECT;
-    update.inc_nr = inc_nr;
+    update.state.status = SWIM_MEMBER_SUSPECT;
+    update.state.inc_nr = inc_nr;
     swim_add_recent_member_update(swim_ctx, update);
 
     ABT_mutex_unlock(swim_ctx->swim_mutex);
@@ -480,8 +480,8 @@ static void swim_unsuspect_member(
      * on future protocol messages
      */
     update.id = member_id;
-    update.status = SWIM_MEMBER_ALIVE;
-    update.inc_nr = inc_nr;
+    update.state.status = SWIM_MEMBER_ALIVE;
+    update.state.inc_nr = inc_nr;
     swim_add_recent_member_update(swim_ctx, update);
 
     ABT_mutex_unlock(swim_ctx->swim_mutex);
@@ -536,8 +536,8 @@ static void swim_kill_member(
      * on future protocol messages
      */
     update.id = member_id;
-    update.status = SWIM_MEMBER_DEAD;
-    update.inc_nr = inc_nr;
+    update.state.status = SWIM_MEMBER_DEAD;
+    update.state.inc_nr = inc_nr;
     swim_add_recent_member_update(swim_ctx, update);
 
 #if 0

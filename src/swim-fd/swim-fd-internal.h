@@ -73,13 +73,6 @@ struct swim_context
     int shutdown_flag;
 };
 
-typedef struct swim_member_update
-{
-    swim_member_id_t id;
-    swim_member_status_t status;
-    swim_member_inc_nr_t inc_nr;
-} swim_member_update_t;
-
 /* SWIM ping function prototypes */
 void swim_register_ping_rpcs(
     swim_context_t * swim_ctx);
