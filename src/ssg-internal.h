@@ -31,8 +31,8 @@ extern "C" {
 #ifdef DEBUG
 #define SSG_DEBUG(__g, __fmt, ...) do { \
     double __now = ABT_get_wtime(); \
-    fprintf(stdout, "%.6lf <%s:%"PRIu64">: " __fmt, __now, \
-        __g->name, __g->self_id, ## __VA_ARGS__); \
+    fprintf(stdout, "[%.6lf] %20"PRIu64" (%s): SSG " __fmt, __now, \
+        __g->self_id, __g->name, ## __VA_ARGS__); \
     fflush(stdout); \
 } while(0)
 #else

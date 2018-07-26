@@ -352,7 +352,7 @@ static void swim_suspect_member(
 
     /* get current swim state for member */
     swim_ctx->swim_callbacks.get_member_state(
-        swim_ctx, member_id, &cur_swim_state);
+        swim_ctx->group_data, member_id, &cur_swim_state);
 
     /* ignore updates for dead members */
     if(cur_swim_state->status == SWIM_MEMBER_DEAD)
@@ -443,7 +443,7 @@ static void swim_unsuspect_member(
 
     /* get current swim state for member */
     swim_ctx->swim_callbacks.get_member_state(
-        swim_ctx, member_id, &cur_swim_state);
+        swim_ctx->group_data, member_id, &cur_swim_state);
 
     /* ignore updates for dead members */
     if(cur_swim_state->status == SWIM_MEMBER_DEAD)
@@ -497,16 +497,13 @@ static void swim_kill_member(
     swim_suspect_member_link_t *suspect_list_p =
         (swim_suspect_member_link_t *)swim_ctx->suspect_list;
     swim_member_update_t update;
-#if 0
-    ssg_membership_update_t ssg_update;
-#endif
 
     /* lock access to group's swim state */
     ABT_mutex_lock(swim_ctx->swim_mutex);
 
     /* get current swim state for member */
     swim_ctx->swim_callbacks.get_member_state(
-        swim_ctx, member_id, &cur_swim_state);
+        swim_ctx->group_data, member_id, &cur_swim_state);
 
     /* ignore updates for dead members */
     if(cur_swim_state->status == SWIM_MEMBER_DEAD)
@@ -540,12 +537,9 @@ static void swim_kill_member(
     update.state.inc_nr = inc_nr;
     swim_add_recent_member_update(swim_ctx, update);
 
-#if 0
-    /* have SSG apply the membership update */
-    ssg_update.member = member_id;
-    ssg_update.type = SSG_MEMBER_REMOVE;
-    ssg_apply_membership_update(g, ssg_update);
-#endif
+    /* have group management layer apply this update */
+    swim_ctx->swim_callbacks.apply_member_update(
+        swim_ctx->group_data, update);
 
     ABT_mutex_unlock(swim_ctx->swim_mutex);
 

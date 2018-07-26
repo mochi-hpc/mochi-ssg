@@ -28,7 +28,7 @@ extern "C" {
 #ifdef DEBUG
 #define SWIM_DEBUG(__swim_ctx, __fmt, ...) do { \
     double __now = ABT_get_wtime(); \
-    fprintf(stdout, "%.6lf <%020"PRIu64">: SWIM: " __fmt, __now, \
+    fprintf(stdout, "[%.6lf] %20"PRIu64": SWIM " __fmt, __now, \
         __swim_ctx->self_id, ## __VA_ARGS__); \
     fflush(stdout); \
 } while(0)
@@ -43,9 +43,13 @@ struct swim_context
     margo_instance_id mid;
     /* void pointer to user group data */
     void *group_data;
-    /* XXX group mgmt callbacks */
+    /* group management callbacks */
     swim_group_mgmt_callbacks_t swim_callbacks;
-    /* XXX other state */
+    /* SWIM protocol parameters */
+    double prot_period_len;
+    int prot_susp_timeout;
+    int prot_subgroup_sz;
+    /* SWIM protocol internal state */
     swim_member_id_t self_id;
     swim_member_inc_nr_t self_inc_nr;
     swim_member_id_t dping_target_id;
@@ -56,21 +60,15 @@ struct swim_context
     hg_addr_t iping_target_addrs[SWIM_MAX_SUBGROUP_SIZE];
     int iping_target_ndx;
     int ping_target_acked;
+    void *suspect_list;
+    void *recent_update_list;
+    int shutdown_flag;
     /* argobots pool for launching SWIM threads */
     ABT_pool swim_pool;
     /* mutex for modifying SWIM group state */
     ABT_mutex swim_mutex;
     /* swim protocol ULT handle */
     ABT_thread prot_thread;
-    /* SWIM protocol parameters */
-    double prot_period_len;
-    int prot_susp_timeout;
-    int prot_subgroup_sz;
-    /* current membership state */
-    void *suspect_list;
-    void *recent_update_list;
-    /* XXX */
-    int shutdown_flag;
 };
 
 /* SWIM ping function prototypes */
