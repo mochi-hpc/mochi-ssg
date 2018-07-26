@@ -130,6 +130,7 @@ static int ssg_get_swim_dping_target(
     hg_addr_t *target_addr);
 static int ssg_get_swim_iping_targets(
     void *group_data,
+    int *num_targets,
     swim_member_id_t *target_ids,
     hg_addr_t *target_addrs);
 static void ssg_get_swim_member_addr(
@@ -160,7 +161,11 @@ static int ssg_get_swim_dping_target(
 
     /* if current member list is empty, generate a new random one */
     if (g->member_list == NULL)
+    {
         ssg_gen_rand_member_list(g);
+        if(g->member_list == NULL)
+            return -1;
+    }
 
     /* pull random member off head of list and return addr */
     target_ms = g->member_list;
@@ -171,19 +176,6 @@ static int ssg_get_swim_dping_target(
 
     return 0;
 }
-
-static int ssg_get_swim_iping_targets(
-    void *group_data,
-    swim_member_id_t *target_id,
-    hg_addr_t *target_addrs)
-{
-    ssg_group_t *g = (ssg_group_t *)group_data;
-
-    assert(g != NULL);
-
-    return 0;
-}
-
 static void ssg_gen_rand_member_list(ssg_group_t *g)
 {
     ssg_member_state_t *ms, *tmp;
@@ -195,6 +187,22 @@ static void ssg_gen_rand_member_list(ssg_group_t *g)
     }
 
     return;
+}
+
+static int ssg_get_swim_iping_targets(
+    void *group_data,
+    int *num_targets,
+    swim_member_id_t *target_id,
+    hg_addr_t *target_addrs)
+{
+    ssg_group_t *g = (ssg_group_t *)group_data;
+    int max_targets = *num_targets;
+
+    assert(g != NULL);
+
+    *num_targets = 0;
+
+    return 0;
 }
 
 static void ssg_get_swim_member_addr(
@@ -209,7 +217,7 @@ static void ssg_get_swim_member_addr(
     assert(g != NULL);
 
     HASH_FIND(hh, g->view.member_map, &ssg_id, sizeof(ssg_member_id_t), ms);
-    /* XXX ASSERT */
+    assert(ms != NULL);
 
     *addr = ms->addr;
 
@@ -228,7 +236,7 @@ static void ssg_get_swim_member_state(
     assert(g != NULL);
 
     HASH_FIND(hh, g->view.member_map, &ssg_id, sizeof(ssg_member_id_t), ms);
-    /* XXX ASSERT */
+    assert(ms != NULL);
 
     *state = &ms->swim_state;
 
@@ -1201,21 +1209,12 @@ static int ssg_group_view_create(
 
             if (strcmp(self_addr_substr, addr_substr) == 0)
             {
-                hret = margo_addr_dup(ssg_inst->mid, self_addr, &tmp_ms->addr);
-                if (hret != HG_SUCCESS)
-                {
-                    free(tmp_ms->addr_str);
-                    free(tmp_ms);
-                    goto fini;
-                }
-
                 if (self_id)               
                     *self_id = tmp_ms->id;
 
-                /* XXX: add self state to membership view? or somewhere static? */
-                //HASH_ADD(hh, view->member_map, id, sizeof(ssg_member_id_t), tmp_ms);
-
                 /* don't look up our own address, we already know it */
+                free(tmp_ms->addr_str);
+                free(tmp_ms);
                 continue;
             }
         }

@@ -192,8 +192,10 @@ static void swim_tick_ult(
     if(!(swim_ctx->ping_target_acked) && (swim_ctx->prot_subgroup_sz > 0))
     {
         /* get a random subgroup of members to send indirect pings to */
-        int iping_target_count = swim_ctx->swim_callbacks.get_iping_targets(
-            swim_ctx->group_data, swim_ctx->iping_target_ids, swim_ctx->iping_target_addrs);
+        int iping_target_count = swim_ctx->prot_subgroup_sz;
+        swim_ctx->swim_callbacks.get_iping_targets(
+            swim_ctx->group_data, &iping_target_count, swim_ctx->iping_target_ids,
+            swim_ctx->iping_target_addrs);
         if(iping_target_count == 0)
         {
             /* no available subgroup members, back out */

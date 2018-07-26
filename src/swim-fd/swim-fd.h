@@ -58,7 +58,7 @@ typedef struct swim_group_mgmt_callbacks
      * @param[out] target_id    ID of selected direct ping target
      * @param[out] inc_nr       SWIM incarnation number of target
      * @param[out] target_addr  HG address of target
-     * @returns 1 on successful selection of a target, 0 if no targets available
+     * @returns 0 on successful selection of a target, -1 if no available targets
      */
     int (*get_dping_target)(
             void *group_data,
@@ -70,13 +70,17 @@ typedef struct swim_group_mgmt_callbacks
      * Retrieve a set of (non-dead) random group members from the group
      * management layer to send indirect ping requests to.
      *
-     * @param[in]  group_data       void pointer to group managment data
-     * @param[out] target_ids       IDs of selected indirect ping targets
-     * @param[out] target_addrs     HG addresses of targets
-     * @returns number of selected indirect ping targets, 0 if no targets available
+     * @param[in]      group_data       void pointer to group managment data
+     * @param[in/out]  num_targets      on input, maximum number of indirect ping
+     *                                  targets to select. on output, the actual
+     *                                  number of selected targets
+     * @param[out]     target_ids       IDs of selected indirect ping targets
+     * @param[out]     target_addrs     HG addresses of targets
+     * @returns 0 on successful selection of targets, -1 if no available targets
      */
     int (*get_iping_targets)(
             void *group_data,
+            int *num_targets,
             swim_member_id_t *target_ids,
             hg_addr_t *target_addrs
             );
