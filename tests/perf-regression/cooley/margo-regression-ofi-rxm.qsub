@@ -3,6 +3,7 @@
 #COBALT -t 20
 #COBALT --mode script
 #COBALT -A radix-io
+#COBALT -q ibleaf3-debug
 
 export FI_FORK_UNSAFE=1
 
