@@ -40,6 +40,7 @@ cd $SANDBOX/spack
 patch -p1 < ../spack-shell.patch
 export SPACK_SHELL=bash
 . $SANDBOX/spack/share/spack/setup-env.sh
+spack bootstrap
 spack repo add $SANDBOX/sds-repo
 spack uninstall -R -y argobots mercury rdma-core libfabric || true
 spack install --dirty ssg
@@ -56,6 +57,7 @@ make install
 
 # ssg
 echo "=== BUILDING SSG TEST PROGRAMS ==="
+module list
 cd $SANDBOX/ssg
 libtoolize
 ./prepare.sh
