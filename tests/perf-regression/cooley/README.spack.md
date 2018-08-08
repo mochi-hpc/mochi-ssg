@@ -70,6 +70,10 @@ packages:
         paths:
             ncurses@5.9: /usr
         buildable: False
+    tcl:
+        paths:
+            tcl@8.5.13: /usr
+        buildable: False
     ssg:
         variants: +mpi
     libfabric:
