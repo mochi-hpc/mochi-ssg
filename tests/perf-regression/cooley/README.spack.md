@@ -50,6 +50,10 @@ packages:
         paths:
             bison@3.0.4: /
         buildable: False
+    flex:
+        paths:
+            flex@2.5.37: /
+        buildable: False
     coreutils:
         paths:
             coreutils@8.22: /usr
