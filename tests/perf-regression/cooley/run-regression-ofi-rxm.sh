@@ -41,6 +41,9 @@ spack bootstrap
 spack repo add $SANDBOX/sds-repo
 spack uninstall -R -y argobots mercury rdma-core libfabric || true
 spack install --dirty ssg
+# deliberately repeat setup-env step after building modules to ensure
+#   that we pick up the right module paths
+. $SANDBOX/spack/share/spack/setup-env.sh
 spack load -r ssg
 
 # less ancient gcc
