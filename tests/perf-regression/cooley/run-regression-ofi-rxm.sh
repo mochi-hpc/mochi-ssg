@@ -15,9 +15,6 @@ SANDBOX=~/tmp/mochi-regression-sandbox-$$
 PREFIX=~/tmp/mochi-regression-install-$$
 JOBDIR=~/tmp/mochi-regression-job-$$
 
-# less ancient gcc
-export CFLAGS="-O3"
-
 # scratch area to clone and build things
 mkdir $SANDBOX
 cp spack-shell.patch  $SANDBOX/
@@ -45,6 +42,9 @@ spack repo add $SANDBOX/sds-repo
 spack uninstall -R -y argobots mercury rdma-core libfabric || true
 spack install --dirty ssg
 spack load -r ssg
+
+# less ancient gcc
+export CFLAGS="-O3"
 
 # OSU MPI benchmarks
 echo "=== BUILDING OSU MICRO BENCHMARKS ==="
