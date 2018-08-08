@@ -26,6 +26,10 @@ spack repo add .
 # edit .spack/linux/packages.yaml to look like this:
 ```
 packages:
+    environment-modules:
+        paths:
+            environment-modules@3.2.10: /usr
+        buildable: False
     openssl:
         paths:
             openssl@1.0.2k: /usr
