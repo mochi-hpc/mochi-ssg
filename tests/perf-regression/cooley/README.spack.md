@@ -42,6 +42,34 @@ packages:
         paths:
             automake@1.15: /soft/buildtools/autotools/feb2016
         buildable: False
+    bzip2:
+        paths:
+            bzip2@1.0.6: /
+        buildable: False
+    bison:
+        paths:
+            bison@3.0.4: /
+        buildable: False
+    coreutils:
+        paths:
+            coreutils@8.22: /usr
+        buildable: False
+    zlib:
+        paths:
+            zlib@1.2.7: /usr
+        buildable: False
+    tar:
+        paths:
+            tar@1.26: /
+        buildable: False
+    gettext:
+        paths:
+            gettext@0.19: /usr
+        buildable: False
+    ncurses:
+        paths:
+            ncurses@5.9: /usr
+        buildable: False
     ssg:
         variants: +mpi
     libfabric:
@@ -50,7 +78,6 @@ packages:
         providers:
             # prefer MPICH by default
             mpi: [mpich,openmpi]
-
 ```
 
 # compile everything and load module for ssg

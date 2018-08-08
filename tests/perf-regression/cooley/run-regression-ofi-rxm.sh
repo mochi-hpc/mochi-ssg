@@ -39,7 +39,7 @@ echo "=== BUILD SPACK PACKAGES AND LOAD ==="
 cd $SANDBOX/spack
 patch -p1 < ../spack-shell.patch
 export SPACK_SHELL=bash
-$SANDBOX/spack/share/spack/setup-env.sh
+. $SANDBOX/spack/share/spack/setup-env.sh
 spack repo add $SANDBOX/sds-repo
 spack uninstall -R -y argobots mercury rdma-core libfabric || true
 spack install --dirty ssg
@@ -81,7 +81,7 @@ cp $SANDBOX/ssg/build/tests/perf-regression/.libs/margo-p2p-bw $JOBDIR
 cp $PREFIX/libexec/osu-micro-benchmarks/mpi/pt2pt/osu_latency $JOBDIR
 cp $PREFIX/bin/mercury-runner $JOBDIR
 cd $JOBDIR
-JOBID=`qsub --env LD_LIBRARY_PATH=$PREFIX/lib ./margo-regression-ofi-rxm.qsub`
+JOBID=`qsub --env LD_LIBRARY_PATH=$PREFIX/lib --env SANDBOX=$SANDBOX ./margo-regression-ofi-rxm.qsub`
 cqwait $JOBID
 
 echo "=== JOB DONE, COLLECTING AND SENDING RESULTS ==="

@@ -8,8 +8,7 @@
 export FI_FORK_UNSAFE=1
 
 export SPACK_SHELL=bash
-
-. /home/carns/working/src/spack/share/spack/setup-env.sh
+. $SANDBOX/spack/share/spack/setup-env.sh
 spack load -r ssg 
 
 # TODO: why is this necessary?  We should be able to find gcc libraries...
