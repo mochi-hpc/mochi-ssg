@@ -6,7 +6,6 @@
 #SBATCH -p bdwall
 
 # example of running benchmarks with spack-compiled software stack
-# builds correctly but fails to open network device as of 8-13-2018
 
 module load numactl
 
@@ -14,20 +13,28 @@ module load numactl
 
 spack load -r ssg
 
+# force use of name server for psm2 libfabric provider.  
+# This is likely no longer necessary but need to test.
 export FI_PSM2_NAME_SERVER=1
 
+# force Intel MPI to use Infiniband instead of Omnipath/PSM2.  If we let 
+# Intel MPI use it's preferred PSM2 path then Mercury can't open interface
+# because of apparent MR_SCALABLE/MR_BASIC conflict
+# we should also try MR_SCALABLE in Mercury NA as a possible workaround
+export I_MPI_FABRICS=shm:ofa
+
 echo "## Margo OFI/PSM2 (round trip, bdw):"
-mpirun ./margo-p2p-latency -i 100000 -n psm2://ib0:5000
+mpirun ./margo-p2p-latency -i 100000 -n psm2://enp6s0f0:5000
 echo "## Margo OFI/PSM2 (bw, bdw):"
-mpirun ./margo-p2p-bw -x 1048576 -n psm2://ib0:5000 -c 1 -D 20
+mpirun ./margo-p2p-bw -x 1048576 -n psm2://enp6s0f0:5000 -c 1 -D 20
 echo "## Margo OFI/PSM2 (bw, 8x concurrency, bdw):"
-mpirun ./margo-p2p-bw -x 1048576 -n psm2://ib0:5000 -c 8 -D 20
+mpirun ./margo-p2p-bw -x 1048576 -n psm2://enp6s0f0:5000 -c 8 -D 20
 
 echo "## Margo OFI/PSM2 (round trip, bdw, Hg busy spin):"
-mpirun ./margo-p2p-latency -i 100000 -n psm2://ib0:5000 -t 0,0
+mpirun ./margo-p2p-latency -i 100000 -n psm2://enp6s0f0:5000 -t 0,0
 echo "## Margo OFI/PSM2 (bw, bdw, Hg busy spin):"
-mpirun ./margo-p2p-bw -x 1048576 -n psm2://ib0:5000 -c 1 -D 20 -t 0,0
+mpirun ./margo-p2p-bw -x 1048576 -n psm2://enp6s0f0:5000 -c 1 -D 20 -t 0,0
 echo "## Margo OFI/PSM2 (bw, 8x concurrency, bdw, Hg busy spin):"
-mpirun ./margo-p2p-bw -x 1048576 -n psm2://ib0:5000 -c 8 -D 20 -t 0,0
+mpirun ./margo-p2p-bw -x 1048576 -n psm2://enp6s0f0:5000 -c 8 -D 20 -t 0,0
 
  
