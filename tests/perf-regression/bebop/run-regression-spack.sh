@@ -10,6 +10,8 @@
 # exit on any error
 set -e
 
+module load numactl boost cmake
+
 SANDBOX=~/tmp/mochi-regression-sandbox-$$
 PREFIX=~/tmp/mochi-regression-install-$$
 JOBDIR=~/tmp/mochi-regression-job-$$
@@ -37,7 +39,7 @@ patch -p1 < ../spack-libfabric-1.6.1.patch
 . $SANDBOX/spack/share/spack/setup-env.sh
 spack repo add $SANDBOX/sds-repo
 spack uninstall -R -y argobots mercury opa-psm2 || true
-spack install ssg
+spack install --dirty ssg
 # deliberately repeat setup-env step after building modules to ensure
 #   that we pick up the right module paths
 . $SANDBOX/spack/share/spack/setup-env.sh
@@ -56,7 +58,6 @@ make install
 
 # ssg
 echo "=== BUILDING SSG TEST PROGRAMS ==="
-module list
 cd $SANDBOX/ssg
 libtoolize
 ./prepare.sh

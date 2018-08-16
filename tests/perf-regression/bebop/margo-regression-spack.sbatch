@@ -7,11 +7,15 @@
 
 # example of running benchmarks with spack-compiled software stack
 
-module load numactl
+export LMOD_PAGER=none
+
+module load numactl boost cmake
 
 . /home/carns/working/src/spack/share/spack/setup-env.sh
 
 spack load -r ssg
+
+module list
 
 # force use of name server for psm2 libfabric provider.  
 # This is likely no longer necessary but need to test.
