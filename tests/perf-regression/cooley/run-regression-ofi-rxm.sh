@@ -60,7 +60,6 @@ make install
 
 # ssg
 echo "=== BUILDING SSG TEST PROGRAMS ==="
-module list
 cd $SANDBOX/ssg
 libtoolize
 ./prepare.sh

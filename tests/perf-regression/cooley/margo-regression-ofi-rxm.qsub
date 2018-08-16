@@ -11,6 +11,8 @@ export SPACK_SHELL=bash
 . $SANDBOX/spack/share/spack/setup-env.sh
 spack load -r ssg 
 
+module list
+
 # TODO: why is this necessary?  We should be able to find gcc libraries...
 export LD_LIBRARY_PATH="/soft/compilers/gcc/7.1.0/lib64:$LD_LIBRARY_PATH"
 
