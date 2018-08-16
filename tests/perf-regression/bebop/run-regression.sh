@@ -12,9 +12,9 @@ set -e
 
 module load numactl boost cmake
 
-SANDBOX=~/tmp/mochi-regression-sandbox-$$
-PREFIX=~/tmp/mochi-regression-install-$$
-JOBDIR=~/tmp/mochi-regression-job-$$
+SANDBOX=/tmp/mochi-regression-sandbox-$$
+PREFIX=/tmp/mochi-regression-install-$$
+JOBDIR=/tmp/mochi-regression-job-$$
 
 # scratch area to clone and build things
 mkdir $SANDBOX
