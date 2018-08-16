@@ -17,10 +17,6 @@ spack load -r ssg
 
 module list
 
-# force use of name server for psm2 libfabric provider.  
-# This is likely no longer necessary but need to test.
-export FI_PSM2_NAME_SERVER=1
-
 # force Intel MPI to use Infiniband instead of Omnipath/PSM2.  If we let 
 # Intel MPI use it's preferred PSM2 path then Mercury can't open interface
 # because of apparent MR_SCALABLE/MR_BASIC conflict
