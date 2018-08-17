@@ -81,7 +81,7 @@ echo "=== SUBMITTING AND WAITING FOR JOB ==="
 cp $SANDBOX/ssg/build/tests/perf-regression/.libs/margo-p2p-latency $JOBDIR
 cp $SANDBOX/ssg/build/tests/perf-regression/.libs/margo-p2p-bw $JOBDIR
 cp $PREFIX/libexec/osu-micro-benchmarks/mpi/pt2pt/osu_latency $JOBDIR
-cp $PREFIX/bin/mercury-runner $JOBDIR
+# cp $PREFIX/bin/mercury-runner $JOBDIR
 cd $JOBDIR
 sbatch --wait --export=ALL ./margo-regression.sbatch
 
