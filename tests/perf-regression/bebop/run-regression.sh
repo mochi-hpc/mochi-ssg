@@ -12,16 +12,16 @@ set -e
 
 module load numactl boost cmake
 
-SANDBOX=/tmp/mochi-regression-sandbox-$$
-PREFIX=/tmp/mochi-regression-install-$$
-JOBDIR=/tmp/mochi-regression-job-$$
+SANDBOX=~/tmp/mochi-regression-sandbox-$$
+PREFIX=~/tmp/mochi-regression-install-$$
+JOBDIR=~/tmp/mochi-regression-job-$$
 
 # scratch area to clone and build things
-mkdir $SANDBOX
+mkdir -p $SANDBOX
 cp spack-libfabric-1.6.1.patch  $SANDBOX/
 
 # scratch area for job submission
-mkdir $JOBDIR
+mkdir -p $JOBDIR
 cp margo-regression.sbatch $JOBDIR
 
 cd $SANDBOX
