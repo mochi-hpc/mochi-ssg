@@ -68,13 +68,13 @@ make -j 3
 make tests
 
 # mercury-runner benchmark
-echo "=== BUILDING MERCURY-RUNNER BENCHMARK ==="
-cd $SANDBOX/mercury-runner
-mkdir build
-cd build
-CC=mpicc CXX=mpicxx CXXFLAGS='-D__STDC_FORMAT_MACROS' cmake -DCMAKE_PREFIX_PATH=$PREFIX -DCMAKE_INSTALL_PREFIX=$PREFIX -DMPI=ON ..
-make -j 3
-make install
+# echo "=== BUILDING MERCURY-RUNNER BENCHMARK ==="
+# cd $SANDBOX/mercury-runner
+# mkdir build
+# cd build
+# CC=mpicc CXX=mpicxx CXXFLAGS='-D__STDC_FORMAT_MACROS' cmake -DCMAKE_PREFIX_PATH=$PREFIX -DCMAKE_INSTALL_PREFIX=$PREFIX -DMPI=ON ..
+# make -j 3
+# make install
 
 # set up job to run
 echo "=== SUBMITTING AND WAITING FOR JOB ==="
