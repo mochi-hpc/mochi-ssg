@@ -24,7 +24,7 @@ extern "C" {
 #define SWIM_MAX_PIGGYBACK_ENTRIES      8
 #define SWIM_MAX_PIGGYBACK_TX_COUNT     50
 
-/* debug printing macro for SSG */
+/* debug printing macro for SWIM */
 #ifdef DEBUG
 #define SWIM_DEBUG(__swim_ctx, __fmt, ...) do { \
     double __now = ABT_get_wtime(); \

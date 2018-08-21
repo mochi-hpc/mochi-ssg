@@ -71,6 +71,7 @@ typedef struct swim_group_mgmt_callbacks
      * management layer to send indirect ping requests to.
      *
      * @param[in]      group_data       void pointer to group managment data
+     * @param[in]      dping_target_id  corresponding dping target ID
      * @param[in/out]  num_targets      on input, maximum number of indirect ping
      *                                  targets to select. on output, the actual
      *                                  number of selected targets
@@ -80,6 +81,7 @@ typedef struct swim_group_mgmt_callbacks
      */
     int (*get_iping_targets)(
             void *group_data,
+            swim_member_id_t dping_target_id,
             int *num_targets,
             swim_member_id_t *target_ids,
             hg_addr_t *target_addrs
