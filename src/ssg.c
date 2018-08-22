@@ -162,14 +162,19 @@ static int ssg_get_swim_dping_target(
 
     /* XXX MUTEX */
 
+    if (g->nondead_member_count == 0)
+        return -1; /* no targets */
+
     if (g->dping_target_ndx == 0)
     {
         /* reshuffle member list */
         ssg_shuffle_member_list(g);
     }
 
+    /* pull next dping target using saved index */
     target_ms_p = (ssg_member_state_t **)utarray_eltptr(
         g->nondead_member_list, g->dping_target_ndx);
+
     *target_id = (swim_member_id_t)(*target_ms_p)->id;
     *target_inc_nr = (*target_ms_p)->swim_state.inc_nr;
     *target_addr = (*target_ms_p)->addr;
@@ -312,6 +317,8 @@ static void ssg_shuffle_member_list(
     UT_array *list = g->nondead_member_list;
     unsigned int len = g->nondead_member_count;
 
+    if (len <= 1) return;
+
     /* run fisher-yates shuffle over list of nondead members */
     for (i = len - 1; i > 0; i--)
     {
@@ -392,7 +399,7 @@ ssg_group_id_t ssg_group_create(
     utarray_reserve(g->nondead_member_list, g->view.size);
     HASH_ITER(hh, g->view.member_map, ms, tmp_ms)
     {
-        utarray_push_back(g->nondead_member_list, ms);
+        utarray_push_back(g->nondead_member_list, &ms);
     }
     g->nondead_member_count = g->view.size;
 
@@ -1230,13 +1237,13 @@ static int ssg_group_view_create(
 
     /* construct view using ULTs to lookup the address of each group member */
     view->size = group_size;
-    r = rand() % view->size;
+    r = rand() % group_size;
     for (i = 0; i < group_size; i++)
     {
         /* randomize our starting index so all group members aren't looking
          * up other group members in the same order
          */
-        j = (r + i) % view->size;
+        j = (r + i) % group_size;
 
         if (group_addr_strs[j] == NULL || strlen(group_addr_strs[j]) == 0) continue;
 
@@ -1268,6 +1275,7 @@ static int ssg_group_view_create(
                     *self_id = tmp_ms->id;
 
                 /* don't look up our own address, we already know it */
+                view->size--;
                 free(tmp_ms->addr_str);
                 free(tmp_ms);
                 continue;
