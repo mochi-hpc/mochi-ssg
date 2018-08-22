@@ -18,7 +18,6 @@
 #include "swim-fd/swim-fd.h"
 #include "uthash.h"
 #include "utlist.h"
-#include "utarray.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -73,7 +72,8 @@ typedef struct ssg_group
     char *name;
     ssg_group_view_t view;
     ssg_member_id_t self_id;
-    UT_array *nondead_member_list;
+    ssg_member_state_t **nondead_member_list;
+    unsigned int nondead_member_list_nslots;
     unsigned int dping_target_ndx;
     ssg_group_descriptor_t *descriptor;
     swim_context_t *swim_ctx;

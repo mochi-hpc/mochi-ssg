@@ -147,7 +147,21 @@ static void ssg_apply_swim_member_update(
     swim_member_update_t update);
 
 static void ssg_shuffle_member_list(
-    ssg_group_t *g);
+    ssg_member_state_t **list,
+    unsigned int len);
+
+void print_nondead_list(ssg_group_t *g, char *tag)
+{
+    unsigned int i = 0;
+
+    printf("***SDS %s nondead_member_list [%lu]: ", tag, g->self_id);
+
+    for (i = 0; i < g->view.size; i++)
+    {
+        printf("%p\t", g->nondead_member_list[i]);
+    }
+    printf("\n");
+}
 
 static int ssg_get_swim_dping_target(
     void *group_data,
@@ -163,20 +177,21 @@ static int ssg_get_swim_dping_target(
 
     /* XXX MUTEX */
 
-    nondead_list_len = utarray_len(g->nondead_member_list);
+    nondead_list_len = g->view.size;
     if (nondead_list_len == 0)
         return -1; /* no targets */
 
     /* reshuffle member list after a complete traversal */
     if (g->dping_target_ndx == nondead_list_len)
     {
-        ssg_shuffle_member_list(g);
+        SSG_DEBUG(g, "...SHUFFLING...\n");
+        ssg_shuffle_member_list(g->nondead_member_list, g->view.size);
+        print_nondead_list(g, "post-shuffle");
         g->dping_target_ndx = 0;
     }
 
     /* pull next dping target using saved state */
-    dping_target_ms = *(ssg_member_state_t **)utarray_eltptr(
-        g->nondead_member_list, g->dping_target_ndx);
+    dping_target_ms = g->nondead_member_list[g->dping_target_ndx];
 
     *target_id = (swim_member_id_t)dping_target_ms->id;
     *target_inc_nr = dping_target_ms->swim_state.inc_nr;
@@ -196,46 +211,49 @@ static int ssg_get_swim_iping_targets(
     hg_addr_t *target_addrs)
 {
     ssg_group_t *g = (ssg_group_t *)group_data;
+    unsigned int nondead_list_len;
     int max_targets = *num_targets;
     int iping_target_count = 0;
     int i = 0;
-    unsigned int r_start, r_ndx;
-    ssg_member_state_t **r_ms_p;
+    int r_start, r_ndx;
+    ssg_member_state_t *tmp_ms;
 
     assert(g != NULL);
 
     *num_targets = 0;
 
-#if 0
     /* XXX MUTEX */
+
+    nondead_list_len = g->view.size;
+    if (nondead_list_len == 0)
+        return -1; /* no targets */
 
     /* pick random index in the nondead list, and pull out a set of iping
      * targets starting from that index
      */
-    r_start = rand() % g->nondead_member_count;
+    r_start = rand() % nondead_list_len;
     while (iping_target_count < max_targets)
     {
-        r_ndx = (r_start + i) % g->nondead_member_count;
+        r_ndx = (r_start + i) % nondead_list_len;
         /* if we've iterated through the entire nondead list, stop */
         if ((i > 0 ) && (r_ndx == r_start)) break;
 
-        r_ms_p = (ssg_member_state_t **)utarray_eltptr(g->nondead_member_list, r_ndx);
+        tmp_ms = g->nondead_member_list[r_ndx];
 
         /* do not select the dping target as an iping target */
-        if ((swim_member_id_t)(*r_ms_p)->id == dping_target_id)
+        if ((swim_member_id_t)tmp_ms->id == dping_target_id)
         {
             i++;
             continue;
         }
 
-        target_ids[iping_target_count] = (swim_member_id_t)(*r_ms_p)->id;
-        target_addrs[iping_target_count] = (*r_ms_p)->addr;
+        target_ids[iping_target_count] = (swim_member_id_t)tmp_ms->id;
+        target_addrs[iping_target_count] = tmp_ms->addr;
         iping_target_count++;
         i++;
     }
 
     *num_targets = iping_target_count;
-#endif
 
     return 0;
 }
@@ -313,14 +331,11 @@ static void ssg_apply_swim_member_update(
 }
 
 static void ssg_shuffle_member_list(
-    ssg_group_t *g)
+    ssg_member_state_t **list,
+    unsigned int len)
 {
     unsigned int i, r;
-    ssg_member_state_t **tmp_ms;
-    UT_array *list = g->nondead_member_list;
-    unsigned int len = utarray_len(g->nondead_member_list);
-
-    SSG_DEBUG(g, "...SHUFFLING\n");
+    ssg_member_state_t *tmp_ms;
 
     if (len <= 1) return;
 
@@ -328,11 +343,9 @@ static void ssg_shuffle_member_list(
     for (i = len - 1; i > 0; i--)
     {
         r = rand() % (i + 1);
-        tmp_ms = (ssg_member_state_t **)utarray_eltptr(list, r);
-        utarray_erase(list, r, 1);
-        utarray_insert(list, *(ssg_member_state_t **)utarray_eltptr(list, i), r);
-        utarray_erase(list, i, 1);
-        utarray_insert(list, *tmp_ms, i);
+        tmp_ms = list[r];
+        list[r] = list[i];
+        list[i] = tmp_ms;
     }
 
     return;
@@ -350,6 +363,7 @@ ssg_group_id_t ssg_group_create(
     ssg_group_descriptor_t *tmp_descriptor;
     ssg_group_t *g = NULL;
     ssg_member_state_t *ms, *tmp_ms;
+    unsigned int i = 0;
     hg_return_t hret;
     int sret;
     ssg_group_id_t group_id = SSG_GROUP_ID_NULL;
@@ -399,14 +413,17 @@ ssg_group_id_t ssg_group_create(
     }
 
     /* create a list of all nondead member states and shuffle it */
-    UT_icd ms_icd = {sizeof(ssg_member_state_t *), NULL, NULL, NULL};
-    utarray_new(g->nondead_member_list, &ms_icd);
-    utarray_reserve(g->nondead_member_list, g->view.size);
+    g->nondead_member_list = malloc(g->view.size * sizeof(*g->nondead_member_list));
+    if (g->nondead_member_list == NULL) goto fini;
+    g->nondead_member_list_nslots = g->view.size;
     HASH_ITER(hh, g->view.member_map, ms, tmp_ms)
     {
-        utarray_push_back(g->nondead_member_list, &ms);
+        g->nondead_member_list[i] = ms;
+        i++;
     }
-    ssg_shuffle_member_list(g);
+    print_nondead_list(g, "init");
+    ssg_shuffle_member_list(g->nondead_member_list, g->view.size);
+    print_nondead_list(g, "init_shuffle");
 
     /* initialize swim failure detector */
     // TODO: we should probably barrier or sync somehow to avoid rpc failures
