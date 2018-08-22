@@ -156,33 +156,34 @@ static int ssg_get_swim_dping_target(
     hg_addr_t *target_addr)
 {
     ssg_group_t *g = (ssg_group_t *)group_data;
-    ssg_member_state_t **target_ms_p;
+    ssg_member_state_t *dping_target_ms;
+    unsigned int nondead_list_len;
 
     assert(g != NULL);
 
     /* XXX MUTEX */
 
-    if (g->nondead_member_count == 0)
+    nondead_list_len = utarray_len(g->nondead_member_list);
+    if (nondead_list_len == 0)
         return -1; /* no targets */
 
-    if (g->dping_target_ndx == 0)
+    /* reshuffle member list after a complete traversal */
+    if (g->dping_target_ndx == nondead_list_len)
     {
-        /* reshuffle member list */
         ssg_shuffle_member_list(g);
+        g->dping_target_ndx = 0;
     }
 
-    /* pull next dping target using saved index */
-    target_ms_p = (ssg_member_state_t **)utarray_eltptr(
+    /* pull next dping target using saved state */
+    dping_target_ms = *(ssg_member_state_t **)utarray_eltptr(
         g->nondead_member_list, g->dping_target_ndx);
 
-    *target_id = (swim_member_id_t)(*target_ms_p)->id;
-    *target_inc_nr = (*target_ms_p)->swim_state.inc_nr;
-    *target_addr = (*target_ms_p)->addr;
+    *target_id = (swim_member_id_t)dping_target_ms->id;
+    *target_inc_nr = dping_target_ms->swim_state.inc_nr;
+    *target_addr = dping_target_ms->addr;
 
-    /* point at next dping target in the view */
+    /* increment dping target index for next iteration */
     g->dping_target_ndx++;
-    if (g->dping_target_ndx == g->nondead_member_count)
-        g->dping_target_ndx = 0;
 
     return 0;
 }
@@ -205,6 +206,7 @@ static int ssg_get_swim_iping_targets(
 
     *num_targets = 0;
 
+#if 0
     /* XXX MUTEX */
 
     /* pick random index in the nondead list, and pull out a set of iping
@@ -233,6 +235,7 @@ static int ssg_get_swim_iping_targets(
     }
 
     *num_targets = iping_target_count;
+#endif
 
     return 0;
 }
@@ -315,7 +318,9 @@ static void ssg_shuffle_member_list(
     unsigned int i, r;
     ssg_member_state_t **tmp_ms;
     UT_array *list = g->nondead_member_list;
-    unsigned int len = g->nondead_member_count;
+    unsigned int len = utarray_len(g->nondead_member_list);
+
+    SSG_DEBUG(g, "...SHUFFLING\n");
 
     if (len <= 1) return;
 
@@ -393,7 +398,7 @@ ssg_group_id_t ssg_group_create(
         goto fini;
     }
 
-    /* create a list of all nondead member states (used for shuffling) */
+    /* create a list of all nondead member states and shuffle it */
     UT_icd ms_icd = {sizeof(ssg_member_state_t *), NULL, NULL, NULL};
     utarray_new(g->nondead_member_list, &ms_icd);
     utarray_reserve(g->nondead_member_list, g->view.size);
@@ -401,7 +406,7 @@ ssg_group_id_t ssg_group_create(
     {
         utarray_push_back(g->nondead_member_list, &ms);
     }
-    g->nondead_member_count = g->view.size;
+    ssg_shuffle_member_list(g);
 
     /* initialize swim failure detector */
     // TODO: we should probably barrier or sync somehow to avoid rpc failures

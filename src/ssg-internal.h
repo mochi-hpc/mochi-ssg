@@ -74,7 +74,6 @@ typedef struct ssg_group
     ssg_group_view_t view;
     ssg_member_id_t self_id;
     UT_array *nondead_member_list;
-    unsigned int nondead_member_count;
     unsigned int dping_target_ndx;
     ssg_group_descriptor_t *descriptor;
     swim_context_t *swim_ctx;
