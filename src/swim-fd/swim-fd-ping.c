@@ -307,7 +307,7 @@ static void swim_iping_recv_ult(hg_handle_t handle)
 
     /* get address for the iping target */
     swim_ctx->swim_callbacks.get_member_addr(
-        swim_ctx, iping_req.target_id, &target_addr);
+        swim_ctx->group_data, iping_req.target_id, &target_addr);
 
     /* send direct ping to target on behalf of who sent iping req */
     ret = swim_send_dping(swim_ctx, iping_req.target_id, target_addr);
