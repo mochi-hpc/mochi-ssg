@@ -349,12 +349,12 @@ static void swim_suspect_member(
         return;
     }
 
-    /* lock access to group's swim state */
-    ABT_mutex_lock(swim_ctx->swim_mutex);
-
     /* get current swim state for member */
     swim_ctx->swim_callbacks.get_member_state(
         swim_ctx->group_data, member_id, &cur_swim_state);
+
+    /* lock access to group's swim state */
+    ABT_mutex_lock(swim_ctx->swim_mutex);
 
     /* ignore updates for dead members */
     if(cur_swim_state->status == SWIM_MEMBER_DEAD)
@@ -440,12 +440,12 @@ static void swim_unsuspect_member(
         (swim_suspect_member_link_t *)swim_ctx->suspect_list;
     swim_member_update_t update;
 
-    /* lock access to group's swim state */
-    ABT_mutex_lock(swim_ctx->swim_mutex);
-
     /* get current swim state for member */
     swim_ctx->swim_callbacks.get_member_state(
         swim_ctx->group_data, member_id, &cur_swim_state);
+
+    /* lock access to group's swim state */
+    ABT_mutex_lock(swim_ctx->swim_mutex);
 
     /* ignore updates for dead members */
     if(cur_swim_state->status == SWIM_MEMBER_DEAD)
@@ -500,12 +500,12 @@ static void swim_kill_member(
         (swim_suspect_member_link_t *)swim_ctx->suspect_list;
     swim_member_update_t update;
 
-    /* lock access to group's swim state */
-    ABT_mutex_lock(swim_ctx->swim_mutex);
-
     /* get current swim state for member */
     swim_ctx->swim_callbacks.get_member_state(
         swim_ctx->group_data, member_id, &cur_swim_state);
+
+    /* lock access to group's swim state */
+    ABT_mutex_lock(swim_ctx->swim_mutex);
 
     /* ignore updates for dead members */
     if(cur_swim_state->status == SWIM_MEMBER_DEAD)
@@ -539,11 +539,11 @@ static void swim_kill_member(
     update.state.inc_nr = inc_nr;
     swim_add_recent_member_update(swim_ctx, update);
 
+    ABT_mutex_unlock(swim_ctx->swim_mutex);
+
     /* have group management layer apply this update */
     swim_ctx->swim_callbacks.apply_member_update(
         swim_ctx->group_data, update);
-
-    ABT_mutex_unlock(swim_ctx->swim_mutex);
 
     return;
 }
@@ -567,8 +567,10 @@ static void swim_update_suspected_members(
             /* if this member has exceeded its allowable suspicion timeout,
              * we mark it as dead
              */
+            ABT_mutex_unlock(swim_ctx->swim_mutex);
             swim_kill_member(swim_ctx, iter->member_id,
                 iter->member_state->inc_nr);
+            ABT_mutex_lock(swim_ctx->swim_mutex);
         }
     }
 
