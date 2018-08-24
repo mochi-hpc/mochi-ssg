@@ -65,13 +65,14 @@ typedef struct ssg_group_view
 {
     unsigned int size;
     ssg_member_state_t *member_map;
+    ABT_rwlock lock;
 } ssg_group_view_t;
 
 typedef struct ssg_group
 {
     char *name;
-    ssg_group_view_t view;
     ssg_member_id_t self_id;
+    ssg_group_view_t view;
     ssg_member_state_t **nondead_member_list;
     unsigned int nondead_member_list_nslots;
     unsigned int dping_target_ndx;
