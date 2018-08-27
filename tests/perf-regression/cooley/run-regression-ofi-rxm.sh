@@ -39,7 +39,7 @@ export SPACK_SHELL=bash
 . $SANDBOX/spack/share/spack/setup-env.sh
 spack bootstrap
 spack repo add $SANDBOX/sds-repo
-spack uninstall -R -y argobots mercury rdma-core libfabric | true
+spack uninstall -R -y argobots mercury rdma-core libfabric || true
 spack install --dirty ssg
 # deliberately repeat setup-env step after building modules to ensure
 #   that we pick up the right module paths
