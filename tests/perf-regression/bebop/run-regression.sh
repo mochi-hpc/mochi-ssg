@@ -36,7 +36,7 @@ echo "=== BUILD SPACK PACKAGES AND LOAD ==="
 cd $SANDBOX/spack
 . $SANDBOX/spack/share/spack/setup-env.sh
 spack repo add $SANDBOX/sds-repo
-spack uninstall -R -y argobots mercury opa-psm2 | true
+spack uninstall -R -y argobots mercury opa-psm2 || true
 spack install --dirty ssg
 # deliberately repeat setup-env step after building modules to ensure
 #   that we pick up the right module paths
