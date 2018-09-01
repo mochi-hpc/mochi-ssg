@@ -9,7 +9,11 @@
 # XXX xalt module currently eating '-M' flag for mercury-runner...disabling for now
 module unload xalt
 
-module load craype-hugepages2M
+export SPACK_SHELL=bash
+. $SANDBOX/spack/share/spack/setup-env.sh
+spack load -r ssg 
+
+module list
 
 # NOTE: needed as of January 2018 to avoid conflicts between MPI and 
 #       libfabric GNI provider
@@ -27,12 +31,12 @@ echo "## Margo OFI/GNI (bw, 8x concurrency, busy spin):"
 aprun -e MPICH_GNI_NDREG_ENTRIES=2000 -n 2 -N 1 ./margo-p2p-bw -x 1048576 -n ofi+gni://ipogif0:5000 -c 8 -D 20 -t 0,0
 
 
-echo "## Margo BMI/TCP (round trip):"
-aprun -e MPICH_GNI_NDREG_ENTRIES=2000 -n 2 -N 1 ./margo-p2p-latency -i 100000 -n bmi+tcp://
-echo "## Margo BMI/TCP (bw):"
-aprun -e MPICH_GNI_NDREG_ENTRIES=2000 -n 2 -N 1 ./margo-p2p-bw -x 1048576 -n bmi+tcp:// -c 1 -D 20
-echo "## Margo BMI/TCP (bw, 8x concurrency):"
-aprun -e MPICH_GNI_NDREG_ENTRIES=2000 -n 2 -N 1 ./margo-p2p-bw -x 1048576 -n bmi+tcp:// -c 8 -D 20
+# echo "## Margo BMI/TCP (round trip):"
+# aprun -e MPICH_GNI_NDREG_ENTRIES=2000 -n 2 -N 1 ./margo-p2p-latency -i 100000 -n bmi+tcp://
+# echo "## Margo BMI/TCP (bw):"
+# aprun -e MPICH_GNI_NDREG_ENTRIES=2000 -n 2 -N 1 ./margo-p2p-bw -x 1048576 -n bmi+tcp:// -c 1 -D 20
+# echo "## Margo BMI/TCP (bw, 8x concurrency):"
+# aprun -e MPICH_GNI_NDREG_ENTRIES=2000 -n 2 -N 1 ./margo-p2p-bw -x 1048576 -n bmi+tcp:// -c 8 -D 20
 
 # echo "## WARNING: Margo OFI/TCP (disabled because it hangs as of 8/10/2017)"
 # aprun -n 2 -N 1 ./margo-p2p-latency -i 100000 -n ofi+tcp://ipogif0:5000
