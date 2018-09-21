@@ -65,19 +65,25 @@ typedef struct ssg_group_view
 {
     unsigned int size;
     ssg_member_state_t *member_map;
-    ABT_rwlock lock;
 } ssg_group_view_t;
+
+typedef struct ssg_group_target_list
+{
+    ssg_member_state_t **targets;
+    unsigned int nslots;
+    unsigned int len;
+    unsigned int dping_ndx;
+} ssg_group_target_list_t;
 
 typedef struct ssg_group
 {
     char *name;
     ssg_member_id_t self_id;
     ssg_group_view_t view;
-    ssg_member_state_t **nondead_member_list;
-    unsigned int nondead_member_list_nslots;
-    unsigned int dping_target_ndx;
+    ssg_group_target_list_t target_list;
     ssg_group_descriptor_t *descriptor;
     swim_context_t *swim_ctx;
+    ABT_rwlock lock;
     ssg_membership_update_cb update_cb;
     void *update_cb_dat;
     UT_hash_handle hh;
@@ -86,8 +92,9 @@ typedef struct ssg_group
 typedef struct ssg_attached_group
 {
     char *name;
-    ssg_group_descriptor_t *descriptor;
     ssg_group_view_t view;
+    ssg_group_descriptor_t *descriptor;
+    ABT_rwlock lock;
     UT_hash_handle hh;
 } ssg_attached_group_t;
 
@@ -120,6 +127,11 @@ static inline uint64_t ssg_hash64_str(const char * str)
 
 void ssg_register_rpcs(
     void);
+int ssg_group_join_send(
+    ssg_group_descriptor_t * group_descriptor,
+    char ** group_name,
+    int * group_size, 
+    void ** view_buf);
 int ssg_group_attach_send(
     ssg_group_descriptor_t * group_descriptor,
     char ** group_name,

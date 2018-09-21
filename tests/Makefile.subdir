@@ -1,14 +1,21 @@
-check_PROGRAMS += \
- tests/ssg-test-simple \
- tests/ssg-test-attach
-
-tests_ssg_test_simple_LDADD = src/libssg.la
-
-tests_ssg_test_attach_LDADD = src/libssg.la
-
 if SSG_HAVE_MPI
+
+TESTS_ENVIRONMENT += \
+ TIMEOUT="$(TIMEOUT)" \
+ MKTEMP="$(MKTEMP)"
+
+check_PROGRAMS += \
+ tests/ssg-launch-group
+
+TESTS += \
+ tests/simple-group.sh
+
+EXTRA_DIST += \
+ tests/simple-group.sh
+
 check_PROGRAMS += tests/perf-regression/margo-p2p-latency
 tests_perf_regression_margo_p2p_latency_LDADD = src/libssg.la
 check_PROGRAMS += tests/perf-regression/margo-p2p-bw
 tests_perf_regression_margo_p2p_bw_LDADD = src/libssg.la
+
 endif

@@ -28,41 +28,53 @@
         } \
     } while(0)
 
+struct group_launch_opts
+{
+    int duration;
+    char *gid_file;
+    char *group_mode;
+    char *group_addr_conf_file;
+};
+
 static void usage()
 {
     fprintf(stderr,
         "Usage: "
-        "ssg-test-simple [-s <time>] <addr> <create mode> [config file]\n"
-        "\t-s <time> - time to sleep between init/finalize\n"
+        "ssg-launch-group [OPTIONS] <addr> <create mode> [config file]\n"
         "\t<addr> - Mercury address string\n"
         "\t<create mode> - \"mpi\" (if supported) or \"conf\"\n"
         "\tif \"conf\" is the mode, then [config file] is required\n");
 }
 
-static void parse_args(int argc, char *argv[], int *sleep_time, const char **addr_str,
-    const char **mode, const char **conf_file)
+static void parse_args(int argc, char *argv[], struct group_launch_opts *opts)
 {
-    int ndx = 1;
+    int c;
+    const char *options = "d:f:";
+    char *check = NULL;
 
-    if (argc < 3)
+    while ((c = getopt(argc, argv, options)) != -1)
     {
-        usage();
-        exit(1);
-    }
-
-    if (strcmp(argv[ndx], "-s") == 0)
-    {
-        char *check = NULL;
-        ndx++;
-
-        *sleep_time = (int)strtol(argv[ndx++], &check, 0);
-        if(*sleep_time < 0 || (check && *check != '\0') || argc < 5)
+        switch (c)
         {
-            usage();
-            exit(1);
+            case 'd':
+                opts->duration = (int)strtol(optarg, &check, 0);
+                if (opts->duration < 0 || (check && *check != '\0'))
+                {
+                    usage();
+                    exit(EXIT_FAILURE);
+                }
+                break;
+            case 'f':
+                opts->gid_file = optarg;
+                break;
+            default:
+                usage();
+                exit(EXIT_FAILURE);
         }
     }
 
+    return;
+#if 0
     *addr_str = argv[ndx++];
     *mode = argv[ndx++];
 
@@ -94,24 +106,23 @@ static void parse_args(int argc, char *argv[], int *sleep_time, const char **add
         usage();
         exit(1);
     }
-
-    return;   
+#endif
 }
 
 int main(int argc, char *argv[])
 {
     margo_instance_id mid = MARGO_INSTANCE_NULL;
-    int sleep_time = 0;
     const char *addr_str;
-    const char *mode;
-    const char *conf_file = NULL;
     const char *group_name = "simple_group";
     ssg_group_id_t g_id = SSG_GROUP_ID_NULL;
     ssg_member_id_t my_id;
     int group_size;
     int sret;
 
-    parse_args(argc, argv, &sleep_time, &addr_str, &mode, &conf_file);
+    /* XXX default options? */
+    struct group_launch_opts opts;
+    parse_args(argc, argv, &opts);
+    return 0;
 
 #ifdef SSG_HAVE_MPI
     if (strcmp(mode, "mpi") == 0)

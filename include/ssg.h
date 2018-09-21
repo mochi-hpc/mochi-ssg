@@ -88,7 +88,7 @@ int ssg_finalize(
  * @param[in] group_size        Number of group members
  * @param[in] update_cb         Callback function executed on group membership changes
  * @param[in] update_cb_dat     User data pointer passed to membership update callback
- * @returns SSG group identifier on success, SSG_GROUP_ID_NULL otherwise
+ * @returns SSG group identifier for created group on success, SSG_GROUP_ID_NULL otherwise
  *
  * NOTE: The HG address string of the caller of this function must be present in
  * the list of address strings given in 'group_addr_strs'. That is, the caller
@@ -110,7 +110,7 @@ ssg_group_id_t ssg_group_create(
  *                          HG address strings for this group
  * @param[in] update_cb         Callback function executed on group membership changes
  * @param[in] update_cb_dat     User data pointer passed to membership update callback
- * @returns SSG group identifier on success, SSG_GROUP_ID_NULL otherwise
+ * @returns SSG group identifier for created group on success, SSG_GROUP_ID_NULL otherwise
  *
  * 
  * NOTE: The HG address string of the caller of this function must be present in
@@ -130,6 +130,30 @@ ssg_group_id_t ssg_group_create_config(
  * @returns SSG_SUCCESS on success, SSG error code otherwise
  */
 int ssg_group_destroy(
+    ssg_group_id_t group_id);
+
+/**
+ * Adds the calling process to an SSG group.
+ *
+ * @param[in] in_group_id       Input SSG group ID
+ * @param[in] update_cb         Callback function executed on group membership changes
+ * @param[in] update_cb_dat     User data pointer passed to membership update callback
+ * @returns SSG group identifier for joined group on success, SSG_GROUP_ID_NULL otherwise
+ *
+ * NOTE: XXX in and out group ids
+ */
+ssg_group_id_t ssg_group_join(
+    ssg_group_id_t in_group_id,
+    ssg_membership_update_cb update_cb,
+    void * update_cb_dat);
+
+/**
+ * Removes the calling process from an SSG group.
+ *
+ * @param[in] group_id SSG group ID
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
+ */
+int ssg_group_leave(
     ssg_group_id_t group_id);
 
 /**
