@@ -449,8 +449,8 @@ ssg_group_id_t ssg_group_create(
         .get_member_state = ssg_get_swim_member_state,
         .apply_member_update = ssg_apply_swim_member_update,
     };
-    g->swim_ctx = swim_init(ssg_inst->mid, g, (swim_member_id_t)g->self_id,
-        swim_callbacks, 1);
+    g->swim_ctx = swim_init_margo(ssg_inst->mid, g, (swim_member_id_t)g->self_id,
+        swim_callbacks);
     if (g->swim_ctx == NULL) goto fini;
 
     /* everything successful -- set the output group identifier, which is just

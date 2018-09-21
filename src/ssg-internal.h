@@ -15,7 +15,7 @@
 #include <margo.h>
 
 #include "ssg.h"
-#include "swim-fd/swim-fd.h"
+#include "swim-margo.h"
 #include "uthash.h"
 #include "utlist.h"
 
