@@ -1,6 +1,3 @@
-[submodule "build/swim"]
-	path = build/swim
-	url = git@xgitlab.cels.anl.gov:sds/swim.git
 [submodule "swim"]
 	path = swim
 	url = git@xgitlab.cels.anl.gov:sds/swim.git
