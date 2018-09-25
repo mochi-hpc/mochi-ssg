@@ -5,13 +5,16 @@ TESTS_ENVIRONMENT += \
  MKTEMP="$(MKTEMP)"
 
 check_PROGRAMS += \
- tests/ssg-launch-group
+ tests/ssg-launch-group \
+ tests/ssg-join-group
 
 TESTS += \
- tests/simple-group.sh
+ tests/simple-group.sh \
+ tests/join-group.sh
 
 EXTRA_DIST += \
- tests/simple-group.sh
+ tests/simple-group.sh \
+ tests/join-group.sh
 
 check_PROGRAMS += tests/perf-regression/margo-p2p-latency
 tests_perf_regression_margo_p2p_latency_LDADD = src/libssg.la
