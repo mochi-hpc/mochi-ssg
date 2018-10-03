@@ -29,6 +29,13 @@ typedef struct swim_member_update_link
     struct swim_member_update_link *next;
 } swim_member_update_link_t;
 
+typedef struct swim_user_update_link
+{
+    swim_user_update_t update;
+    int tx_count;
+    struct swim_user_update_link *next;
+} swim_user_update_link_t;
+
 /* SWIM ABT ULT prototypes */
 static void swim_prot_ult(
     void *t_arg);
@@ -36,18 +43,18 @@ static void swim_tick_ult(
     void *t_arg);
 
 /* SWIM group membership utility function prototypes */
-static void swim_suspect_member(
+static void swim_process_suspect_update(
     swim_context_t *swim_ctx, swim_member_id_t member_id,
     swim_member_inc_nr_t inc_nr);
-static void swim_unsuspect_member(
+static void swim_process_alive_update(
     swim_context_t *swim_ctx, swim_member_id_t member_id,
     swim_member_inc_nr_t inc_nr);
-static void swim_kill_member(
+static void swim_process_dead_update(
     swim_context_t *swim_ctx, swim_member_id_t member_id,
     swim_member_inc_nr_t inc_nr);
-static void swim_update_suspected_members(
+static void swim_check_suspected_members(
     swim_context_t *swim_ctx, double susp_timeout);
-static void swim_add_recent_member_update(
+static void swim_register_member_update(
     swim_context_t *swim_ctx, swim_member_update_t update);
 
 /******************************************************
@@ -145,8 +152,8 @@ static void swim_tick_ult(
 
     assert(swim_ctx != NULL);
 
-    /* update status of any suspected members */
-    swim_update_suspected_members(swim_ctx, swim_ctx->prot_susp_timeout *
+    /* check status of any suspected members */
+    swim_check_suspected_members(swim_ctx, swim_ctx->prot_susp_timeout *
         swim_ctx->prot_period_len);
 
     /* check whether the ping target from the previous protocol tick
@@ -155,7 +162,7 @@ static void swim_tick_ult(
     if(!(swim_ctx->ping_target_acked))
     {
         /* no response from direct/indirect pings, suspect this member */
-        swim_suspect_member(swim_ctx, swim_ctx->dping_target_id,
+        swim_process_suspect_update(swim_ctx, swim_ctx->dping_target_id,
             swim_ctx->dping_target_inc_nr);
     }
 
@@ -224,6 +231,8 @@ void swim_finalize(swim_context_t *swim_ctx)
     /* set shutdown flag so ULTs know to start wrapping up */
     swim_ctx->shutdown_flag = 1;
 
+    /* XXX free lists, etc. */
+
     if(swim_ctx->prot_thread)
     {
         /* wait for the protocol ULT to terminate */
@@ -240,18 +249,18 @@ void swim_finalize(swim_context_t *swim_ctx)
  * SWIM membership update functions *
  ************************************/
 
-void swim_retrieve_membership_updates(
+void swim_retrieve_member_updates(
     swim_context_t *swim_ctx,
     swim_member_update_t *updates,
     hg_size_t *update_count)
 {
     swim_member_update_link_t *iter, *tmp;
-    swim_member_update_link_t *recent_update_list =
-        (swim_member_update_link_t *)swim_ctx->recent_update_list;
+    swim_member_update_link_t *swim_update_list =
+        (swim_member_update_link_t *)swim_ctx->swim_update_list;
     hg_size_t i = 0;
     hg_size_t max_updates = *update_count;
 
-    LL_FOREACH_SAFE(recent_update_list, iter, tmp)
+    LL_FOREACH_SAFE(swim_update_list, iter, tmp)
     {
         if(i == max_updates)
             break;
@@ -262,7 +271,7 @@ void swim_retrieve_membership_updates(
         iter->tx_count++;
         if(iter->tx_count == SWIM_MAX_PIGGYBACK_TX_COUNT)
         {
-            LL_DELETE(recent_update_list, iter);
+            LL_DELETE(swim_update_list, iter);
             free(iter);
         }
         i++;
@@ -272,7 +281,39 @@ void swim_retrieve_membership_updates(
     return;
 }
 
-void swim_apply_membership_updates(
+void swim_retrieve_user_updates(
+    swim_context_t *swim_ctx,
+    swim_user_update_t *updates,
+    hg_size_t *update_count)
+{
+    swim_user_update_link_t *iter, *tmp;
+    swim_user_update_link_t **user_update_list =
+        (swim_user_update_link_t **)&swim_ctx->user_update_list;
+    hg_size_t i = 0;
+    hg_size_t max_updates = *update_count;
+
+    LL_FOREACH_SAFE(*user_update_list, iter, tmp)
+    {
+        if(i == max_updates)
+            break;
+
+        memcpy(&updates[i], &iter->update, sizeof(iter->update));
+
+        /* remove this update if it has been piggybacked enough */
+        iter->tx_count++;
+        if(iter->tx_count == SWIM_MAX_PIGGYBACK_TX_COUNT)
+        {
+            LL_DELETE(*user_update_list, iter);
+            free(iter);
+        }
+        i++;
+    }
+    *update_count = i;
+
+    return;
+}
+
+void swim_apply_member_updates(
     swim_context_t *swim_ctx,
     swim_member_update_t *updates,
     hg_size_t update_count)
@@ -286,7 +327,8 @@ void swim_apply_membership_updates(
             case SWIM_MEMBER_ALIVE:
                 /* ignore alive updates for self */
                 if(updates[i].id != swim_ctx->self_id)
-                    swim_unsuspect_member(swim_ctx, updates[i].id, updates[i].state.inc_nr);
+                    swim_process_alive_update(swim_ctx, updates[i].id,
+                        updates[i].state.inc_nr);
                 break;
             case SWIM_MEMBER_SUSPECT:
                 if(updates[i].id == swim_ctx->self_id)
@@ -303,7 +345,8 @@ void swim_apply_membership_updates(
                 }
                 else
                 {
-                    swim_suspect_member(swim_ctx, updates[i].id, updates[i].state.inc_nr);
+                    swim_process_suspect_update(swim_ctx, updates[i].id,
+                        updates[i].state.inc_nr);
                 }
                 break;
             case SWIM_MEMBER_DEAD:
@@ -317,7 +360,8 @@ void swim_apply_membership_updates(
                 }
                 else
                 {
-                    swim_kill_member(swim_ctx, updates[i].id, updates[i].state.inc_nr);
+                    swim_process_dead_update(swim_ctx, updates[i].id,
+                        updates[i].state.inc_nr);
                 }
                 break;
             default:
@@ -328,11 +372,42 @@ void swim_apply_membership_updates(
     return;
 }
 
+void swim_register_user_update(
+    swim_context_t *swim_ctx,
+    swim_user_update_t update)
+{
+    swim_user_update_link_t *iter, *tmp;
+    swim_user_update_link_t *update_link = NULL;
+    swim_user_update_link_t **user_update_list =
+        (swim_user_update_link_t **)&swim_ctx->user_update_list;
+
+    /* ignore updates we already are aware of */
+    LL_FOREACH_SAFE(*user_update_list, iter, tmp)
+    {
+        if((iter->update.size == update.size) &&
+           (memcmp(iter->update.data, update.data, update.size) == 0))
+            return;
+    }
+
+    /* allocate and initialize this update */
+    update_link = malloc(sizeof(*update_link));
+    assert(update_link);
+    update_link->update = update;
+    update_link->tx_count = 0;
+
+    /* add to recent update list */
+    LL_APPEND(*user_update_list, update_link);
+
+    SWIM_DEBUG(swim_ctx, "REGISTERED UPDATE *******************\n");
+
+    return;
+}
+
 /*******************************************
  * SWIM group membership utility functions *
  *******************************************/
 
-static void swim_suspect_member(
+static void swim_process_suspect_update(
     swim_context_t *swim_ctx, swim_member_id_t member_id, swim_member_inc_nr_t inc_nr)
 {
     swim_member_state_t *cur_swim_state;
@@ -345,13 +420,14 @@ static void swim_suspect_member(
     /* if there is no suspicion timeout, just kill the member */
     if(swim_ctx->prot_susp_timeout == 0)
     {
-        swim_kill_member(swim_ctx, member_id, inc_nr);
+        swim_process_dead_update(swim_ctx, member_id, inc_nr);
         return;
     }
 
     /* get current swim state for member */
     swim_ctx->swim_callbacks.get_member_state(
         swim_ctx->group_data, member_id, &cur_swim_state);
+    if(!cur_swim_state) return;
 
     /* lock access to group's swim state */
     ABT_mutex_lock(swim_ctx->swim_mutex);
@@ -418,20 +494,18 @@ static void swim_suspect_member(
     cur_swim_state->inc_nr = inc_nr;
     cur_swim_state->status = SWIM_MEMBER_SUSPECT;
 
-    /* add this update to recent update list so it will be piggybacked
-     * on future protocol messages
-     */
+    /* register this update so it's piggybacked on future SWIM messages */
     update.id = member_id;
     update.state.status = SWIM_MEMBER_SUSPECT;
     update.state.inc_nr = inc_nr;
-    swim_add_recent_member_update(swim_ctx, update);
+    swim_register_member_update(swim_ctx, update);
 
     ABT_mutex_unlock(swim_ctx->swim_mutex);
 
     return;
 }
 
-static void swim_unsuspect_member(
+static void swim_process_alive_update(
     swim_context_t *swim_ctx, swim_member_id_t member_id, swim_member_inc_nr_t inc_nr)
 {
     swim_member_state_t *cur_swim_state;
@@ -443,6 +517,7 @@ static void swim_unsuspect_member(
     /* get current swim state for member */
     swim_ctx->swim_callbacks.get_member_state(
         swim_ctx->group_data, member_id, &cur_swim_state);
+    if(!cur_swim_state) return;
 
     /* lock access to group's swim state */
     ABT_mutex_lock(swim_ctx->swim_mutex);
@@ -478,20 +553,18 @@ static void swim_unsuspect_member(
     cur_swim_state->inc_nr = inc_nr;
     cur_swim_state->status = SWIM_MEMBER_ALIVE;
 
-    /* add this update to recent update list so it will be piggybacked
-     * on future protocol messages
-     */
+    /* register this update so it's piggybacked on future SWIM messages */
     update.id = member_id;
     update.state.status = SWIM_MEMBER_ALIVE;
     update.state.inc_nr = inc_nr;
-    swim_add_recent_member_update(swim_ctx, update);
+    swim_register_member_update(swim_ctx, update);
 
     ABT_mutex_unlock(swim_ctx->swim_mutex);
 
     return;
 }
 
-static void swim_kill_member(
+static void swim_process_dead_update(
     swim_context_t *swim_ctx, swim_member_id_t member_id, swim_member_inc_nr_t inc_nr)
 {
     swim_member_state_t *cur_swim_state;
@@ -503,6 +576,7 @@ static void swim_kill_member(
     /* get current swim state for member */
     swim_ctx->swim_callbacks.get_member_state(
         swim_ctx->group_data, member_id, &cur_swim_state);
+    if(!cur_swim_state) return;
 
     /* lock access to group's swim state */
     ABT_mutex_lock(swim_ctx->swim_mutex);
@@ -531,13 +605,11 @@ static void swim_kill_member(
     cur_swim_state->inc_nr = inc_nr;
     cur_swim_state->status = SWIM_MEMBER_DEAD;
 
-    /* add this update to recent update list so it will be piggybacked
-     * on future protocol messages
-     */
+    /* register this update so it's piggybacked on future SWIM messages */
     update.id = member_id;
     update.state.status = SWIM_MEMBER_DEAD;
     update.state.inc_nr = inc_nr;
-    swim_add_recent_member_update(swim_ctx, update);
+    swim_register_member_update(swim_ctx, update);
 
     ABT_mutex_unlock(swim_ctx->swim_mutex);
 
@@ -548,7 +620,7 @@ static void swim_kill_member(
     return;
 }
 
-static void swim_update_suspected_members(
+static void swim_check_suspected_members(
     swim_context_t *swim_ctx, double susp_timeout)
 {
     double now = ABT_get_wtime();
@@ -568,7 +640,7 @@ static void swim_update_suspected_members(
              * we mark it as dead
              */
             ABT_mutex_unlock(swim_ctx->swim_mutex);
-            swim_kill_member(swim_ctx, iter->member_id,
+            swim_process_dead_update(swim_ctx, iter->member_id,
                 iter->member_state->inc_nr);
             ABT_mutex_lock(swim_ctx->swim_mutex);
         }
@@ -579,20 +651,20 @@ static void swim_update_suspected_members(
     return;
 }
 
-static void swim_add_recent_member_update(
+static void swim_register_member_update(
     swim_context_t *swim_ctx, swim_member_update_t update)
 {
     swim_member_update_link_t *iter, *tmp;
     swim_member_update_link_t *update_link = NULL;
-    swim_member_update_link_t *recent_update_list =
-        (swim_member_update_link_t *)swim_ctx->recent_update_list;
+    swim_member_update_link_t *swim_update_list =
+        (swim_member_update_link_t *)swim_ctx->swim_update_list;
 
     /* search and remove any recent updates corresponding to this member */
-    LL_FOREACH_SAFE(recent_update_list, iter, tmp)
+    LL_FOREACH_SAFE(swim_update_list, iter, tmp)
     {
         if(iter->update.id == update.id)
         {
-            LL_DELETE(recent_update_list, iter);
+            LL_DELETE(swim_update_list, iter);
             update_link = iter;
         }
     }
@@ -601,14 +673,14 @@ static void swim_add_recent_member_update(
     {
         update_link = malloc(sizeof(*update_link));
         assert(update_link);
-        memset(update_link, 0, sizeof(*update_link));
     }
 
+    /* set update */
     memcpy(&update_link->update, &update, sizeof(update));
+    update_link->tx_count = 0;
 
     /* add to recent update list */
-    update_link->tx_count = 0;
-    LL_APPEND(recent_update_list, update_link);
+    LL_APPEND(swim_update_list, update_link);
 
     return;
 }

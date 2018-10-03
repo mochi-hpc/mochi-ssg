@@ -101,6 +101,9 @@ int main(int argc, char *argv[])
     sret = ssg_init(mid);
     DIE_IF(sret != SSG_SUCCESS, "ssg_init");
 
+    /* load GID from file */
+    ssg_group_id_load(opts.gid_file, &in_g_id);
+
     /* XXX do we want to use callback for testing anything about group??? */
     out_g_id = ssg_group_join(in_g_id, NULL, NULL);
     DIE_IF(out_g_id == SSG_GROUP_ID_NULL, "ssg_group_join");

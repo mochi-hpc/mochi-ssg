@@ -60,9 +60,12 @@ struct swim_context
     hg_addr_t iping_target_addrs[SWIM_MAX_SUBGROUP_SIZE];
     int iping_target_ndx;
     int ping_target_acked;
-    void *suspect_list;
-    void *recent_update_list;
     int shutdown_flag;
+    /* list of currently supspected SWIM members */
+    void *suspect_list;
+    /* lists of SWIM membership updates and user-supplied updates */
+    void *swim_update_list;
+    void *user_update_list;
     /* argobots pool for launching SWIM threads */
     ABT_pool swim_pool;
     /* mutex for modifying SWIM group state */
@@ -79,12 +82,16 @@ void swim_dping_send_ult(
 void swim_iping_send_ult(
     void * t_arg);
 
-/* SWIM membership update function prototypes */
-void swim_retrieve_membership_updates(
+/* SWIM update function prototypes */
+void swim_retrieve_member_updates(
     swim_context_t *swim_ctx,
     swim_member_update_t *updates,
     hg_size_t *update_count);
-void swim_apply_membership_updates(
+void swim_retrieve_user_updates(
+    swim_context_t *swim_ctx,
+    swim_user_update_t *updates,
+    hg_size_t *update_count);
+void swim_apply_member_updates(
     swim_context_t *swim_ctx,
     swim_member_update_t *updates,
     hg_size_t update_count);

@@ -25,15 +25,37 @@ extern "C" {
 
 #define SSG_MAGIC_NR 17321588
 
+#define SSG_GET_SELF_ADDR_STR(__mid, __addr_str) do { \
+    hg_addr_t __self_addr; \
+    hg_size_t __size; \
+    __addr_str = NULL; \
+    if (margo_addr_self(__mid, &__self_addr) != HG_SUCCESS) break; \
+    if (margo_addr_to_string(__mid, NULL, &__size, __self_addr) != HG_SUCCESS) { \
+        margo_addr_free(__mid, __self_addr); \
+        break; \
+    } \
+    if ((__addr_str = malloc(__size)) == NULL) { \
+        margo_addr_free(__mid, __self_addr); \
+        break; \
+    } \
+    if (margo_addr_to_string(__mid, __addr_str, &__size, __self_addr) != HG_SUCCESS) { \
+        free(__addr_str); \
+        __addr_str = NULL; \
+        margo_addr_free(__mid, __self_addr); \
+        break; \
+    } \
+    margo_addr_free(__mid, __self_addr); \
+} while(0)
+
 /* debug printing macro for SSG */
 /* TODO: direct debug output to file? */
 /* TODO: how do we debug attachers? */
 #ifdef DEBUG
 #define SSG_DEBUG(__g, __fmt, ...) do { \
     double __now = ABT_get_wtime(); \
-    fprintf(stdout, "[%.6lf] %20"PRIu64" (%s): SSG " __fmt, __now, \
+    fprintf(g->dbg_log, "[%.6lf] %20"PRIu64" (%s): SSG " __fmt, __now, \
         __g->self_id, __g->name, ## __VA_ARGS__); \
-    fflush(stdout); \
+    fflush(g->dbg_log); \
 } while(0)
 #else
 #define SSG_DEBUG(__g, __fmt, ...) do { \
@@ -86,6 +108,9 @@ typedef struct ssg_group
     ABT_rwlock lock;
     ssg_membership_update_cb update_cb;
     void *update_cb_dat;
+#ifdef DEBUG
+    FILE *dbg_log;
+#endif
     UT_hash_handle hh;
 } ssg_group_t;
 
@@ -137,6 +162,10 @@ int ssg_group_attach_send(
     char ** group_name,
     int * group_size, 
     void ** view_buf);
+void ssg_apply_swim_user_updates(
+    void *group_data,
+    swim_user_update_t *updates,
+    hg_size_t update_count);
 
 /* XXX: is this right? can this be a global? */
 extern ssg_instance_t *ssg_inst; 

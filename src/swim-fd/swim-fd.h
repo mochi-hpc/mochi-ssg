@@ -40,6 +40,13 @@ typedef struct swim_member_update
     swim_member_state_t state;
 } swim_member_update_t;
 
+/* generic SWIM user update */
+typedef struct swim_user_update
+{
+    hg_size_t size;
+    void *data;
+} swim_user_update_t;
+
 #define SWIM_MEMBER_STATE_INIT(__ms) do { \
     __ms.inc_nr = 0; \
     __ms.status = SWIM_MEMBER_ALIVE; \
@@ -120,6 +127,11 @@ typedef struct swim_group_mgmt_callbacks
             void *group_data,
             swim_member_update_t update
             );
+    void (*apply_user_updates)(
+            void *group_data,
+            swim_user_update_t *updates,
+            hg_size_t update_count
+            );
 } swim_group_mgmt_callbacks_t;
 
 /**
@@ -134,7 +146,7 @@ typedef struct swim_group_mgmt_callbacks
  */
 swim_context_t * swim_init(
     margo_instance_id mid,
-    void * group_data,
+    void *group_data,
     swim_member_id_t self_id,
     swim_group_mgmt_callbacks_t swim_callbacks,
     int active);
@@ -145,7 +157,14 @@ swim_context_t * swim_init(
  * @param[in] swim_ctx  SWIM context pointer
  */
 void swim_finalize(
-    swim_context_t * swim_ctx);
+    swim_context_t *swim_ctx);
+
+/**
+ *
+ */
+void swim_register_user_update(
+    swim_context_t *swim_ctx,
+    swim_user_update_t update);   
 
 #ifdef __cplusplus
 }

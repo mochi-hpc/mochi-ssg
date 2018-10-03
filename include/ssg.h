@@ -36,11 +36,12 @@ typedef uint64_t ssg_member_id_t;
 #define SSG_MEMBER_ID_INVALID 0
 
 /* SSG group member update types */
-enum ssg_membership_update_type
+typedef enum ssg_update_type
 {
-    SSG_MEMBER_ADD = 0,
-    SSG_MEMBER_REMOVE
-};
+    SSG_MEMBER_JOINED = 0,
+    SSG_MEMBER_LEFT,
+    SSG_MEMBER_DIED
+} ssg_update_type_t;
 
 typedef struct ssg_member_update
 {

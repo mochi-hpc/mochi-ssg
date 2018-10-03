@@ -32,11 +32,15 @@ typedef struct swim_message_s
 {
     swim_member_id_t source_id;
     swim_member_inc_nr_t source_inc_nr;
-    hg_size_t pb_buf_count;
-    swim_member_update_t pb_buf[SWIM_MAX_PIGGYBACK_ENTRIES]; //TODO: dynamic array?
+    hg_size_t swim_pb_buf_count;
+    hg_size_t user_pb_buf_count;
+    swim_member_update_t swim_pb_buf[SWIM_MAX_PIGGYBACK_ENTRIES]; //TODO: dynamic array?
+    swim_user_update_t user_pb_buf[SWIM_MAX_PIGGYBACK_ENTRIES]; //TODO: dynamic array?
 } swim_message_t;
 
 /* HG encode/decode routines for SWIM RPCs */
+static hg_return_t hg_proc_swim_user_update_t(
+    hg_proc_t proc, void *data);
 static hg_return_t hg_proc_swim_message_t(
     hg_proc_t proc, void *data);
 
@@ -344,9 +348,11 @@ static void swim_pack_message(swim_context_t *swim_ctx, swim_message_t *msg)
     msg->source_id = swim_ctx->self_id;
     msg->source_inc_nr = swim_ctx->self_inc_nr;
 
-    /* piggyback a set of membership states on this message */
-    msg->pb_buf_count = SWIM_MAX_PIGGYBACK_ENTRIES;
-    swim_retrieve_membership_updates(swim_ctx, msg->pb_buf, &msg->pb_buf_count);
+    /* piggyback SWIM updates on the message */
+    msg->swim_pb_buf_count = SWIM_MAX_PIGGYBACK_ENTRIES;
+    msg->user_pb_buf_count = SWIM_MAX_PIGGYBACK_ENTRIES;
+    swim_retrieve_member_updates(swim_ctx, msg->swim_pb_buf, &msg->swim_pb_buf_count);
+    swim_retrieve_user_updates(swim_ctx, msg->user_pb_buf, &msg->user_pb_buf_count);
 
     return;
 }
@@ -359,10 +365,16 @@ static void swim_unpack_message(swim_context_t *swim_ctx, swim_message_t *msg)
     sender_update.id = msg->source_id;
     sender_update.state.status = SWIM_MEMBER_ALIVE;
     sender_update.state.inc_nr = msg->source_inc_nr;
-    swim_apply_membership_updates(swim_ctx, &sender_update, 1);
+    swim_apply_member_updates(swim_ctx, &sender_update, 1);
 
-    /* update membership status using piggybacked membership updates */
-    swim_apply_membership_updates(swim_ctx, msg->pb_buf, msg->pb_buf_count);
+    /* apply SWIM updates */
+    if(msg->swim_pb_buf_count > 0)
+        swim_apply_member_updates(swim_ctx, msg->swim_pb_buf, msg->swim_pb_buf_count);
+
+    /* apply user updates */
+    if(msg->user_pb_buf_count > 0)
+        swim_ctx->swim_callbacks.apply_user_updates(swim_ctx->group_data,
+            msg->user_pb_buf, msg->user_pb_buf_count);
 
     return;
 }
@@ -389,15 +401,30 @@ static hg_return_t hg_proc_swim_message_t(hg_proc_t proc, void *data)
                 hret = HG_PROTOCOL_ERROR;
                 return hret;
             }
-            hret = hg_proc_hg_size_t(proc, &(msg->pb_buf_count));
+            hret = hg_proc_hg_size_t(proc, &(msg->swim_pb_buf_count));
             if(hret != HG_SUCCESS)
             {
                 hret = HG_PROTOCOL_ERROR;
                 return hret;
             }
-            for(i = 0; i < msg->pb_buf_count; i++)
+            hret = hg_proc_hg_size_t(proc, &(msg->user_pb_buf_count));
+            if(hret != HG_SUCCESS)
             {
-                hret = hg_proc_swim_member_update_t(proc, &(msg->pb_buf[i]));
+                hret = HG_PROTOCOL_ERROR;
+                return hret;
+            }
+            for(i = 0; i < msg->swim_pb_buf_count; i++)
+            {
+                hret = hg_proc_swim_member_update_t(proc, &(msg->swim_pb_buf[i]));
+                if(hret != HG_SUCCESS)
+                {
+                    hret = HG_PROTOCOL_ERROR;
+                    return hret;
+                }
+            }
+            for(i = 0; i < msg->user_pb_buf_count; i++)
+            {
+                hret = hg_proc_swim_user_update_t(proc, &(msg->user_pb_buf[i]));
                 if(hret != HG_SUCCESS)
                 {
                     hret = HG_PROTOCOL_ERROR;
@@ -418,15 +445,30 @@ static hg_return_t hg_proc_swim_message_t(hg_proc_t proc, void *data)
                 hret = HG_PROTOCOL_ERROR;
                 return hret;
             }
-            hret = hg_proc_hg_size_t(proc, &(msg->pb_buf_count));
+            hret = hg_proc_hg_size_t(proc, &(msg->swim_pb_buf_count));
             if(hret != HG_SUCCESS)
             {
                 hret = HG_PROTOCOL_ERROR;
                 return hret;
             }
-            for(i = 0; i < msg->pb_buf_count; i++)
+            hret = hg_proc_hg_size_t(proc, &(msg->user_pb_buf_count));
+            if(hret != HG_SUCCESS)
             {
-                hret = hg_proc_swim_member_update_t(proc, &(msg->pb_buf[i]));
+                hret = HG_PROTOCOL_ERROR;
+                return hret;
+            }
+            for(i = 0; i < msg->swim_pb_buf_count; i++)
+            {
+                hret = hg_proc_swim_member_update_t(proc, &(msg->swim_pb_buf[i]));
+                if(hret != HG_SUCCESS)
+                {
+                    hret = HG_PROTOCOL_ERROR;
+                    return hret;
+                }
+            }
+            for(i = 0; i < msg->user_pb_buf_count; i++)
+            {
+                hret = hg_proc_swim_user_update_t(proc, &(msg->user_pb_buf[i]));
                 if(hret != HG_SUCCESS)
                 {
                     hret = HG_PROTOCOL_ERROR;
@@ -435,7 +477,67 @@ static hg_return_t hg_proc_swim_message_t(hg_proc_t proc, void *data)
             }
             break;
         case HG_FREE:
-            /* do nothing */
+            for(i = 0; i < msg->user_pb_buf_count; i++)
+            {
+                hret = hg_proc_swim_user_update_t(proc, &(msg->user_pb_buf[i]));
+                if(hret != HG_SUCCESS)
+                {
+                    hret = HG_PROTOCOL_ERROR;
+                    return hret;
+                }
+            }
+            hret = HG_SUCCESS;
+            break;
+        default:
+            break;
+    }
+
+    return(hret);
+}
+
+static hg_return_t hg_proc_swim_user_update_t(hg_proc_t proc, void *data)
+{
+    swim_user_update_t *update = (swim_user_update_t *)data;
+    hg_return_t hret = HG_PROTOCOL_ERROR;
+
+    switch(hg_proc_get_op(proc))
+    {
+        case HG_ENCODE:
+            hret = hg_proc_hg_size_t(proc, &(update->size));
+            if(hret != HG_SUCCESS)
+            {
+                hret = HG_PROTOCOL_ERROR;
+                return hret;
+            }
+            hret = hg_proc_memcpy(proc, update->data, update->size);
+            if(hret != HG_SUCCESS)
+            {
+                hret = HG_PROTOCOL_ERROR;
+                return hret;
+            }
+            break;
+        case HG_DECODE:
+            hret = hg_proc_hg_size_t(proc, &(update->size));
+            if(hret != HG_SUCCESS)
+            {
+                hret = HG_PROTOCOL_ERROR;
+                return hret;
+            }
+            update->data = malloc(update->size);
+            if(!update->data)
+            {
+                hret = HG_NOMEM_ERROR;
+                return hret;
+            }
+            hret = hg_proc_memcpy(proc, update->data, update->size);
+            if(hret != HG_SUCCESS)
+            {
+                hret = HG_PROTOCOL_ERROR;
+                return hret;
+            }
+            break;
+        case HG_FREE:
+            free(update->data);
             hret = HG_SUCCESS;
             break;
         default:

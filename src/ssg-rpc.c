@@ -18,6 +18,17 @@
 
 #define SSG_VIEW_BUF_DEF_SIZE (128 * 1024)
 
+#define SSG_USER_UPDATE_SERIALIZE(__type, __data, __size, __update) do { \
+    __update.size = sizeof(uint8_t) + __size; \
+    __update.data = malloc(__update.size); \
+    if (__update.data) { \
+        void *__p = __update.data; \
+        *(uint8_t *)__p = __type; \
+        __p += sizeof(uint8_t); \
+        memcpy(__p, __data, __size); \
+    } \
+} while(0)
+
 /* SSG RPC types and (de)serialization routines */
 
 /* TODO join and attach are nearly identical -- refactor */
@@ -59,8 +70,8 @@ DECLARE_MARGO_RPC_HANDLER(ssg_group_leave_recv_ult)
 DECLARE_MARGO_RPC_HANDLER(ssg_group_attach_recv_ult)
 
 /* internal helper routine prototypes */
-static int ssg_group_view_serialize(
-    ssg_group_view_t *view, void **buf, hg_size_t *buf_size);
+static int ssg_group_serialize(
+    ssg_group_t *g, void **buf, hg_size_t *buf_size);
 
 /* SSG RPC IDs */
 static hg_id_t ssg_group_join_rpc_id;
@@ -215,56 +226,56 @@ static void ssg_group_join_recv_ult(
     void *view_buf = NULL;
     hg_size_t view_buf_size;
     hg_bulk_t bulk_handle = HG_BULK_NULL;
+    char *join_addr_str = NULL;
+    hg_size_t join_addr_str_size = 0;
+    swim_user_update_t join_update;
     int sret;
     hg_return_t hret;
 
-    if (!ssg_inst) goto fini;
+    if (!ssg_inst) return;
 
     hgi = margo_get_info(handle);
-    if (!hgi) goto fini;
+    if (!hgi) return;
 
     hret = margo_get_input(handle, &join_req);
-    if (hret != HG_SUCCESS) goto fini;
+    if (hret != HG_SUCCESS) return;
     view_size_requested = margo_bulk_get_size(join_req.bulk_handle);
 
     /* look for the given group in my local table of groups */
     HASH_FIND(hh, ssg_inst->group_table, &join_req.group_descriptor.name_hash,
         sizeof(uint64_t), g);
-    if (!g)
-    {
-        margo_free_input(handle, &join_req);
-        goto fini;
-    }
+    if (!g) goto fini;
 
-    sret = ssg_group_view_serialize(&g->view, &view_buf, &view_buf_size);
-    if (sret != SSG_SUCCESS)
-    {
-        margo_free_input(handle, &join_req);
-        goto fini;
-    }
+    sret = ssg_group_serialize(g, &view_buf, &view_buf_size);
+    if (sret != SSG_SUCCESS) goto fini;
 
     if (view_size_requested >= view_buf_size)
     {
         /* if attacher's buf is large enough, transfer the view */
         hret = margo_bulk_create(ssg_inst->mid, 1, &view_buf, &view_buf_size,
             HG_BULK_READ_ONLY, &bulk_handle);
-        if (hret != HG_SUCCESS)
-        {
-            margo_free_input(handle, &join_req);
-            goto fini;
-        }
+        if (hret != HG_SUCCESS) goto fini;
 
         hret = margo_bulk_transfer(ssg_inst->mid, HG_BULK_PUSH, hgi->addr,
             join_req.bulk_handle, 0, bulk_handle, 0, view_buf_size);
-        if (hret != HG_SUCCESS)
-        {
-            margo_free_input(handle, &join_req);
-            goto fini;
-        }
-    }
+        if (hret != HG_SUCCESS) goto fini;
 
-    /* XXX what else? need to add to view/target list */
-    printf("***SDS: received JOINNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN REQUESTTTTTTTTTTTTTT\n");
+        /* get joining member's address string */
+        hret = margo_addr_to_string(ssg_inst->mid, NULL, &join_addr_str_size, hgi->addr);
+        if (hret != HG_SUCCESS) goto fini;
+        join_addr_str = malloc(join_addr_str_size);
+        if (join_addr_str == NULL) goto fini;
+        hret = margo_addr_to_string(ssg_inst->mid, join_addr_str, &join_addr_str_size, hgi->addr);
+        if (hret != HG_SUCCESS) goto fini;
+
+        /* create an SSG join update and register with SWIM to be gossiped */
+        SSG_USER_UPDATE_SERIALIZE(SSG_MEMBER_JOINED, join_addr_str,
+            join_addr_str_size, join_update);
+        swim_register_user_update(g->swim_ctx, join_update);
+
+        /* apply group join locally */
+        ssg_apply_swim_user_updates(g, &join_update, 1);
+    }
 
     /* set the response and send back */
     join_resp.group_name = g->name;
@@ -272,9 +283,10 @@ static void ssg_group_join_recv_ult(
     join_resp.view_buf_size = view_buf_size;
     margo_respond(handle, &join_resp);
 
-    margo_free_input(handle, &join_req);
 fini:
     free(view_buf);
+    free(join_addr_str);
+    margo_free_input(handle, &join_req);
     if (handle != HG_HANDLE_NULL) margo_destroy(handle);
     if (bulk_handle != HG_BULK_NULL) margo_bulk_free(bulk_handle);
 
@@ -445,7 +457,7 @@ static void ssg_group_attach_recv_ult(
         goto fini;
     }
 
-    sret = ssg_group_view_serialize(&g->view, &view_buf, &view_buf_size);
+    sret = ssg_group_serialize(g, &view_buf, &view_buf_size);
     if (sret != SSG_SUCCESS)
     {
         margo_free_input(handle, &attach_req);
@@ -488,37 +500,48 @@ fini:
 }
 DEFINE_MARGO_RPC_HANDLER(ssg_group_attach_recv_ult)
 
-static int ssg_group_view_serialize(
-    ssg_group_view_t *view, void **buf, hg_size_t *buf_size)
+static int ssg_group_serialize(
+    ssg_group_t *g, void **buf, hg_size_t *buf_size)
 {
+    char *self_addr_str;
     ssg_member_state_t *member_state, *tmp;
-    hg_size_t view_buf_size = 0;
-    void *view_buf;
+    hg_size_t group_buf_size = 0;
+    void *group_buf;
     void *buf_p, *str_p;
 
     *buf = NULL;
     *buf_size = 0;
 
-    /* first determine view size */
-    HASH_ITER(hh, view->member_map, member_state, tmp)
+    SSG_GET_SELF_ADDR_STR(ssg_inst->mid, self_addr_str);
+    if (!self_addr_str) return SSG_FAILURE;
+
+    /* first determine size */
+    group_buf_size = strlen(self_addr_str) + 1;
+    HASH_ITER(hh, g->view.member_map, member_state, tmp)
     {
-        view_buf_size += strlen(member_state->addr_str) + 1;
+        group_buf_size += strlen(member_state->addr_str) + 1;
     }
 
-    view_buf = malloc(view_buf_size);
-    if(!view_buf)
+    group_buf = malloc(group_buf_size);
+    if(!group_buf)
+    {
+        free(self_addr_str);
         return SSG_FAILURE;
+    }
 
-    buf_p = view_buf;
-    HASH_ITER(hh, view->member_map, member_state, tmp)
+    buf_p = group_buf;
+    strcpy(buf_p, self_addr_str);
+    buf_p += strlen(self_addr_str) + 1;
+    HASH_ITER(hh, g->view.member_map, member_state, tmp)
     {
         str_p = member_state->addr_str;
         strcpy(buf_p, str_p);
         buf_p += strlen(member_state->addr_str) + 1;
     }
 
-    *buf = view_buf;
-    *buf_size = view_buf_size;
+    *buf = group_buf;
+    *buf_size = group_buf_size;
+    free(self_addr_str);
 
     return SSG_SUCCESS;
 }
