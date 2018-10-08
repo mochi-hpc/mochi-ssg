@@ -48,7 +48,6 @@ extern "C" {
 } while(0)
 
 /* debug printing macro for SSG */
-/* TODO: direct debug output to file? */
 /* TODO: how do we debug attachers? */
 #ifdef DEBUG
 #define SSG_DEBUG(__g, __fmt, ...) do { \
@@ -103,6 +102,7 @@ typedef struct ssg_group
     ssg_member_id_t self_id;
     ssg_group_view_t view;
     ssg_group_target_list_t target_list;
+    ssg_member_state_t *dead_members;
     ssg_group_descriptor_t *descriptor;
     swim_context_t *swim_ctx;
     ABT_rwlock lock;
@@ -128,6 +128,7 @@ typedef struct ssg_instance
     margo_instance_id mid;
     ssg_group_t *group_table;
     ssg_attached_group_t *attached_group_table;
+    ABT_rwlock lock;
 } ssg_instance_t;
 
 enum ssg_group_descriptor_owner_status
@@ -154,9 +155,14 @@ void ssg_register_rpcs(
     void);
 int ssg_group_join_send(
     ssg_group_descriptor_t * group_descriptor,
+    hg_addr_t group_target_addr,
     char ** group_name,
     int * group_size, 
     void ** view_buf);
+int ssg_group_leave_send(
+    ssg_group_descriptor_t * group_descriptor,
+    ssg_member_id_t self_id,
+    hg_addr_t group_target_addr);
 int ssg_group_attach_send(
     ssg_group_descriptor_t * group_descriptor,
     char ** group_name,
@@ -167,7 +173,6 @@ void ssg_apply_swim_user_updates(
     swim_user_update_t *updates,
     hg_size_t update_count);
 
-/* XXX: is this right? can this be a global? */
 extern ssg_instance_t *ssg_inst; 
 
 #ifdef __cplusplus

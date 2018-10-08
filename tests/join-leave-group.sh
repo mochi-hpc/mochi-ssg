@@ -8,11 +8,10 @@ source $srcdir/tests/test-util.sh
 
 TMPOUT=$($MKTEMP -d --tmpdir test-XXXXXX)
 
-#export SSG_DEBUG_LOGDIR=$TMPOUT
+export SSG_DEBUG_LOGDIR=$TMPOUT
 
 # launch initial group, storing GID
-export SSG_GROUP_LAUNCH_NAME=simplest-group
-export SSG_GROUP_LAUNCH_DURATION=10
+export SSG_GROUP_LAUNCH_DURATION=30
 export SSG_GROUP_LAUNCH_GIDFILE=gid.out
 launch_ssg_group_mpi 4 na+sm &
 if [ $? -ne 0 ]; then
@@ -21,11 +20,9 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-sleep 2
+sleep 5
 
-# try to join running group
-export SSG_GROUP_LAUNCH_DURATION=8
-join_ssg_group na+sm $SSG_GROUP_LAUNCH_GIDFILE &
+tests/ssg-join-leave-group -s 25 -l 10 na+sm $SSG_GROUP_LAUNCH_GIDFILE &
 if [ $? -ne 0 ]; then
     wait
     rm -rf $TMPOUT
@@ -38,5 +35,5 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-#rm -rf $TMPOUT
+rm -rf $TMPOUT
 exit 0

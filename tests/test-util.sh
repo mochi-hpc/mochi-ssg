@@ -18,7 +18,7 @@ function launch_ssg_group_mpi ()
         options="$options -n $SSG_GROUP_LAUNCH_NAME"
     fi
     if [ ! -z $SSG_GROUP_LAUNCH_DURATION ]; then
-        options="$options -d $SSG_GROUP_LAUNCH_DURATION"
+        options="$options -s $SSG_GROUP_LAUNCH_DURATION"
     fi
     if [ ! -z $SSG_GROUP_LAUNCH_GIDFILE ]; then
         options="$options -f $SSG_GROUP_LAUNCH_GIDFILE"
@@ -26,23 +26,4 @@ function launch_ssg_group_mpi ()
 
     # launch SSG group given options
     mpirun -np $nmembers tests/ssg-launch-group $options $hg_addr mpi
-}
-
-function join_ssg_group ()
-{
-    hg_addr=${1:-"na+sm"}
-    gid_file=${2}
-    options=""
-
-    if [ -z "$gid_file" ]; then
-        echo "Error: join_ssg_group requires a valid GID file argument"
-        exit 1
-    fi
-
-    # parse known cmdline options out of env
-    if [ ! -z $SSG_GROUP_LAUNCH_DURATION ]; then
-        options="$options -d $SSG_GROUP_LAUNCH_DURATION"
-    fi
-
-    tests/ssg-join-group $options $hg_addr $gid_file
 }

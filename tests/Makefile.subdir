@@ -6,15 +6,15 @@ TESTS_ENVIRONMENT += \
 
 check_PROGRAMS += \
  tests/ssg-launch-group \
- tests/ssg-join-group
+ tests/ssg-join-leave-group
 
 TESTS += \
  tests/simple-group.sh \
- tests/join-group.sh
+ tests/join-leave-group.sh
 
 EXTRA_DIST += \
  tests/simple-group.sh \
- tests/join-group.sh
+ tests/join-leave-group.sh
 
 check_PROGRAMS += tests/perf-regression/margo-p2p-latency
 tests_perf_regression_margo_p2p_latency_LDADD = src/libssg.la

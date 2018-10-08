@@ -193,6 +193,7 @@ static void swim_tick_ult(
     /* sleep for an RTT and wait for an ack for this dping req */
     margo_thread_sleep(swim_ctx->mid, swim_ctx->dping_timeout);
 
+#if 0
     /* if we don't hear back from the target after an RTT, kick off
      * a set of indirect pings to a subgroup of group members
      */
@@ -222,6 +223,7 @@ static void swim_tick_ult(
             }
         }
     }
+#endif
 
     return;
 }
@@ -230,6 +232,8 @@ void swim_finalize(swim_context_t *swim_ctx)
 {
     /* set shutdown flag so ULTs know to start wrapping up */
     swim_ctx->shutdown_flag = 1;
+
+    SWIM_DEBUG(swim_ctx, "GOT SHUTDOWN\n");
 
     /* XXX free lists, etc. */
 
@@ -397,8 +401,6 @@ void swim_register_user_update(
 
     /* add to recent update list */
     LL_APPEND(*user_update_list, update_link);
-
-    SWIM_DEBUG(swim_ctx, "REGISTERED UPDATE *******************\n");
 
     return;
 }

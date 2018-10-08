@@ -141,7 +141,8 @@ int ssg_group_destroy(
  * @param[in] update_cb_dat     User data pointer passed to membership update callback
  * @returns SSG group identifier for joined group on success, SSG_GROUP_ID_NULL otherwise
  *
- * NOTE: XXX in and out group ids
+ * NOTE: Use the returned group ID to refer to the group, as the input group ID
+ *       becomes stale after the join is completed.
  */
 ssg_group_id_t ssg_group_join(
     ssg_group_id_t in_group_id,

@@ -7,7 +7,6 @@ fi
 source $srcdir/tests/test-util.sh
 
 # launch a group and wait for termination
-export SSG_GROUP_LAUNCH_NAME=simplest-group
 export SSG_GROUP_LAUNCH_DURATION=10
 launch_ssg_group_mpi 4 na+sm &
 if [ $? -ne 0 ]; then

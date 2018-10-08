@@ -47,10 +47,14 @@ typedef struct swim_user_update
     void *data;
 } swim_user_update_t;
 
-#define SWIM_MEMBER_STATE_INIT(__ms) do { \
+#define SWIM_MEMBER_SET_ALIVE(__ms) do { \
     __ms.inc_nr = 0; \
     __ms.status = SWIM_MEMBER_ALIVE; \
 } while(0)
+#define SWIM_MEMBER_SET_DEAD(__ms) do { \
+    __ms.status = SWIM_MEMBER_DEAD; \
+} while(0)
+#define SWIM_MEMBER_IS_DEAD(__ms) (__ms.status == SWIM_MEMBER_DEAD)
 
 /* SWIM callbacks for integrating with an overlying group management layer */
 typedef struct swim_group_mgmt_callbacks
