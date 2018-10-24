@@ -48,13 +48,12 @@ extern "C" {
 } while(0)
 
 /* debug printing macro for SSG */
-/* TODO: how do we debug attachers? */
 #ifdef DEBUG
 #define SSG_DEBUG(__g, __fmt, ...) do { \
     double __now = ABT_get_wtime(); \
-    fprintf(g->dbg_log, "[%.6lf] %20"PRIu64" (%s): SSG " __fmt, __now, \
+    fprintf(__g->dbg_log, "[%.6lf] %20"PRIu64" (%s): " __fmt, __now, \
         __g->self_id, __g->name, ## __VA_ARGS__); \
-    fflush(g->dbg_log); \
+    fflush(__g->dbg_log); \
 } while(0)
 #else
 #define SSG_DEBUG(__g, __fmt, ...) do { \
@@ -62,6 +61,16 @@ extern "C" {
 #endif
 
 /* SSG internal dataypes */
+
+/* TODO: associate a version number with a descriptor? */
+typedef struct ssg_group_descriptor
+{
+    uint64_t magic_nr;
+    uint64_t name_hash;
+    char *addr_str;
+    int owner_status;
+    int ref_count;
+} ssg_group_descriptor_t;
 
 typedef struct ssg_member_state
 {
@@ -72,15 +81,15 @@ typedef struct ssg_member_state
     UT_hash_handle hh;
 } ssg_member_state_t;
 
-/* TODO: associate a version number with a descriptor */
-typedef struct ssg_group_descriptor
+typedef struct ssg_member_update
 {
-    uint64_t magic_nr;
-    uint64_t name_hash;
-    char *addr_str;
-    int owner_status;
-    int ref_count;
-} ssg_group_descriptor_t;
+    ssg_member_update_type_t type;
+    union
+    {
+        char *member_addr_str;
+        ssg_member_id_t member_id;
+    } u;
+} ssg_member_update_t;
 
 typedef struct ssg_group_view
 {
@@ -88,26 +97,17 @@ typedef struct ssg_group_view
     ssg_member_state_t *member_map;
 } ssg_group_view_t;
 
-typedef struct ssg_group_target_list
-{
-    ssg_member_state_t **targets;
-    unsigned int nslots;
-    unsigned int len;
-    unsigned int dping_ndx;
-} ssg_group_target_list_t;
-
 typedef struct ssg_group
 {
     char *name;
     ssg_member_id_t self_id;
     ssg_group_view_t view;
-    ssg_group_target_list_t target_list;
     ssg_member_state_t *dead_members;
     ssg_group_descriptor_t *descriptor;
     swim_context_t *swim_ctx;
-    ABT_rwlock lock;
     ssg_membership_update_cb update_cb;
     void *update_cb_dat;
+    ABT_rwlock lock;
 #ifdef DEBUG
     FILE *dbg_log;
 #endif
@@ -168,10 +168,12 @@ int ssg_group_attach_send(
     char ** group_name,
     int * group_size, 
     void ** view_buf);
-void ssg_apply_swim_user_updates(
-    void *group_data,
-    swim_user_update_t *updates,
+void ssg_apply_member_updates(
+    ssg_group_t  * g,
+    ssg_member_update_t * updates,
     hg_size_t update_count);
+hg_return_t hg_proc_ssg_member_update_t(
+    hg_proc_t proc, void *data);
 
 extern ssg_instance_t *ssg_inst; 
 

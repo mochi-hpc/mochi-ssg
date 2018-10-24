@@ -182,8 +182,6 @@ int main(int argc, char *argv[])
     DIE_IF(my_id == SSG_MEMBER_ID_INVALID, "ssg_get_group_self_id");
     group_size = ssg_get_group_size(g_id);
     DIE_IF(group_size == 0, "ssg_get_group_size");
-    printf("group member %lu successfully created group (size == %d)\n",
-        my_id, group_size);
 
     /* print group at each member */
     ssg_group_dump(g_id);

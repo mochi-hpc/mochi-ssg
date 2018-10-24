@@ -9,6 +9,9 @@
 #include <stdint.h>
 #include <inttypes.h>
 
+#include "ssg.h"
+#include "ssg-internal.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -17,7 +20,6 @@ extern "C" {
 typedef struct swim_context swim_context_t;
 
 /* swim member specific types */
-typedef uint64_t swim_member_id_t;
 typedef uint32_t swim_member_inc_nr_t;
 typedef enum swim_member_status
 {
@@ -33,142 +35,40 @@ typedef struct swim_member_state
     swim_member_status_t status;
 } swim_member_state_t;
 
-/* SWIM protocol update */
-typedef struct swim_member_update
-{
-    swim_member_id_t id;
-    swim_member_state_t state;
-} swim_member_update_t;
-
-/* generic SWIM user update */
-typedef struct swim_user_update
-{
-    hg_size_t size;
-    void *data;
-} swim_user_update_t;
-
-#define SWIM_MEMBER_SET_ALIVE(__ms) do { \
-    __ms.inc_nr = 0; \
-    __ms.status = SWIM_MEMBER_ALIVE; \
-} while(0)
-#define SWIM_MEMBER_SET_DEAD(__ms) do { \
-    __ms.status = SWIM_MEMBER_DEAD; \
-} while(0)
-#define SWIM_MEMBER_IS_DEAD(__ms) (__ms.status == SWIM_MEMBER_DEAD)
-
-/* SWIM callbacks for integrating with an overlying group management layer */
-typedef struct swim_group_mgmt_callbacks
-{
-    /**
-     * Retrieve a (non-dead) random group member from the group
-     * management layer to send a direct ping request to.
-     * NOTE: to ensure time-bounded detection of faulty members,
-     * round-robin selection of members is required.
-     *
-     * @param[in]  group_data   void pointer to group managment data
-     * @param[out] target_id    ID of selected direct ping target
-     * @param[out] inc_nr       SWIM incarnation number of target
-     * @param[out] target_addr  HG address of target
-     * @returns 0 on successful selection of a target, -1 if no available targets
-     */
-    int (*get_dping_target)(
-            void *group_data,
-            swim_member_id_t *target_id,
-            swim_member_inc_nr_t *inc_nr,
-            hg_addr_t *target_addr
-            );
-    /**
-     * Retrieve a set of (non-dead) random group members from the group
-     * management layer to send indirect ping requests to.
-     *
-     * @param[in]      group_data       void pointer to group managment data
-     * @param[in]      dping_target_id  corresponding dping target ID
-     * @param[in/out]  num_targets      on input, maximum number of indirect ping
-     *                                  targets to select. on output, the actual
-     *                                  number of selected targets
-     * @param[out]     target_ids       IDs of selected indirect ping targets
-     * @param[out]     target_addrs     HG addresses of targets
-     * @returns 0 on successful selection of targets, -1 if no available targets
-     */
-    int (*get_iping_targets)(
-            void *group_data,
-            swim_member_id_t dping_target_id,
-            int *num_targets,
-            swim_member_id_t *target_ids,
-            hg_addr_t *target_addrs
-            );
-    /**
-     * Get the HG address corresponding to a given member ID.
-     *
-     * @param[in]  group_data   void pointer to group managment data
-     * @param[in]  id           member ID to query
-     * @param[out] addr         HG address of given member
-     */
-    void (*get_member_addr)(
-            void *group_data,
-            swim_member_id_t id,
-            hg_addr_t *addr
-            );
-    /**
-     * Get the SWIM protocol state corresponding to a given member ID.
-     *
-     * @param[in]  group_data   void pointer to group managment data
-     * @param[in]  id           member ID to query
-     * @param[out] state        pointer to given member's SWIM state
-     */
-    void (*get_member_state)(
-            void *group_data,
-            swim_member_id_t id,
-            swim_member_state_t **state
-            );
-    /**
-     * Apply a SWIM protocol update in the group management layer.
-     *
-     * @param[in] group_data    void pointer to group managment data
-     * @param[in] update        SWIM member update to apply to group
-     */
-    void (*apply_member_update)(
-            void *group_data,
-            swim_member_update_t update
-            );
-    void (*apply_user_updates)(
-            void *group_data,
-            swim_user_update_t *updates,
-            hg_size_t update_count
-            );
-} swim_group_mgmt_callbacks_t;
+/* forward declarations to work around weird SSG/SWIM circular dependency */
+struct ssg_group;
+struct ssg_member_state;
+struct ssg_member_update;
 
 /**
- * Initialize the SWIM protocol.
+ * Initialize SWIM protocol for the given SSG group and Margo instance.
  *
+ * @param[in] group             pointer to SSG group associated with this SWIM context
  * @param[in] mid               Margo instance ID
- * @param[in] group_data        void pointer to group management data
- * @param[in] self_id           ID
- * @param[in] swim_callbacks    SWIM callbacks to group management layer
  * @param[in] active            boolean value indicating whether member should actively ping
- * @returns SWIM context pointer on success, NULL otherwise
+ * @returns SSG_SUCCESS on success, SSG_FAILURE otherwise
  */
-swim_context_t * swim_init(
+int swim_init(
+    struct ssg_group * group,
     margo_instance_id mid,
-    void *group_data,
-    swim_member_id_t self_id,
-    swim_group_mgmt_callbacks_t swim_callbacks,
     int active);
 
 /**
- * Finalize the SWIM protocol.
+ * Finalize the given SSG group's SWIM protocol.
  *
- * @param[in] swim_ctx  SWIM context pointer
+ * @param[in] group     pointer to SSG group to finalize SWIM for
  */
 void swim_finalize(
-    swim_context_t *swim_ctx);
+    struct ssg_group * group);
 
 /**
  *
+ * @returns SSG_SUCCESS on success, SSG_FAILURE otherwise
  */
-void swim_register_user_update(
-    swim_context_t *swim_ctx,
-    swim_user_update_t update);   
+int swim_apply_ssg_member_update(
+    struct ssg_group * group,
+    struct ssg_member_state * ms,
+    struct ssg_member_update update);
 
 #ifdef __cplusplus
 }

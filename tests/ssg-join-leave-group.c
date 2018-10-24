@@ -146,7 +146,7 @@ int main(int argc, char *argv[])
     ssg_group_id_free(in_g_id);
 
     /* sleep for given duration to allow group time to run */
-    if (opts.leave_time > 0)
+    if (opts.leave_time >= 0)
     {
         margo_thread_sleep(mid, (opts.leave_time - opts.join_time) * 1000.0);
 
@@ -155,20 +155,17 @@ int main(int argc, char *argv[])
 
         sret = ssg_group_leave(out_g_id);
         DIE_IF(sret != SSG_SUCCESS, "ssg_group_leave");
-        goto cleanup;
-    }
 
-    if (opts.leave_time > 0)
         margo_thread_sleep(mid, (opts.shutdown_time - opts.leave_time) * 1000.0);
+    }
     else
+    {
         margo_thread_sleep(mid, (opts.shutdown_time - opts.join_time) * 1000.0);
 
-    /* print group at each member */
-    ssg_group_dump(out_g_id);
+        ssg_group_dump(out_g_id);
+        ssg_group_destroy(out_g_id);
+    }
 
-    /** cleanup **/
-cleanup:
-    ssg_group_destroy(out_g_id);
     ssg_finalize();
     margo_finalize(mid);
 

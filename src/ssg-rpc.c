@@ -18,17 +18,6 @@
 
 #define SSG_VIEW_BUF_DEF_SIZE (128 * 1024)
 
-#define SSG_USER_UPDATE_SERIALIZE(__type, __data, __size, __update) do { \
-    __update.size = sizeof(uint8_t) + __size; \
-    __update.data = malloc(__update.size); \
-    if (__update.data) { \
-        void *__p = __update.data; \
-        *(uint8_t *)__p = __type; \
-        __p += sizeof(uint8_t); \
-        memcpy(__p, __data, __size); \
-    } \
-} while(0)
-
 /* SSG RPC types and (de)serialization routines */
 
 /* TODO join and attach are nearly identical -- refactor */
@@ -224,7 +213,7 @@ static void ssg_group_join_recv_ult(
     void *view_buf = NULL;
     hg_size_t view_buf_size;
     hg_bulk_t bulk_handle = HG_BULK_NULL;
-    swim_user_update_t join_update;
+    ssg_member_update_t join_update;
     int sret;
     hg_return_t hret;
 
@@ -274,13 +263,10 @@ static void ssg_group_join_recv_ult(
             goto fini;
         }
 
-        /* create an SSG join update and register with SWIM to be gossiped */
-        SSG_USER_UPDATE_SERIALIZE(SSG_MEMBER_JOINED, join_req.addr_str,
-            strlen(join_req.addr_str) + 1, join_update);
-        swim_register_user_update(g->swim_ctx, join_update);
-
         /* apply group join locally */
-        ssg_apply_swim_user_updates(g, &join_update, 1);
+        join_update.type = SSG_MEMBER_JOINED;
+        join_update.u.member_addr_str = join_req.addr_str;
+        ssg_apply_member_updates(g, &join_update, 1);
     }
     margo_free_input(handle, &join_req);
 
@@ -346,7 +332,7 @@ static void ssg_group_leave_recv_ult(
     ssg_group_t *g = NULL;
     ssg_group_leave_request_t leave_req;
     ssg_group_leave_response_t leave_resp;
-    swim_user_update_t leave_update;
+    ssg_member_update_t leave_update;
     hg_return_t hret;
 
     leave_resp.ret = SSG_FAILURE;
@@ -368,15 +354,12 @@ static void ssg_group_leave_recv_ult(
         goto fini;
     }
 
-    /* create an SSG join update and register with SWIM to be gossiped */
-    SSG_USER_UPDATE_SERIALIZE(SSG_MEMBER_LEFT, &leave_req.member_id,
-        sizeof(leave_req.member_id), leave_update);
-    swim_register_user_update(g->swim_ctx, leave_update);
+    /* apply group leave locally */
+    leave_update.type = SSG_MEMBER_LEFT;
+    leave_update.u.member_id = leave_req.member_id;
+    ssg_apply_member_updates(g, &leave_update, 1);
+
     margo_free_input(handle, &leave_req);
-
-    /* apply group join locally */
-    ssg_apply_swim_user_updates(g, &leave_update, 1);
-
     leave_resp.ret = SSG_SUCCESS;
 fini:
     /* respond */
@@ -656,7 +639,7 @@ hg_return_t hg_proc_ssg_group_id_t(
             (*group_descriptor)->ref_count = 1;
             break;
         case HG_FREE:
-            if((*group_descriptor)->ref_count == 1)
+            if ((*group_descriptor)->ref_count == 1)
             {
                 free((*group_descriptor)->addr_str);
                 free(*group_descriptor);
@@ -666,6 +649,96 @@ hg_return_t hg_proc_ssg_group_id_t(
                 (*group_descriptor)->ref_count--;
             }
             hret = HG_SUCCESS;
+            break;
+        default:
+            break;
+    }
+
+    return hret;
+}
+
+hg_return_t hg_proc_ssg_member_update_t(
+    hg_proc_t proc, void *data)
+{
+    ssg_member_update_t *update = (ssg_member_update_t *)data;
+    hg_return_t hret = HG_PROTOCOL_ERROR;
+
+    switch(hg_proc_get_op(proc))
+    {
+        case HG_ENCODE:
+            hret = hg_proc_uint8_t(proc, &(update->type));
+            if (hret != HG_SUCCESS)
+            {
+                hret = HG_PROTOCOL_ERROR;
+                return hret;
+            }
+            if (update->type == SSG_MEMBER_JOINED)
+            {
+                hret = hg_proc_hg_string_t(proc, &(update->u.member_addr_str));
+                if (hret != HG_SUCCESS)
+                {
+                    hret = HG_PROTOCOL_ERROR;
+                    return hret;
+                }
+            }
+            else if (update->type == SSG_MEMBER_LEFT)
+            {
+                hret = hg_proc_ssg_member_id_t(proc, &(update->u.member_id));
+                if (hret != HG_SUCCESS)
+                {
+                    hret = HG_PROTOCOL_ERROR;
+                    return hret;
+                }
+            }
+            else
+            {
+                hret = HG_PROTOCOL_ERROR;
+            }
+            break;
+        case HG_DECODE:
+            hret = hg_proc_uint8_t(proc, &(update->type));
+            if (hret != HG_SUCCESS)
+            {
+                hret = HG_PROTOCOL_ERROR;
+                return hret;
+            }
+            if (update->type == SSG_MEMBER_JOINED)
+            {
+                hret = hg_proc_hg_string_t(proc, &(update->u.member_addr_str));
+                if (hret != HG_SUCCESS)
+                {
+                    hret = HG_PROTOCOL_ERROR;
+                    return hret;
+                }
+            }
+            else if (update->type == SSG_MEMBER_LEFT)
+            {
+                hret = hg_proc_ssg_member_id_t(proc, &(update->u.member_id));
+                if (hret != HG_SUCCESS)
+                {
+                    hret = HG_PROTOCOL_ERROR;
+                    return hret;
+                }
+            }
+            else
+            {
+                hret = HG_PROTOCOL_ERROR;
+            }
+            break;
+        case HG_FREE:
+            if (update->type == SSG_MEMBER_JOINED)
+            {
+                hret = hg_proc_hg_string_t(proc, &(update->u.member_addr_str));
+                if (hret != HG_SUCCESS)
+                {
+                    hret = HG_PROTOCOL_ERROR;
+                    return hret;
+                }
+            }
+            else
+            {
+                hret = HG_SUCCESS;
+            }
             break;
         default:
             break;

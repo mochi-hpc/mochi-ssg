@@ -36,21 +36,17 @@ typedef uint64_t ssg_member_id_t;
 #define SSG_MEMBER_ID_INVALID 0
 
 /* SSG group member update types */
-typedef enum ssg_update_type
+typedef enum ssg_member_update_type
 {
     SSG_MEMBER_JOINED = 0,
     SSG_MEMBER_LEFT,
     SSG_MEMBER_DIED
-} ssg_update_type_t;
-
-typedef struct ssg_member_update
-{
-    ssg_member_id_t id;
-    int type;
-} ssg_member_update_t;
+} ssg_member_update_type_t;
 
 typedef void (*ssg_membership_update_cb)(
-    ssg_member_update_t, void *);
+    void * group_data,
+    ssg_member_id_t member_id,
+    ssg_member_update_type_t update_type);
 
 /* HG proc routine prototypes for SSG types */
 #define hg_proc_ssg_member_id_t hg_proc_int64_t
