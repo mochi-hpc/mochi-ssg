@@ -75,9 +75,9 @@ struct swim_context
 /* SWIM ping function prototypes */
 void swim_register_ping_rpcs(
     ssg_group_t * group);
-void swim_dping_send_ult(
+void swim_dping_req_send_ult(
     void * t_arg);
-void swim_iping_send_ult(
+void swim_iping_req_send_ult(
     void * t_arg);
 
 /* SWIM update function prototypes */

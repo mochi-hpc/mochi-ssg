@@ -141,10 +141,11 @@ void swim_finalize(
     ssg_group_t * group)
 {
     swim_context_t *swim_ctx = group->swim_ctx;
-    int i;
 
     /* set shutdown flag so ULTs know to start wrapping up */
+    ABT_rwlock_wrlock(group->lock);
     swim_ctx->shutdown_flag = 1;
+    ABT_rwlock_unlock(group->lock);
 
     if(swim_ctx->prot_thread)
     {
@@ -153,23 +154,7 @@ void swim_finalize(
         ABT_thread_free(&(swim_ctx->prot_thread));
     }
 
-    /* cleanup ping target addresses */
-    if(swim_ctx->dping_target_id != SSG_MEMBER_ID_INVALID)
-        margo_addr_free(swim_ctx->mid, swim_ctx->dping_target_addr);
-    for(i = 0; i < swim_ctx->prot_subgroup_sz; i++)
-    {
-        if(swim_ctx->iping_target_ids[i] != SSG_MEMBER_ID_INVALID)
-        {
-            margo_addr_free(swim_ctx->mid, swim_ctx->iping_target_addrs[i]);
-            swim_ctx->iping_target_ids[i] = SSG_MEMBER_ID_INVALID;
-        }
-        else
-            break;
-    }
-
-    /* XXX free lists, etc. */
     free(swim_ctx->target_list.targets);
-
     free(swim_ctx);
     group->swim_ctx = NULL;
 
@@ -185,6 +170,7 @@ static void swim_prot_ult(
 {
     ssg_group_t *group = (ssg_group_t *)t_arg;
     swim_context_t *swim_ctx;
+    int i;
     int ret;
 
     assert(group != NULL);
@@ -196,8 +182,11 @@ static void swim_prot_ult(
         swim_ctx->prot_period_len, swim_ctx->prot_susp_timeout,
         swim_ctx->prot_subgroup_sz);
 
+    ABT_rwlock_rdlock(group->lock);
     while(!(swim_ctx->shutdown_flag))
     {
+        ABT_rwlock_unlock(group->lock);
+
         /* spawn a ULT to run this tick */
         ret = ABT_thread_create(swim_ctx->swim_pool, swim_tick_ult, group,
             ABT_THREAD_ATTR_NULL, NULL);
@@ -208,7 +197,29 @@ static void swim_prot_ult(
 
         /* sleep for a protocol period length */
         margo_thread_sleep(swim_ctx->mid, swim_ctx->prot_period_len);
+
+        ABT_rwlock_wrlock(group->lock);
+
+        /* cleanup state from previous period */
+        if(swim_ctx->dping_target_id != SSG_MEMBER_ID_INVALID)
+        {
+            margo_addr_free(swim_ctx->mid, swim_ctx->dping_target_addr);
+        }
+        for(i = 0; i < swim_ctx->prot_subgroup_sz; i++)
+        {
+            if(swim_ctx->iping_target_ids[i] != SSG_MEMBER_ID_INVALID)
+            {
+                margo_addr_free(swim_ctx->mid, swim_ctx->iping_target_addrs[i]);
+                swim_ctx->iping_target_ids[i] = SSG_MEMBER_ID_INVALID;
+            }
+            else
+            {
+                break;
+            }
+        }
+
     }
+    ABT_rwlock_unlock(group->lock);
 
     SSG_DEBUG(group, "SWIM protocol shutdown\n");
 
@@ -257,7 +268,7 @@ static void swim_tick_ult(
 
     /* kick off dping request ULT */
     swim_ctx->ping_target_acked = 0;
-    ret = ABT_thread_create(swim_ctx->swim_pool, swim_dping_send_ult, group,
+    ret = ABT_thread_create(swim_ctx->swim_pool, swim_dping_req_send_ult, group,
         ABT_THREAD_ATTR_NULL, NULL);
     if(ret != ABT_SUCCESS)
     {
@@ -288,7 +299,7 @@ static void swim_tick_ult(
         swim_ctx->iping_target_ndx = 0;
         for(i = 0; i < iping_target_count; i++)
         {
-            ret = ABT_thread_create(swim_ctx->swim_pool, swim_iping_send_ult,
+            ret = ABT_thread_create(swim_ctx->swim_pool, swim_iping_req_send_ult,
                 group, ABT_THREAD_ATTR_NULL, NULL);
             if(ret != ABT_SUCCESS)
             {
@@ -314,13 +325,6 @@ static void swim_get_dping_target(
     hg_return_t hret;
 
     ABT_rwlock_wrlock(group->lock);
-
-    /* cleanup previous dping target state */
-    if(swim_ctx->dping_target_id != SSG_MEMBER_ID_INVALID)
-    {
-        margo_addr_free(swim_ctx->mid, swim_ctx->dping_target_addr);
-        swim_ctx->dping_target_id = SSG_MEMBER_ID_INVALID;
-    }
 
     /* find dping target */
     while(swim_ctx->target_list.len > 0)
@@ -372,18 +376,6 @@ static void swim_get_iping_targets(
     *num_targets = 0;
 
     ABT_rwlock_rdlock(group->lock);
-
-    /* cleanup previous iping target state */
-    for(i = 0; i < swim_ctx->prot_subgroup_sz; i++)
-    {
-        if(swim_ctx->iping_target_ids[i] != SSG_MEMBER_ID_INVALID)
-        {
-            margo_addr_free(swim_ctx->mid, swim_ctx->iping_target_addrs[i]);
-            swim_ctx->iping_target_ids[i] = SSG_MEMBER_ID_INVALID;
-        }
-        else
-            break;
-    }
 
     if (swim_ctx->target_list.len == 0)
     {
