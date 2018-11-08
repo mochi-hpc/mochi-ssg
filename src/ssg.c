@@ -152,19 +152,7 @@ ssg_group_id_t ssg_group_create(
     g = ssg_group_create_internal(group_name, group_addr_strs,
             group_size, update_cb, update_cb_dat);
     if (g)
-    {
-        /* on successful creation, dup the group descriptor and return
-         * it for the caller to hold on to
-         */
-        g_id = (ssg_group_id_t)ssg_group_descriptor_dup(g->descriptor);
-        if (g_id == SSG_GROUP_ID_NULL)
-        {
-            ABT_rwlock_wrlock(ssg_inst->lock);
-            HASH_DELETE(hh, ssg_inst->group_table, g);
-            ABT_rwlock_unlock(ssg_inst->lock);
-            ssg_group_destroy_internal(g);
-        }
-    }
+        g_id = (ssg_group_id_t)g->descriptor;
 
     return g_id;
 }
@@ -414,18 +402,7 @@ ssg_group_id_t ssg_group_join(
             update_cb, update_cb_dat);
     if (g)
     {
-        /* on successful creation, dup the group descriptor and return
-         * it for the caller to hold on to
-         */
-        g_id = (ssg_group_id_t)ssg_group_descriptor_dup(g->descriptor);
-        if (g_id == SSG_GROUP_ID_NULL)
-        {
-            ABT_rwlock_wrlock(ssg_inst->lock);
-            HASH_DELETE(hh, ssg_inst->group_table, g);
-            ABT_rwlock_unlock(ssg_inst->lock);
-            ssg_group_destroy_internal(g);
-            goto fini;
-        }
+        g_id = (ssg_group_id_t)g->descriptor;
 
         /* don't free on success */
         group_name = NULL;
