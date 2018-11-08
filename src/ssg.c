@@ -1341,14 +1341,6 @@ static void ssg_group_destroy_internal(
     /* free up SWIM state */
     swim_finalize(g);
 
-    /* destroy group state */
-    ssg_group_view_destroy(&g->view);
-    g->descriptor->owner_status = SSG_OWNER_IS_UNASSOCIATED;
-    ssg_group_descriptor_free(g->descriptor);
-    ABT_rwlock_free(&g->lock);
-    free(g->name);
-    free(g);
-
 #ifdef DEBUG
     fflush(g->dbg_log);
 
@@ -1356,6 +1348,14 @@ static void ssg_group_destroy_internal(
     if (dbg_log_dir)
         fclose(g->dbg_log);
 #endif
+
+    /* destroy group state */
+    ssg_group_view_destroy(&g->view);
+    g->descriptor->owner_status = SSG_OWNER_IS_UNASSOCIATED;
+    ssg_group_descriptor_free(g->descriptor);
+    ABT_rwlock_free(&g->lock);
+    free(g->name);
+    free(g);
 
     return;
 }
