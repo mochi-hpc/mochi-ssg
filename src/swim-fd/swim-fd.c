@@ -141,6 +141,15 @@ void swim_finalize(
     ssg_group_t * group)
 {
     swim_context_t *swim_ctx = group->swim_ctx;
+    swim_suspect_member_link_t **suspect_list_p =
+        (swim_suspect_member_link_t **)&swim_ctx->suspect_list;
+    swim_member_update_link_t **swim_update_list_p =
+        (swim_member_update_link_t **)&swim_ctx->swim_update_list;
+    swim_ssg_member_update_link_t **ssg_update_list_p =
+        (swim_ssg_member_update_link_t **)&swim_ctx->ssg_update_list;
+    swim_suspect_member_link_t *suspect_iter, *suspect_tmp;
+    swim_member_update_link_t *swim_update_iter, *swim_update_tmp;
+    swim_ssg_member_update_link_t *ssg_update_iter, *ssg_update_tmp;
 
     /* set shutdown flag so ULTs know to start wrapping up */
     ABT_rwlock_wrlock(group->lock);
@@ -152,6 +161,22 @@ void swim_finalize(
         /* wait for the protocol ULT to terminate */
         ABT_thread_join(swim_ctx->prot_thread);
         ABT_thread_free(&(swim_ctx->prot_thread));
+    }
+
+    LL_FOREACH_SAFE(*suspect_list_p, suspect_iter, suspect_tmp)
+    {
+        LL_DELETE(*suspect_list_p, suspect_iter);
+        free(suspect_iter);
+    }
+    LL_FOREACH_SAFE(*swim_update_list_p, swim_update_iter, swim_update_tmp)
+    {
+        LL_DELETE(*swim_update_list_p, swim_update_iter);
+        free(swim_update_iter);
+    }
+    LL_FOREACH_SAFE(*ssg_update_list_p, ssg_update_iter, ssg_update_tmp)
+    {
+        LL_DELETE(*ssg_update_list_p, ssg_update_iter);
+        free(ssg_update_iter);
     }
 
     free(swim_ctx->target_list.targets);
