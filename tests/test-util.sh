@@ -27,3 +27,10 @@ function launch_ssg_group_mpi ()
     # launch SSG group given options
     mpirun -np $nmembers tests/ssg-launch-group $options $hg_addr mpi
 }
+
+function launch_ssg_group_pmix ()
+{
+    nmembers=${1:-4}
+
+    prun -n $nmembers tests/ssg-pmix-test
+}

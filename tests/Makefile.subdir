@@ -1,12 +1,16 @@
-if SSG_HAVE_MPI
-
 TESTS_ENVIRONMENT += \
- TIMEOUT="$(TIMEOUT)" \
  MKTEMP="$(MKTEMP)"
+
+EXTRA_DIST += \
+ tests/test-util.sh
+
+if SSG_HAVE_MPI
 
 check_PROGRAMS += \
  tests/ssg-launch-group \
- tests/ssg-join-leave-group
+ tests/ssg-join-leave-group \
+ tests/perf-regression/margo-p2p-latency \
+ tests/perf-regression/margo-p2p-bw
 
 TESTS += \
  tests/simple-group.sh \
@@ -16,9 +20,11 @@ EXTRA_DIST += \
  tests/simple-group.sh \
  tests/join-leave-group.sh
 
-check_PROGRAMS += tests/perf-regression/margo-p2p-latency
-tests_perf_regression_margo_p2p_latency_LDADD = src/libssg.la
-check_PROGRAMS += tests/perf-regression/margo-p2p-bw
-tests_perf_regression_margo_p2p_bw_LDADD = src/libssg.la
+endif
+
+if SSG_HAVE_PMIX
+
+check_PROGRAMS += \
+ tests/ssg-pmix-test
 
 endif
