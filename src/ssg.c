@@ -19,6 +19,9 @@
 #ifdef SSG_HAVE_MPI
 #include <mpi.h>
 #endif
+#ifdef SSG_HAVE_PMIX
+#include <pmix.h>
+#endif
 
 #include <mercury.h>
 #include <abt.h>
@@ -27,6 +30,9 @@
 #include "ssg.h"
 #ifdef SSG_HAVE_MPI
 #include "ssg-mpi.h"
+#endif
+#ifdef SSG_HAVE_PMIX
+#include "ssg-pmix.h"
 #endif
 #include "ssg-internal.h"
 #include "swim-fd/swim-fd.h"
@@ -313,6 +319,24 @@ fini:
     return group_id;
 }
 #endif
+
+#ifdef SSG_HAVE_PMIX
+ssg_group_id_t ssg_group_create_pmix(
+    const char * group_name,
+    ssg_membership_update_cb update_cb,
+    void * update_cb_dat)
+{
+    ssg_group_id_t group_id = SSG_GROUP_ID_NULL;
+
+    if (!ssg_inst) goto fini;
+
+    if (!PMIx_Initialized()) goto fini;
+
+fini:
+
+    return group_id;
+}
+#endif 
 
 int ssg_group_destroy(
     ssg_group_id_t group_id)

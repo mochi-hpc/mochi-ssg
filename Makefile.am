@@ -15,7 +15,10 @@ BUILT_SOURCES =
 include_HEADERS = include/ssg.h
 if SSG_HAVE_MPI
 include_HEADERS += include/ssg-mpi.h
-endif 
+endif
+if SSG_HAVE_PMIX
+include_HEADERS += include/ssg-pmix.h
+endif
 noinst_HEADERS = ssg-config.h
 TESTS_ENVIRONMENT =
 
