@@ -66,6 +66,16 @@ AC_ARG_ENABLE([mpi],
      esac],
     [])
 
+check_pmix=auto
+AC_ARG_ENABLE([pmix],
+    [  --enable-pmix           enable PMIx (default: dynamic check)],
+    [ case "${enableval}" in
+     yes) check_pmix=yes ;;
+     no)  check_pmix=no ;;
+     *) AC_MSG_ERROR([bad value ${enableval} for --enable-pmix]) ;;
+     esac],
+    [])
+
 check_mpi_status=fail
 if test "x${check_mpi}" = xauto -o "x${check_mpi}" = xyes ; then
     AC_MSG_CHECKING([If MPI programs can be compiled])
@@ -77,11 +87,26 @@ if test "x${check_mpi}" = xauto -o "x${check_mpi}" = xyes ; then
         [AC_MSG_RESULT([no])])
 fi
 
+check_pmix_status=fail
+if test "x${check_pmix}" = xauto -o "x${check_pmix}" = xyes ; then
+    AC_MSG_CHECKING([If PMIx programs can be compiled])
+    AC_LINK_IFELSE(
+        [AC_LANG_PROGRAM([[#include<pmix.h>]], [[PMIx_Init(NULL, NULL,0);]])],
+        [AC_DEFINE([SSG_HAVE_PMIX], [1], [Define to 1 if compiled with PMIx support])
+         AC_MSG_RESULT([yes])
+         check_pmix_status=success],
+        [AC_MSG_RESULT([no])])
+fi
+
 if test "x${check_mpi_status}" = xfail -a "x${check_mpi}" = xyes; then
     AC_MSG_ERROR([MPI requested but unable to be used. Did you specify an MPI compiler?])
 fi
+if test "x${check_pmix_status}" = xfail -a "x${check_pmix}" = xyes; then
+    AC_MSG_ERROR([PMIx requested but unable to be used.])
+fi
 
 AM_CONDITIONAL([SSG_HAVE_MPI], [test "x${check_mpi_status}" = xsuccess])
+AM_CONDITIONAL([SSG_HAVE_PMIX], [test "x${check_pmix_status}" = xsuccess])
 
 PKG_CHECK_MODULES([MARGO],[margo],[],
    [AC_MSG_ERROR([Could not find working margo installation!])])
