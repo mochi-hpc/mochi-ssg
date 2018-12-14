@@ -1,30 +1,35 @@
 TESTS_ENVIRONMENT += \
  MKTEMP="$(MKTEMP)"
 
+check_PROGRAMS += \
+ tests/ssg-launch-group \
+ tests/ssg-join-leave-group 
+
 EXTRA_DIST += \
  tests/test-util.sh
 
 if SSG_HAVE_MPI
 
 check_PROGRAMS += \
- tests/ssg-launch-group \
- tests/ssg-join-leave-group \
  tests/perf-regression/margo-p2p-latency \
  tests/perf-regression/margo-p2p-bw
 
 TESTS += \
- tests/simple-group.sh \
+ tests/simple-group-mpi.sh \
  tests/join-leave-group.sh
 
 EXTRA_DIST += \
- tests/simple-group.sh \
+ tests/simple-group-mpi.sh \
  tests/join-leave-group.sh
 
 endif
 
 if SSG_HAVE_PMIX
 
-check_PROGRAMS += \
- tests/ssg-pmix-test
+TESTS += \
+ tests/simple-group-pmix.sh
+
+EXTRA_DIST += \
+ tests/simple-group-pmix.sh
 
 endif

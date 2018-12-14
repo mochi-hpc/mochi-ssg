@@ -7,11 +7,9 @@ if [ -z "$MKTEMP" ]; then
     exit 1
 fi
 
-function launch_ssg_group_mpi ()
+function parse_launch_args ()
 {
-    nmembers=${1:-4}
-    hg_addr=${2:-"na+sm"}
-    options=""
+    local options=""
 
     # parse known cmdline options out of env
     if [ ! -z $SSG_GROUP_LAUNCH_NAME ]; then
@@ -24,6 +22,15 @@ function launch_ssg_group_mpi ()
         options="$options -f $SSG_GROUP_LAUNCH_GIDFILE"
     fi
 
+    echo $options
+}
+
+function launch_ssg_group_mpi ()
+{
+    nmembers=${1:-4}
+    hg_addr=${2:-"na+sm"}
+    options=$(parse_launch_args)
+
     # launch SSG group given options
     mpirun -np $nmembers tests/ssg-launch-group $options $hg_addr mpi
 }
@@ -31,6 +38,8 @@ function launch_ssg_group_mpi ()
 function launch_ssg_group_pmix ()
 {
     nmembers=${1:-4}
+    hg_addr=${2:-"na+sm"}
+    options=$(parse_launch_args)
 
-    prun -n $nmembers tests/ssg-pmix-test
+    prun -n $nmembers tests/ssg-launch-group $options $hg_addr pmix
 }

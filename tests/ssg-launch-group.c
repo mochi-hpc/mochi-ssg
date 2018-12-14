@@ -18,6 +18,9 @@
 #ifdef SSG_HAVE_MPI
 #include <ssg-mpi.h>
 #endif
+#ifdef SSG_HAVE_PMIX
+#include <ssg-pmix.h>
+#endif
 
 #define DIE_IF(cond_expr, err_fmt, ...) \
     do { \
@@ -32,7 +35,6 @@ struct group_launch_opts
 {
     char *addr_str;
     char *group_mode;
-    char *group_addr_conf_file;
     int shutdown_time;
     char *gid_file;
     char *group_name;
@@ -43,8 +45,7 @@ static void usage()
     fprintf(stderr,
         "Usage: "
         "ssg-launch-group [OPTIONS] <ADDR> <MODE> [CONFFILE]\n"
-        "Create and launch group using given Mercury ADDR string and group create MODE (\"mpi\" or \"conf\").\n"
-        "NOTE: A path to an address CONFFILE is required when using \"conf\" mode.\n" 
+        "Create and launch group using given Mercury ADDR string and group create MODE (\"mpi\" or \"pmix\").\n"
         "\n"
         "OPTIONS:\n"
         "\t-s <TIME>\t\tTime duration (in seconds) to run the group before shutting down\n"
@@ -90,18 +91,7 @@ static void parse_args(int argc, char *argv[], struct group_launch_opts *opts)
 
     opts->addr_str = argv[optind++];
     opts->group_mode = argv[optind++];
-    if (strcmp(opts->group_mode, "conf") == 0)
-    {
-        fprintf(stderr, "Error: configuration file mode not supported currently!\n");
-        exit(EXIT_FAILURE);
-        if ((argc - optind) != 1)
-        {
-            usage();
-            exit(EXIT_FAILURE);
-        }
-        opts->group_addr_conf_file = argv[optind++];
-    }
-    else if (strcmp(opts->group_mode, "mpi") == 0)
+    if (strcmp(opts->group_mode, "mpi") == 0)
     {
 #ifdef SSG_HAVE_MPI
         if (optind != argc)
@@ -111,6 +101,19 @@ static void parse_args(int argc, char *argv[], struct group_launch_opts *opts)
         }
 #else
         fprintf(stderr, "Error: MPI support not built in\n");
+        exit(EXIT_FAILURE);
+#endif
+    }
+    else if (strcmp(opts->group_mode, "pmix") == 0)
+    {
+#ifdef SSG_HAVE_PMIX
+        if (optind != argc)
+        {
+            usage();
+            exit(EXIT_FAILURE);
+        }
+#else
+        fprintf(stderr, "Error: PMIx support not built in\n");
         exit(EXIT_FAILURE);
 #endif
     }
@@ -149,6 +152,15 @@ int main(int argc, char *argv[])
         MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
     }
 #endif
+#ifdef SSG_HAVE_PMIX
+    pmix_status_t ret;
+    pmix_proc_t proc;
+    if (strcmp(opts.group_mode, "pmix") == 0)
+    {
+        ret = PMIx_Init(&proc, NULL, 0);
+        DIE_IF(ret != PMIX_SUCCESS, "PMIx_Init");
+    }
+#endif
 
     /* init margo */
     /* use the main xstream to drive progress & run handlers */
@@ -160,12 +172,13 @@ int main(int argc, char *argv[])
     DIE_IF(sret != SSG_SUCCESS, "ssg_init");
 
     /* XXX do we want to use callback for testing anything about group??? */
-    if(strcmp(opts.group_mode, "conf") == 0)
-        g_id = ssg_group_create_config(opts.group_name, opts.group_addr_conf_file,
-            NULL, NULL);
 #ifdef SSG_HAVE_MPI
-    else if(strcmp(opts.group_mode, "mpi") == 0)
+    if(strcmp(opts.group_mode, "mpi") == 0)
         g_id = ssg_group_create_mpi(opts.group_name, MPI_COMM_WORLD, NULL, NULL);
+#endif
+#ifdef SSG_HAVE_PMIX
+    if(strcmp(opts.group_mode, "pmix") == 0)
+        g_id = ssg_group_create_pmix(opts.group_name, proc, NULL, NULL);
 #endif
     DIE_IF(g_id == SSG_GROUP_ID_NULL, "ssg_group_create");
 
@@ -193,6 +206,10 @@ int main(int argc, char *argv[])
 #ifdef SSG_HAVE_MPI
     if (strcmp(opts.group_mode, "mpi") == 0)
         MPI_Finalize();
+#endif
+#ifdef SSG_HAVE_PMIX
+    if (strcmp(opts.group_mode, "pmix") == 0)
+        PMIx_Finalize(NULL, 0);
 #endif
 
     return 0;
