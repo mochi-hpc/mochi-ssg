@@ -176,8 +176,8 @@ ssg_group_id_t ssg_group_create_config(
     char *tok;
     void *addr_str_buf = NULL;
     int addr_str_buf_len = 0, num_addrs = 0;
-    int ret;
     const char **addr_strs = NULL;
+    int ret;
     ssg_group_id_t group_id = SSG_GROUP_ID_NULL;
 
     /* open config file for reading */
@@ -323,16 +323,86 @@ fini:
 #ifdef SSG_HAVE_PMIX
 ssg_group_id_t ssg_group_create_pmix(
     const char * group_name,
+    const pmix_proc_t proc,
     ssg_membership_update_cb update_cb,
     void * update_cb_dat)
 {
+    char *self_addr_str = NULL;
+    pmix_proc_t tmp_proc;
+    pmix_value_t value;
+    pmix_value_t *val_p = &value;
+    pmix_value_t *addr_vals = NULL;
+    unsigned int nprocs;
+    char key[128];
+    pmix_info_t *info;
+    bool flag;
+    const char **addr_strs = NULL;
+    unsigned int n;
+    pmix_status_t ret;
     ssg_group_id_t group_id = SSG_GROUP_ID_NULL;
 
-    if (!ssg_inst) goto fini;
+    if (!ssg_inst || !PMIx_Initialized()) goto fini;
 
-    if (!PMIx_Initialized()) goto fini;
+    /* get my address */
+    SSG_GET_SELF_ADDR_STR(ssg_inst->mid, self_addr_str);
+    if (self_addr_str == NULL) goto fini;
+
+    /* XXX default handler? */
+
+    /* XXX note we are assuming every process in the job wants to join this group... */
+    /* get the total nprocs in the job */
+    PMIX_PROC_LOAD(&tmp_proc, proc.nspace, PMIX_RANK_WILDCARD);
+    ret = PMIx_Get(&tmp_proc, PMIX_JOB_SIZE, NULL, 0, &val_p);
+    if (ret != PMIX_SUCCESS) goto fini;
+    nprocs = (int)val_p->data.uint32;
+    PMIX_VALUE_RELEASE(val_p);
+
+    /* put my address string using a well-known key */
+    if (snprintf(key, 128, "%s-%d-hg-addr", proc.nspace, proc.rank) >= 128) goto fini;
+    PMIX_VALUE_LOAD(val_p, self_addr_str, PMIX_STRING);
+    ret = PMIx_Put(PMIX_GLOBAL, key, val_p);
+    if (ret != PMIX_SUCCESS) goto fini;
+
+    /* commit the put data to the local pmix server */
+    ret = PMIx_Commit();
+    if (ret != PMIX_SUCCESS) goto fini;
+
+    /* barrier, additionally requesting to collect relevant process data */
+    PMIX_INFO_CREATE(info, 1);
+    flag = true;
+    PMIX_INFO_LOAD(info, PMIX_COLLECT_DATA, &flag, PMIX_BOOL);
+    ret = PMIx_Fence(&proc, 1, info, 1);
+    PMIX_INFO_FREE(info, 1);
+
+    addr_strs = malloc(nprocs * sizeof(*addr_strs));
+    if (addr_strs == NULL) goto fini;
+
+    /* finalize exchange by getting each member's address */
+    PMIX_VALUE_CREATE(addr_vals, nprocs);
+    for (n = 0; n < nprocs; n++)
+    {
+        /* skip ourselves */
+        if(n == proc.rank) continue;
+
+        if (snprintf(key, 128, "%s-%d-hg-addr", proc.nspace, n) >= 128) goto fini;
+
+        tmp_proc.rank = n;
+        val_p = &addr_vals[n];
+        ret = PMIx_Get(&tmp_proc, key, NULL, 0, &val_p);
+        if (ret != PMIX_SUCCESS) goto fini;
+
+        addr_strs[n] = val_p->data.string;
+    }
+
+    /* invoke the generic group create routine using our list of addrs */
+    group_id = ssg_group_create(group_name, addr_strs, nprocs,
+        update_cb, update_cb_dat);
 
 fini:
+    /* cleanup before returning */
+    free(self_addr_str);
+    free(addr_strs);
+    PMIX_VALUE_FREE(addr_vals, nprocs);
 
     return group_id;
 }
