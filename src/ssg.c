@@ -330,7 +330,7 @@ ssg_group_id_t ssg_group_create_pmix(
     char *self_addr_str = NULL;
     pmix_proc_t tmp_proc;
     pmix_value_t value;
-    pmix_value_t *val_p = &value;
+    pmix_value_t *val_p;
     pmix_value_t *addr_vals = NULL;
     unsigned int nprocs;
     char key[128];
@@ -359,8 +359,8 @@ ssg_group_id_t ssg_group_create_pmix(
 
     /* put my address string using a well-known key */
     if (snprintf(key, 128, "%s-%d-hg-addr", proc.nspace, proc.rank) >= 128) goto fini;
-    PMIX_VALUE_LOAD(val_p, self_addr_str, PMIX_STRING);
-    ret = PMIx_Put(PMIX_GLOBAL, key, val_p);
+    PMIX_VALUE_LOAD(&value, self_addr_str, PMIX_STRING);
+    ret = PMIx_Put(PMIX_GLOBAL, key, &value);
     if (ret != PMIX_SUCCESS) goto fini;
 
     /* commit the put data to the local pmix server */
@@ -382,7 +382,11 @@ ssg_group_id_t ssg_group_create_pmix(
     for (n = 0; n < nprocs; n++)
     {
         /* skip ourselves */
-        if(n == proc.rank) continue;
+        if(n == proc.rank)
+        {
+            addr_strs[n] = self_addr_str;
+            continue;
+        }
 
         if (snprintf(key, 128, "%s-%d-hg-addr", proc.nspace, n) >= 128) goto fini;
 
