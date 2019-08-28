@@ -74,6 +74,14 @@ static ssg_member_id_t ssg_gen_member_id(
     const char * addr_str);
 static const char ** ssg_addr_str_buf_to_list(
     const char * buf, int num_addrs);
+#ifdef SSG_HAVE_PMIX
+void ssg_pmix_proc_failure_notify_fn(
+    size_t evhdlr_registration_id, pmix_status_t status, const pmix_proc_t *source,
+    pmix_info_t info[], size_t ninfo, pmix_info_t results[], size_t nresults,
+    pmix_event_notification_cbfunc_fn_t cbfunc, void *cbdata);
+void ssg_pmix_proc_failure_reg_cb(
+    pmix_status_t status, size_t evhdlr_ref, void *cbdata);
+#endif 
 
 /* XXX: i think we ultimately need per-mid ssg instances rather than 1 global? */
 ssg_instance_t *ssg_inst = NULL;
@@ -103,6 +111,22 @@ int ssg_init(
     /* seed RNG */
     clock_gettime(CLOCK_MONOTONIC, &ts);
     srand(ts.tv_nsec + getpid());
+
+#ifdef SSG_HAVE_PMIX
+    if (PMIx_Initialized())
+    {
+        /* use PMIx event registrations to inform us of terminated/aborted procs */
+        pmix_status_t err_codes[2] = {PMIX_PROC_TERMINATED, PMIX_ERR_PROC_ABORTED};
+        PMIx_Register_event_handler(err_codes, 2, NULL, 0,
+            ssg_pmix_proc_failure_notify_fn, ssg_pmix_proc_failure_reg_cb, NULL /* XXX */);
+    }
+    else
+    {
+        fprintf(stderr, "Warning: skipping PMIx event notification registration -- "\
+                        "PMIx not initialized\n");
+    }
+
+#endif
 
     return SSG_SUCCESS;
 }
@@ -346,8 +370,6 @@ ssg_group_id_t ssg_group_create_pmix(
     /* get my address */
     SSG_GET_SELF_ADDR_STR(ssg_inst->mid, self_addr_str);
     if (self_addr_str == NULL) goto fini;
-
-    /* XXX default handler? */
 
     /* XXX note we are assuming every process in the job wants to join this group... */
     /* get the total nprocs in the job */
@@ -1678,6 +1700,39 @@ void ssg_apply_member_updates(
             SSG_DEBUG(g, "Warning: invalid SSG update received, ignoring.\n");
         }
     }
+
+    return;
+}
+
+void ssg_pmix_proc_failure_notify_fn(
+    size_t evhdlr_registration_id, pmix_status_t status, const pmix_proc_t *source,
+    pmix_info_t info[], size_t ninfo, pmix_info_t results[], size_t nresults,
+    pmix_event_notification_cbfunc_fn_t cbfunc, void *cbdata)
+{
+    pmix_status_t ret = PMIX_SUCCESS;
+
+    fprintf(stderr, "SSG received PMIx event notification [%d]\n", status);
+
+    /* TODO KILL MEMBER IN GROUP */
+
+    /* execute PMIx event notification callback */
+    if (cbfunc != NULL)
+        cbfunc(ret, NULL, 0, NULL, NULL, cbdata);
+
+    return;
+}
+
+void ssg_pmix_proc_failure_reg_cb(
+    pmix_status_t status, size_t evhdlr_ref, void *cbdata)
+{
+
+    if (status != PMIX_SUCCESS)
+    {
+        fprintf(stderr, "Error: PMIx event notification registration failed! [%d]\n", status);
+        return;
+    }
+
+    /* TODO store evhdlr_ref for eventual deregister? */
 
     return;
 }
