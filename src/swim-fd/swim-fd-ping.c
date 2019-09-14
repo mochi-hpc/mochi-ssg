@@ -116,8 +116,11 @@ void swim_dping_req_send_ult(
 {
     ssg_group_t *group = (ssg_group_t *)t_arg;
 
-    assert(group != NULL);
-    assert(group->swim_ctx != NULL);
+    if (group == NULL || group->swim_ctx == NULL)
+    {
+        fprintf(stderr, "SWIM dping req send error -- invalid group state\n");
+        return;
+    }
 
     /* send the dping req, ignoring retval since we can't return it from a ULT */
     swim_dping_req_send(group, group->swim_ctx->dping_target_id,
@@ -175,8 +178,11 @@ static void swim_dping_req_recv_ult(
 
     /* get SSG group */
     group = (ssg_group_t *)margo_registered_data(mid, swim_dping_req_rpc_id);
-    assert(group != NULL);
-    assert(group->swim_ctx != NULL);
+    if (group == NULL || group->swim_ctx == NULL)
+    {
+        fprintf(stderr, "SWIM dping req recv error -- invalid group state\n");
+        return;
+    }
 
     hret = margo_get_input(handle, &dping_req);
     if(hret != HG_SUCCESS)
@@ -234,8 +240,11 @@ static void swim_dping_ack_recv_ult(
 
     /* get SSG group */
     group = (ssg_group_t *)margo_registered_data(mid, swim_dping_ack_rpc_id);
-    assert(group != NULL);
-    assert(group->swim_ctx != NULL);
+    if (group == NULL || group->swim_ctx == NULL)
+    {
+        fprintf(stderr, "SWIM dping ack recv error -- invalid group state\n");
+        return;
+    }
 
     hret = margo_get_input(handle, &dping_ack);
     if(hret != HG_SUCCESS)
@@ -337,9 +346,12 @@ void swim_iping_req_send_ult(
     swim_iping_req_t iping_req;
     hg_return_t hret;
 
-    assert(group != NULL);
+    if (group == NULL || group->swim_ctx == NULL)
+    {
+        fprintf(stderr, "SWIM iping req send error -- invalid group state\n");
+        return;
+    }
     swim_ctx = group->swim_ctx;
-    assert(swim_ctx != NULL);
 
     ABT_rwlock_wrlock(group->lock);
     iping_target_id = swim_ctx->iping_target_ids[swim_ctx->iping_target_ndx];
@@ -387,8 +399,11 @@ static void swim_iping_req_recv_ult(hg_handle_t handle)
 
     /* get SSG group */
     group = (ssg_group_t *)margo_registered_data(mid, swim_iping_req_rpc_id);
-    assert(group != NULL);
-    assert(group->swim_ctx != NULL);
+    if (group == NULL || group->swim_ctx == NULL)
+    {
+        fprintf(stderr, "SWIM iping req recv error -- invalid group state\n");
+        return;
+    }
 
     hret = margo_get_input(handle, &iping_req);
     if(hret != HG_SUCCESS)
@@ -453,8 +468,11 @@ static void swim_iping_ack_recv_ult(hg_handle_t handle)
 
     /* get SSG group */
     group = (ssg_group_t *)margo_registered_data(mid, swim_iping_ack_rpc_id);
-    assert(group != NULL);
-    assert(group->swim_ctx != NULL);
+    if (group == NULL || group->swim_ctx == NULL)
+    {
+        fprintf(stderr, "SWIM iping ack recv error -- invalid group state\n");
+        return;
+    }
 
     hret = margo_get_input(handle, &iping_ack);
     if(hret != HG_SUCCESS)
@@ -493,7 +511,7 @@ static void swim_pack_message(ssg_group_t *group, swim_message_t *msg)
     memset(msg, 0, sizeof(*msg));
 
     /* fill in self information */
-    msg->source_id = group->self_id;
+    msg->source_id = group->ssg_inst->self_id;
     msg->source_inc_nr = group->swim_ctx->self_inc_nr;
 
     /* piggyback SWIM & SSG updates on the message */
@@ -606,6 +624,7 @@ static hg_return_t hg_proc_swim_message_t(hg_proc_t proc, void *data)
             }
             for(i = 0; i < msg->swim_pb_buf_count; i++)
             {
+                memset(&(msg->swim_pb_buf[i]), 0, sizeof(msg->swim_pb_buf[i]));
                 hret = hg_proc_swim_member_update_t(proc, &(msg->swim_pb_buf[i]));
                 if(hret != HG_SUCCESS)
                 {

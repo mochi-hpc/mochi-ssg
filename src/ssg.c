@@ -54,7 +54,7 @@ static ssg_group_t * ssg_group_create_internal(
 static int ssg_group_view_create(
     const char * const group_addr_strs[], int group_size,
     const char * self_addr_str, ABT_rwlock view_lock,
-    ssg_group_view_t * view, ssg_member_id_t * self_id);
+    ssg_group_view_t * view);
 static ssg_member_state_t * ssg_group_view_add_member(
     const char * addr_str, hg_addr_t addr, ssg_member_id_t member_id,
     ssg_group_view_t * view);
@@ -83,7 +83,7 @@ void ssg_pmix_proc_failure_reg_cb(
     pmix_status_t status, size_t evhdlr_ref, void *cbdata);
 #endif 
 
-/* XXX: i think we ultimately need per-mid ssg instances rather than 1 global? */
+/* XXX: we ultimately need per-mid ssg instances rather than 1 global */
 ssg_instance_t *ssg_inst = NULL;
 
 /***************************************************
@@ -94,6 +94,8 @@ int ssg_init(
     margo_instance_id mid)
 {
     struct timespec ts;
+    hg_addr_t self_addr;
+    hg_size_t self_addr_str_size;
 
     if (ssg_inst)
         return SSG_FAILURE;
@@ -112,22 +114,35 @@ int ssg_init(
     clock_gettime(CLOCK_MONOTONIC, &ts);
     srand(ts.tv_nsec + getpid());
 
-#ifdef SSG_HAVE_PMIX
-    if (PMIx_Initialized())
+    /* get my self address string and ID (which are constant per-mid) */
+    if (margo_addr_self(mid, &self_addr) != HG_SUCCESS)
     {
-        /* use PMIx event registrations to inform us of terminated/aborted procs */
-        pmix_status_t err_codes[2] = {PMIX_PROC_TERMINATED, PMIX_ERR_PROC_ABORTED};
-        PMIx_Register_event_handler(err_codes, 2, NULL, 0,
-            ssg_pmix_proc_failure_notify_fn, ssg_pmix_proc_failure_reg_cb, NULL /* XXX */);
+        free(ssg_inst);
+        return SSG_FAILURE;
     }
-    else
+    if (margo_addr_to_string(mid, NULL, &self_addr_str_size, self_addr) != HG_SUCCESS)
     {
-        fprintf(stderr, "Warning: skipping PMIx event notification registration -- "\
-                        "PMIx not initialized\n");
+        margo_addr_free(mid, self_addr); 
+        free(ssg_inst);
+        return SSG_FAILURE;
+    }
+    if ((ssg_inst->self_addr_str = malloc(self_addr_str_size)) == NULL)
+    {
+        margo_addr_free(mid, self_addr);
+        free(ssg_inst);
+        return SSG_FAILURE;
+    }
+    if (margo_addr_to_string(mid, ssg_inst->self_addr_str, &self_addr_str_size, self_addr) != HG_SUCCESS)
+    {
+        free(ssg_inst->self_addr_str);
+        margo_addr_free(mid, self_addr);
+        free(ssg_inst);
+        return SSG_FAILURE;
     }
 
-#endif
+    ssg_inst->self_id = ssg_gen_member_id(ssg_inst->self_addr_str);
 
+    margo_addr_free(mid, self_addr);
     return SSG_SUCCESS;
 }
 
@@ -140,6 +155,11 @@ int ssg_finalize()
         return SSG_FAILURE;
 
     ABT_rwlock_wrlock(ssg_inst->lock);
+
+#ifdef SSG_HAVE_PMIX
+    if (ssg_inst->pmix_failure_evhdlr_ref)
+        PMIx_Deregister_event_handler(ssg_inst->pmix_failure_evhdlr_ref, NULL, NULL);
+#endif
 
     /* destroy all active groups */
     HASH_ITER(hh, ssg_inst->group_table, g, g_tmp)
@@ -159,6 +179,7 @@ int ssg_finalize()
     ABT_rwlock_unlock(ssg_inst->lock);
     ABT_rwlock_free(&ssg_inst->lock);
 
+    free(ssg_inst->self_addr_str);
     free(ssg_inst);
     ssg_inst = NULL;
 
@@ -285,7 +306,6 @@ ssg_group_id_t ssg_group_create_mpi(
     void * update_cb_dat)
 {
     int i;
-    char *self_addr_str = NULL;
     int self_addr_str_size = 0;
     char *addr_str_buf = NULL;
     int *sizes = NULL;
@@ -296,16 +316,12 @@ ssg_group_id_t ssg_group_create_mpi(
 
     if (!ssg_inst) goto fini;
 
-    /* get my address */
-    SSG_GET_SELF_ADDR_STR(ssg_inst->mid, self_addr_str);
-    if (self_addr_str == NULL) goto fini;
-    self_addr_str_size = (int)strlen(self_addr_str) + 1;
-
     /* gather the buffer sizes */
     MPI_Comm_size(comm, &comm_size);
     MPI_Comm_rank(comm, &comm_rank);
     sizes = malloc(comm_size * sizeof(*sizes));
     if (sizes == NULL) goto fini;
+    self_addr_str_size = (int)strlen(ssg_inst->self_addr_str) + 1;
     sizes[comm_rank] = self_addr_str_size;
     MPI_Allgather(MPI_IN_PLACE, 0, MPI_BYTE, sizes, 1, MPI_INT, comm);
 
@@ -321,7 +337,7 @@ ssg_group_id_t ssg_group_create_mpi(
     /* allgather the addresses */
     addr_str_buf = malloc(sizes_psum[comm_size]);
     if (addr_str_buf == NULL) goto fini;
-    MPI_Allgatherv(self_addr_str, self_addr_str_size, MPI_BYTE,
+    MPI_Allgatherv(ssg_inst->self_addr_str, self_addr_str_size, MPI_BYTE,
             addr_str_buf, sizes, sizes_psum, MPI_BYTE, comm);
 
     /* set up address string array for group members */
@@ -334,7 +350,6 @@ ssg_group_id_t ssg_group_create_mpi(
 
 fini:
     /* cleanup before returning */
-    free(self_addr_str);
     free(sizes);
     free(sizes_psum);
     free(addr_str_buf);
@@ -351,13 +366,12 @@ ssg_group_id_t ssg_group_create_pmix(
     ssg_membership_update_cb update_cb,
     void * update_cb_dat)
 {
-    char *self_addr_str = NULL;
     pmix_proc_t tmp_proc;
     pmix_value_t value;
     pmix_value_t *val_p;
     pmix_value_t *addr_vals = NULL;
     unsigned int nprocs;
-    char key[128];
+    char key[512];
     pmix_info_t *info;
     bool flag;
     const char **addr_strs = NULL;
@@ -367,9 +381,49 @@ ssg_group_id_t ssg_group_create_pmix(
 
     if (!ssg_inst || !PMIx_Initialized()) goto fini;
 
-    /* get my address */
-    SSG_GET_SELF_ADDR_STR(ssg_inst->mid, self_addr_str);
-    if (self_addr_str == NULL) goto fini;
+    /* XXX config switch for this functionality */
+    /* if not already done, register for PMIx process failure notifications */
+    if (!ssg_inst->pmix_failure_evhdlr_ref)
+    {
+        /* use PMIx event registrations to inform us of terminated/aborted procs */
+        pmix_status_t err_codes[2] = {PMIX_PROC_TERMINATED, PMIX_ERR_PROC_ABORTED};
+        PMIx_Register_event_handler(err_codes, 2, NULL, 0,
+            ssg_pmix_proc_failure_notify_fn, ssg_pmix_proc_failure_reg_cb,
+            &ssg_inst->pmix_failure_evhdlr_ref);
+
+        /* exchange information needed to map PMIx ranks to SSG member IDs */
+        snprintf(key, 512, "ssg-%s-%d-id", proc.nspace, proc.rank);
+        PMIX_VALUE_LOAD(&value, &ssg_inst->self_id, PMIX_UINT64);
+        ret = PMIx_Put(PMIX_GLOBAL, key, &value);
+        if (ret != PMIX_SUCCESS)
+        {
+            fprintf(stderr, "Warning: skipping PMIx event notification registration -- "\
+                "Unable to put PMIx rank mapping\n");
+            PMIx_Deregister_event_handler(ssg_inst->pmix_failure_evhdlr_ref, NULL, NULL);
+        }
+
+        /* commit the put data to the local pmix server */
+        ret = PMIx_Commit();
+        if (ret != PMIX_SUCCESS)
+        {
+            fprintf(stderr, "Warning: skipping PMIx event notification registration -- "\
+                "Unable to commit PMIx rank mapping\n");
+            PMIx_Deregister_event_handler(ssg_inst->pmix_failure_evhdlr_ref, NULL, NULL);
+        }
+
+        /* barrier, additionally requesting to collect relevant process data */
+        PMIX_INFO_CREATE(info, 1);
+        flag = true;
+        PMIX_INFO_LOAD(info, PMIX_COLLECT_DATA, &flag, PMIX_BOOL);
+        ret = PMIx_Fence(&proc, 1, info, 1);
+        if (ret != PMIX_SUCCESS)
+        {
+            fprintf(stderr, "Warning: skipping PMIx event notification registration -- "\
+                "Unable to exchange PMIx rank mapping\n");
+            PMIx_Deregister_event_handler(ssg_inst->pmix_failure_evhdlr_ref, NULL, NULL);
+        }
+        PMIX_INFO_FREE(info, 1);
+    }
 
     /* XXX note we are assuming every process in the job wants to join this group... */
     /* get the total nprocs in the job */
@@ -380,8 +434,8 @@ ssg_group_id_t ssg_group_create_pmix(
     PMIX_VALUE_RELEASE(val_p);
 
     /* put my address string using a well-known key */
-    if (snprintf(key, 128, "%s-%d-hg-addr", proc.nspace, proc.rank) >= 128) goto fini;
-    PMIX_VALUE_LOAD(&value, self_addr_str, PMIX_STRING);
+    snprintf(key, 512, "ssg-%s-%s-%d-hg-addr", group_name, proc.nspace, proc.rank);
+    PMIX_VALUE_LOAD(&value, ssg_inst->self_addr_str, PMIX_STRING);
     ret = PMIx_Put(PMIX_GLOBAL, key, &value);
     if (ret != PMIX_SUCCESS) goto fini;
 
@@ -394,6 +448,7 @@ ssg_group_id_t ssg_group_create_pmix(
     flag = true;
     PMIX_INFO_LOAD(info, PMIX_COLLECT_DATA, &flag, PMIX_BOOL);
     ret = PMIx_Fence(&proc, 1, info, 1);
+    if (ret != PMIX_SUCCESS) goto fini;
     PMIX_INFO_FREE(info, 1);
 
     addr_strs = malloc(nprocs * sizeof(*addr_strs));
@@ -406,11 +461,12 @@ ssg_group_id_t ssg_group_create_pmix(
         /* skip ourselves */
         if(n == proc.rank)
         {
-            addr_strs[n] = self_addr_str;
+            addr_strs[n] = ssg_inst->self_addr_str;
             continue;
         }
 
-        if (snprintf(key, 128, "%s-%d-hg-addr", proc.nspace, n) >= 128) goto fini;
+        if (snprintf(key, 128, "ssg-%s-%s-%d-hg-addr", group_name,
+            proc.nspace, n) >= 128) goto fini;
 
         tmp_proc.rank = n;
         val_p = &addr_vals[n];
@@ -426,7 +482,6 @@ ssg_group_id_t ssg_group_create_pmix(
 
 fini:
     /* cleanup before returning */
-    free(self_addr_str);
     free(addr_strs);
     PMIX_VALUE_FREE(addr_vals, nprocs);
 
@@ -472,7 +527,6 @@ ssg_group_id_t ssg_group_join(
     void * update_cb_dat)
 {
     ssg_group_descriptor_t *in_group_descriptor = (ssg_group_descriptor_t *)in_group_id;
-    char *self_addr_str = NULL;
     hg_addr_t group_target_addr = HG_ADDR_NULL;
     char *group_name = NULL;
     int group_size;
@@ -505,10 +559,6 @@ ssg_group_id_t ssg_group_join(
         &group_name, &group_size, &view_buf);
     if (sret != SSG_SUCCESS || !group_name || !view_buf) goto fini;
 
-    /* get my address string */
-    SSG_GET_SELF_ADDR_STR(ssg_inst->mid, self_addr_str);
-    if (self_addr_str == NULL) goto fini;
-
     /* set up address string array for all group members */
     addr_strs = ssg_addr_str_buf_to_list(view_buf, group_size);
     if (!addr_strs) goto fini;
@@ -516,7 +566,7 @@ ssg_group_id_t ssg_group_join(
     /* append self address string to list of group member address strings */
     addr_strs = realloc(addr_strs, (group_size+1)*sizeof(char *));
     if(!addr_strs) goto fini;
-    addr_strs[group_size++] = self_addr_str;
+    addr_strs[group_size++] = ssg_inst->self_addr_str;
 
     g = ssg_group_create_internal(group_name, addr_strs, group_size,
             update_cb, update_cb_dat);
@@ -534,7 +584,6 @@ fini:
     free(addr_strs);
     free(view_buf);
     free(group_name);
-    free(self_addr_str);
 
     return g_id;
 }
@@ -574,7 +623,7 @@ int ssg_group_leave(
     }
     ABT_rwlock_unlock(ssg_inst->lock);
 
-    sret = ssg_group_leave_send(group_descriptor, g->self_id, group_target_addr);
+    sret = ssg_group_leave_send(group_descriptor, ssg_inst->self_id, group_target_addr);
     if (sret != SSG_SUCCESS) goto fini;
 
     /* at least one group member knows of the leave request -- safe to
@@ -650,7 +699,7 @@ int ssg_group_attach(
     ag->descriptor->owner_status = SSG_OWNER_IS_ATTACHER;
 
     /* create the view for the group */
-    sret = ssg_group_view_create(addr_strs, group_size, NULL, ag->lock, &ag->view, NULL);
+    sret = ssg_group_view_create(addr_strs, group_size, NULL, ag->lock, &ag->view);
     if (sret != SSG_SUCCESS) goto fini;
 
     /* add this group reference to our group table */
@@ -701,36 +750,18 @@ int ssg_group_detach(
 }
 #endif
 
-/*********************************
- *** SSG group access routines ***
- *********************************/
+/*********************************************************
+ *** SSG routines for obtaining self/group information ***
+ *********************************************************/
 
-ssg_member_id_t ssg_get_group_self_id(
-    ssg_group_id_t group_id)
+ssg_member_id_t ssg_get_self_id(
+    margo_instance_id mid)
 {
-    ssg_group_descriptor_t *group_descriptor = (ssg_group_descriptor_t *)group_id;
-    ssg_group_t *g;
-    ssg_member_id_t self_id;
+    /* XXX eventually mid needed to distinguish multiple ssg contexts */
 
-    if (!ssg_inst || group_id == SSG_GROUP_ID_NULL) return SSG_MEMBER_ID_INVALID;
+    if (!ssg_inst) return SSG_MEMBER_ID_INVALID;
 
-    if (group_descriptor->owner_status != SSG_OWNER_IS_MEMBER)
-    {
-        fprintf(stderr, "Error: SSG can only obtain a self ID from a group the" \
-            " caller is a member of\n");
-        return SSG_MEMBER_ID_INVALID;
-    }
-
-    ABT_rwlock_rdlock(ssg_inst->lock);
-    HASH_FIND(hh, ssg_inst->group_table, &group_descriptor->name_hash,
-        sizeof(uint64_t), g);
-    if (g)
-        self_id = g->self_id;
-    else
-        self_id = SSG_MEMBER_ID_INVALID;
-    ABT_rwlock_unlock(ssg_inst->lock);
-
-    return self_id;
+    return ssg_inst->self_id;
 }
 
 int ssg_get_group_size(
@@ -781,7 +812,7 @@ int ssg_get_group_size(
     return group_size;
 }
 
-hg_addr_t ssg_get_addr(
+hg_addr_t ssg_get_group_addr(
     ssg_group_id_t group_id,
     ssg_member_id_t member_id)
 {
@@ -1061,6 +1092,7 @@ void ssg_group_dump(
 
     if (group_descriptor->owner_status == SSG_OWNER_IS_MEMBER)
     {
+        fprintf(stderr, "MEMBER DUMP\n");
         ssg_group_t *g;
 
         ABT_rwlock_rdlock(ssg_inst->lock);
@@ -1073,7 +1105,7 @@ void ssg_group_dump(
             group_size = g->view.size + 1;
             group_name = g->name;
             strcpy(group_role, "member");
-            sprintf(group_self_id, "%lu", g->self_id);
+            sprintf(group_self_id, "%lu", ssg_inst->self_id);
         }
         ABT_rwlock_unlock(ssg_inst->lock);
     }
@@ -1134,7 +1166,6 @@ static ssg_group_t * ssg_group_create_internal(
     int group_size, ssg_membership_update_cb update_cb, void *update_cb_dat)
 {
     uint64_t name_hash;
-    char *self_addr_str = NULL;
     int sret;
     int success = 0;
     ssg_group_t *g = NULL, *check_g;
@@ -1143,36 +1174,26 @@ static ssg_group_t * ssg_group_create_internal(
 
     name_hash = ssg_hash64_str(group_name);
 
-    /* get my address string */
-    SSG_GET_SELF_ADDR_STR(ssg_inst->mid, self_addr_str);
-    if (self_addr_str == NULL) goto fini;
-
     /* allocate an SSG group data structure and initialize some of it */
     g = malloc(sizeof(*g));
     if (!g) goto fini;
     memset(g, 0, sizeof(*g));
     g->name = strdup(group_name);
     if (!g->name) goto fini;
+    g->ssg_inst = ssg_inst;
     g->update_cb = update_cb;
     g->update_cb_dat = update_cb_dat;
     ABT_rwlock_create(&g->lock);
 
     /* generate unique descriptor for this group  */
-    g->descriptor = ssg_group_descriptor_create(name_hash, self_addr_str,
+    g->descriptor = ssg_group_descriptor_create(name_hash, ssg_inst->self_addr_str,
         SSG_OWNER_IS_MEMBER);
     if (g->descriptor == NULL) goto fini;
 
     /* initialize the group view */
-    sret = ssg_group_view_create(group_addr_strs, group_size, self_addr_str,
-        g->lock, &g->view, &g->self_id);
+    sret = ssg_group_view_create(group_addr_strs, group_size, ssg_inst->self_addr_str,
+        g->lock, &g->view);
     if (sret != SSG_SUCCESS) goto fini;
-    if (g->self_id == SSG_MEMBER_ID_INVALID)
-    {
-        /* if unable to resolve my rank within the group, error out */
-        fprintf(stderr, "Error: SSG unable to resolve rank in group %s\n",
-            group_name);
-        goto fini;
-    }
 
 #ifdef DEBUG
     /* set debug output pointer */
@@ -1181,7 +1202,7 @@ static ssg_group_t * ssg_group_create_internal(
     {
         char dbg_log_path[PATH_MAX];
         snprintf(dbg_log_path, PATH_MAX, "%s/ssg-%s-%lu.log",
-            dbg_log_dir, g->name, g->self_id);
+            dbg_log_dir, g->name, g->ssg_inst->self_id);
         g->dbg_log = fopen(dbg_log_path, "a");
         if (!g->dbg_log) goto fini;
     }
@@ -1211,7 +1232,8 @@ static ssg_group_t * ssg_group_create_internal(
         goto fini;
     }
 
-    SSG_DEBUG(g, "group create successful (size=%d, self=%s)\n", group_size, self_addr_str);
+    SSG_DEBUG(g, "group create successful (size=%d, self=%s)\n",
+        group_size, ssg_inst->self_addr_str);
     success = 1;
 
 fini:
@@ -1229,7 +1251,6 @@ fini:
         free(g);
         g = NULL;
     }
-    free(self_addr_str);
 
     return g;
 }
@@ -1237,20 +1258,16 @@ fini:
 static int ssg_group_view_create(
     const char * const group_addr_strs[], int group_size,
     const char * self_addr_str, ABT_rwlock view_lock,
-    ssg_group_view_t * view, ssg_member_id_t * self_id)
+    ssg_group_view_t * view)
 {
     int i, j, r;
     ABT_thread *lookup_ults = NULL;
     struct ssg_group_lookup_ult_args *lookup_ult_args = NULL;
     const char *self_addr_substr = NULL;
     const char *addr_substr = NULL;
+    int self_found = 0;
     int aret;
     int sret = SSG_FAILURE;
-
-    if (self_id)
-        *self_id = SSG_MEMBER_ID_INVALID;
-        
-    if ((self_id != NULL && self_addr_str == NULL) || !view) goto fini;
 
     /* allocate lookup ULTs */
     lookup_ults = malloc(group_size * sizeof(*lookup_ults));
@@ -1283,7 +1300,6 @@ static int ssg_group_view_create(
 
         if (group_addr_strs[j] == NULL || strlen(group_addr_strs[j]) == 0) continue;
 
-        /* resolve self id in group if caller asked for it */
         if (self_addr_substr)
         {
             addr_substr = strstr(group_addr_strs[j], "://");
@@ -1294,10 +1310,8 @@ static int ssg_group_view_create(
 
             if (strcmp(self_addr_substr, addr_substr) == 0)
             {
-                if (self_id)               
-                    *self_id = ssg_gen_member_id(group_addr_strs[j]);
-
                 /* don't look up our own address, we already know it */
+                self_found = 1;
                 continue;
             }
         }
@@ -1329,6 +1343,15 @@ static int ssg_group_view_create(
                 lookup_ult_args[i].addr_str);
             goto fini;
         }
+    }
+
+    /* if we provided a self address string and didn't find ourselves,
+     * then we return with an error
+     */
+    if (self_addr_str && !self_found)
+    {
+        fprintf(stderr, "Error: SSG unable to resolve self ID in group\n");
+        goto fini;
     }
 
     /* clean exit */
@@ -1535,6 +1558,67 @@ static const char ** ssg_addr_str_buf_to_list(
     return ret;
 }
 
+#ifdef SSG_HAVE_PMIX
+void ssg_pmix_proc_failure_notify_fn(
+    size_t evhdlr_registration_id, pmix_status_t status, const pmix_proc_t *source,
+    pmix_info_t info[], size_t ninfo, pmix_info_t results[], size_t nresults,
+    pmix_event_notification_cbfunc_fn_t cbfunc, void *cbdata)
+{
+    char key[512];
+    pmix_value_t ssg_id_val;
+    pmix_value_t *val_p;
+    pmix_status_t ret;
+    ssg_group_t *g, *g_tmp;
+    ssg_member_update_t fail_update;
+
+    assert(status == PMIX_PROC_TERMINATED || status == PMIX_ERR_PROC_ABORTED);
+
+    snprintf(key, 512, "ssg-%s-%d-id", source->nspace, source->rank);
+    val_p = &ssg_id_val;
+    PMIX_VALUE_CONSTRUCT(val_p);
+    ret = PMIx_Get(source, key, NULL, 0, &val_p);
+    if (ret != PMIX_SUCCESS)
+    {
+        fprintf(stderr, "Warning: unable to retrieve PMIx rank mapping for rank %d\n",
+            source->rank);
+    }
+    else
+    {
+        /* remove this member from any group its a member of */
+        fail_update.type = SSG_MEMBER_DIED;
+        fail_update.u.member_id = val_p->data.uint64;
+        HASH_ITER(hh, ssg_inst->group_table, g, g_tmp)
+        {
+            SSG_DEBUG(g, "RECEIVED FAIL UPDATE FOR MEMBER %lu\n", fail_update.u.member_id);
+            ssg_apply_member_updates(g, &fail_update, 1);
+        }
+    }
+
+    /* execute PMIx event notification callback */
+    if (cbfunc != NULL)
+        cbfunc(ret, NULL, 0, NULL, NULL, cbdata);
+
+    return;
+}
+
+void ssg_pmix_proc_failure_reg_cb(
+    pmix_status_t status, size_t evhdlr_ref, void *cbdata)
+{
+    size_t *proc_failure_evhdlr_ref = (size_t *)cbdata;
+
+    if (status != PMIX_SUCCESS)
+    {
+        fprintf(stderr, "Error: PMIx event notification registration failed! [%d]\n", status);
+        return;
+    }
+
+    /* store evhdlr_ref for eventual deregister */
+    *proc_failure_evhdlr_ref = evhdlr_ref;
+
+    return;
+}
+#endif
+
 /**************************************
  *** SWIM group management routines ***
  **************************************/
@@ -1557,14 +1641,13 @@ void ssg_apply_member_updates(
         {
             ssg_member_id_t join_id = ssg_gen_member_id(updates[i].u.member_addr_str);
 
-            ABT_rwlock_wrlock(g->lock);
-            if (join_id == g->self_id)
+            if (join_id == ssg_inst->self_id)
             {
                 /* ignore joins for self */
-                ABT_rwlock_unlock(g->lock);
                 continue;
             }
 
+            ABT_rwlock_wrlock(g->lock);
             HASH_FIND(hh, g->view.member_map, &join_id, sizeof(join_id), update_ms);
             if (update_ms)
             {
@@ -1653,6 +1736,7 @@ void ssg_apply_member_updates(
             margo_addr_free(ssg_inst->mid, update_ms->addr);
             update_ms->addr= HG_ADDR_NULL;
 
+            /* have SWIM apply the leave update */
             ret = swim_apply_ssg_member_update(g, update_ms, updates[i]);
             if (ret != SSG_SUCCESS)
             {
@@ -1671,25 +1755,46 @@ void ssg_apply_member_updates(
         }
         else if (updates[i].type == SSG_MEMBER_DIED)
         {
-            ABT_rwlock_wrlock(g->lock);
-            HASH_FIND(hh, g->view.member_map, &updates[i].u.member_id,
-                sizeof(updates[i].u.member_id), update_ms);
-            if (!update_ms)
+            if (updates[i].u.member_id == ssg_inst->self_id)
             {
-                /* ignore fail messages for members not in view */
+                /* if dead member is self, just destroy group locally ... */
+                ABT_rwlock_wrlock(g->lock);
+                HASH_DELETE(hh, ssg_inst->group_table, g);
                 ABT_rwlock_unlock(g->lock);
-                continue;
+                ssg_group_destroy_internal(g);
             }
+            else
+            {
+                ABT_rwlock_wrlock(g->lock);
+                HASH_FIND(hh, g->view.member_map, &updates[i].u.member_id,
+                    sizeof(updates[i].u.member_id), update_ms);
+                if (!update_ms)
+                {
+                    /* ignore fail messages for members not in view */
+                    ABT_rwlock_unlock(g->lock);
+                    continue;
+                }
 
-            /* remove from view and add to dead list */
-            HASH_DELETE(hh, g->view.member_map, update_ms);
-            g->view.size--;
-            HASH_ADD(hh, g->dead_members, id, sizeof(update_ms->id), update_ms);
-            margo_addr_free(ssg_inst->mid, update_ms->addr);
-            update_ms->addr= HG_ADDR_NULL;
-            ABT_rwlock_unlock(g->lock);
+                /* remove from view and add to dead list */
+                HASH_DELETE(hh, g->view.member_map, update_ms);
+                g->view.size--;
+                HASH_ADD(hh, g->dead_members, id, sizeof(update_ms->id), update_ms);
+                margo_addr_free(ssg_inst->mid, update_ms->addr);
+                update_ms->addr= HG_ADDR_NULL;
 
-            SSG_DEBUG(g, "successfully removed failed member %lu\n", updates[i].u.member_id);
+                /* have SWIM apply the dead update */
+                ret = swim_apply_ssg_member_update(g, update_ms, updates[i]);
+                if (ret != SSG_SUCCESS)
+                {
+                    SSG_DEBUG(g, "Warning: SWIM unable to apply SSG update for dead"\
+                        "group member %lu\n", updates[i].u.member_id);
+                    ABT_rwlock_unlock(g->lock);
+                    continue;
+                }
+                ABT_rwlock_unlock(g->lock);
+
+                SSG_DEBUG(g, "successfully removed dead member %lu\n", updates[i].u.member_id);
+            }
 
             /* invoke user callback to apply the SSG update */
             if (g->update_cb)
@@ -1700,39 +1805,6 @@ void ssg_apply_member_updates(
             SSG_DEBUG(g, "Warning: invalid SSG update received, ignoring.\n");
         }
     }
-
-    return;
-}
-
-void ssg_pmix_proc_failure_notify_fn(
-    size_t evhdlr_registration_id, pmix_status_t status, const pmix_proc_t *source,
-    pmix_info_t info[], size_t ninfo, pmix_info_t results[], size_t nresults,
-    pmix_event_notification_cbfunc_fn_t cbfunc, void *cbdata)
-{
-    pmix_status_t ret = PMIX_SUCCESS;
-
-    fprintf(stderr, "SSG received PMIx event notification [%d]\n", status);
-
-    /* TODO KILL MEMBER IN GROUP */
-
-    /* execute PMIx event notification callback */
-    if (cbfunc != NULL)
-        cbfunc(ret, NULL, 0, NULL, NULL, cbdata);
-
-    return;
-}
-
-void ssg_pmix_proc_failure_reg_cb(
-    pmix_status_t status, size_t evhdlr_ref, void *cbdata)
-{
-
-    if (status != PMIX_SUCCESS)
-    {
-        fprintf(stderr, "Error: PMIx event notification registration failed! [%d]\n", status);
-        return;
-    }
-
-    /* TODO store evhdlr_ref for eventual deregister? */
 
     return;
 }

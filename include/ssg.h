@@ -183,11 +183,11 @@ int ssg_group_detach(
 /**
  * Obtains the caller's member ID in the given SSG group.
  *
- * @param[in] group_id SSG group ID
+ * @param[in] mid Corresponding Margo instance identifier
  * @returns caller's group ID on success, SSG_MEMBER_ID_INVALID otherwise
  */
-ssg_member_id_t ssg_get_group_self_id(
-    ssg_group_id_t group_id);
+ssg_member_id_t ssg_get_self_id(
+    margo_instance_id mid);
 
 /**
  * Obtains the size of a given SSG group.
@@ -205,7 +205,7 @@ int ssg_get_group_size(
  * @param[in] member_id SSG group member ID
  * @returns HG address of given group member on success, HG_ADDR_NULL otherwise
  */
-hg_addr_t ssg_get_addr(
+hg_addr_t ssg_get_group_addr(
     ssg_group_id_t group_id,
     ssg_member_id_t member_id);
 

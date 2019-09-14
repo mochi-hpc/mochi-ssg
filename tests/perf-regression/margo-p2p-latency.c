@@ -182,7 +182,7 @@ int main(int argc, char **argv)
 
     assert(ssg_get_group_size(gid) == 2);
 
-    self = ssg_get_group_self_id(gid);
+    self = ssg_get_self_id(gid);
 #if 0
     printf("MPI rank %d has SSG ID %lu\n", rank, self);
 #endif
@@ -332,7 +332,7 @@ static int run_benchmark(int iterations, hg_id_t id, ssg_member_id_t target,
     int ret;
     double tm1, tm2;
 
-    target_addr = ssg_get_addr(gid, target);
+    target_addr = ssg_get_group_addr(gid, target);
     assert(target_addr != HG_ADDR_NULL);
 
     ret = margo_create(mid, target_addr, id, &handle);

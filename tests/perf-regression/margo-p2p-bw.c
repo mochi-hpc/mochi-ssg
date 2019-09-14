@@ -228,7 +228,7 @@ int main(int argc, char **argv)
 
     assert(ssg_get_group_size(gid) == 2);
 
-    self = ssg_get_group_self_id(gid);
+    self = ssg_get_self_id(gid);
 
     if(self == 1)
     {
@@ -538,7 +538,7 @@ static int run_benchmark(hg_id_t id, ssg_member_id_t target,
     for(i=0; i<(g_buffer_size/sizeof(i)); i++)
         ((hg_size_t*)buffer)[i] = i;
 
-    target_addr = ssg_get_addr(gid, target);
+    target_addr = ssg_get_group_addr(gid, target);
     assert(target_addr != HG_ADDR_NULL);
 
     ret = margo_create(mid, target_addr, id, &handle);

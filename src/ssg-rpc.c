@@ -105,7 +105,6 @@ int ssg_group_join_send(
     hg_bulk_t bulk_handle = HG_BULK_NULL;
     void *tmp_view_buf = NULL, *b;
     hg_size_t tmp_view_buf_size = SSG_VIEW_BUF_DEF_SIZE;
-    char *self_addr_str = NULL;
     ssg_group_join_request_t join_req;
     ssg_group_join_response_t join_resp;
     hg_return_t hret;
@@ -118,9 +117,6 @@ int ssg_group_join_send(
     hret = margo_create(ssg_inst->mid, group_target_addr,
         ssg_group_join_rpc_id, &handle);
     if (hret != HG_SUCCESS) goto fini;
-
-    SSG_GET_SELF_ADDR_STR(ssg_inst->mid, self_addr_str);
-    if (!self_addr_str) goto fini;
 
     /* allocate a buffer to try to store the group view in */
     /* NOTE: We don't know if this buffer is big enough to store the complete
@@ -137,7 +133,7 @@ int ssg_group_join_send(
     /* send a join request to the given group member address */
     /* XXX is the whole descriptor really needed? */
     memcpy(&join_req.group_descriptor, group_descriptor, sizeof(*group_descriptor));
-    join_req.addr_str = self_addr_str;
+    join_req.addr_str = ssg_inst->self_addr_str;
     join_req.bulk_handle = bulk_handle;
     hret = margo_forward(handle, &join_req);
     if (hret != HG_SUCCESS) goto fini;
@@ -197,7 +193,6 @@ fini:
     if (handle != HG_HANDLE_NULL) margo_destroy(handle);
     if (bulk_handle != HG_BULK_NULL) margo_bulk_free(bulk_handle);
     free(tmp_view_buf);
-    free(self_addr_str);
 
     return sret;
 }
@@ -561,7 +556,6 @@ DEFINE_MARGO_RPC_HANDLER(ssg_group_attach_recv_ult)
 static int ssg_group_serialize(
     ssg_group_t *g, void **buf, hg_size_t *buf_size)
 {
-    char *self_addr_str;
     ssg_member_state_t *member_state, *tmp;
     hg_size_t group_buf_size = 0;
     void *group_buf;
@@ -570,11 +564,8 @@ static int ssg_group_serialize(
     *buf = NULL;
     *buf_size = 0;
 
-    SSG_GET_SELF_ADDR_STR(ssg_inst->mid, self_addr_str);
-    if (!self_addr_str) return SSG_FAILURE;
-
     /* first determine size */
-    group_buf_size = strlen(self_addr_str) + 1;
+    group_buf_size = strlen(ssg_inst->self_addr_str) + 1;
     HASH_ITER(hh, g->view.member_map, member_state, tmp)
     {
         group_buf_size += strlen(member_state->addr_str) + 1;
@@ -583,13 +574,12 @@ static int ssg_group_serialize(
     group_buf = malloc(group_buf_size);
     if(!group_buf)
     {
-        free(self_addr_str);
         return SSG_FAILURE;
     }
 
     buf_p = group_buf;
-    strcpy(buf_p, self_addr_str);
-    buf_p += strlen(self_addr_str) + 1;
+    strcpy(buf_p, ssg_inst->self_addr_str);
+    buf_p += strlen(ssg_inst->self_addr_str) + 1;
     HASH_ITER(hh, g->view.member_map, member_state, tmp)
     {
         str_p = member_state->addr_str;
@@ -599,7 +589,6 @@ static int ssg_group_serialize(
 
     *buf = group_buf;
     *buf_size = group_buf_size;
-    free(self_addr_str);
 
     return SSG_SUCCESS;
 }

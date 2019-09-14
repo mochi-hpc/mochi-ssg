@@ -349,6 +349,7 @@ static void swim_get_dping_target(
     ssg_member_state_t *tmp_ms;
     hg_return_t hret;
 
+    *target_id = SSG_MEMBER_ID_INVALID;
     ABT_rwlock_wrlock(group->lock);
 
     /* find dping target */
@@ -873,12 +874,12 @@ void swim_apply_member_updates(
         {
             case SWIM_MEMBER_ALIVE:
                 /* ignore alive updates for self */
-                if(updates[i].id != group->self_id)
+                if(updates[i].id != group->ssg_inst->self_id)
                     swim_process_alive_member_update(group, updates[i].id,
                         updates[i].state.inc_nr);
                 break;
             case SWIM_MEMBER_SUSPECT:
-                if(updates[i].id == group->self_id)
+                if(updates[i].id == group->ssg_inst->self_id)
                 {
                     /* increment our incarnation number if we are suspected
                      * in the current incarnation
@@ -898,7 +899,7 @@ void swim_apply_member_updates(
                 break;
             case SWIM_MEMBER_DEAD:
                 /* if we get an update that we are dead, just shut down */
-                if(updates[i].id == group->self_id)
+                if(updates[i].id == group->ssg_inst->self_id)
                 {
                     SSG_DEBUG(group, "SWIM self confirmed DEAD (inc_nr=%u)\n",
                         updates[i].state.inc_nr);
@@ -912,7 +913,7 @@ void swim_apply_member_updates(
                 }
                 break;
             default:
-                fprintf(stderr, "Error: invalid SWIM member update\n");
+                fprintf(stderr, "Error: invalid SWIM member update [%lu,%d]\n", group->ssg_inst->self_id,updates[i].state.status);
                 break;
         }
     }
@@ -952,6 +953,7 @@ int swim_apply_ssg_member_update(
 
             break;
         case SSG_MEMBER_LEFT:
+        case SSG_MEMBER_DIED:
             /* just mark as dead, this member will be cleaned from ping target
              * list on the next re-shuffle
              */

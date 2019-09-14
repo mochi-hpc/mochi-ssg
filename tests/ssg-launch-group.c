@@ -191,7 +191,7 @@ int main(int argc, char *argv[])
         margo_thread_sleep(mid, opts.shutdown_time * 1000.0);
 
     /* get my group id and the size of the group */
-    my_id = ssg_get_group_self_id(g_id);
+    my_id = ssg_get_self_id(mid);
     DIE_IF(my_id == SSG_MEMBER_ID_INVALID, "ssg_get_group_self_id");
     group_size = ssg_get_group_size(g_id);
     DIE_IF(group_size == 0, "ssg_get_group_size");

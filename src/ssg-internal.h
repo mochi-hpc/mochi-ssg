@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include "ssg-config.h"
+
 #include <stdint.h>
 #include <inttypes.h>
 
@@ -25,34 +27,12 @@ extern "C" {
 
 #define SSG_MAGIC_NR 17321588
 
-#define SSG_GET_SELF_ADDR_STR(__mid, __addr_str) do { \
-    hg_addr_t __self_addr; \
-    hg_size_t __size; \
-    __addr_str = NULL; \
-    if (margo_addr_self(__mid, &__self_addr) != HG_SUCCESS) break; \
-    if (margo_addr_to_string(__mid, NULL, &__size, __self_addr) != HG_SUCCESS) { \
-        margo_addr_free(__mid, __self_addr); \
-        break; \
-    } \
-    if ((__addr_str = malloc(__size)) == NULL) { \
-        margo_addr_free(__mid, __self_addr); \
-        break; \
-    } \
-    if (margo_addr_to_string(__mid, __addr_str, &__size, __self_addr) != HG_SUCCESS) { \
-        free(__addr_str); \
-        __addr_str = NULL; \
-        margo_addr_free(__mid, __self_addr); \
-        break; \
-    } \
-    margo_addr_free(__mid, __self_addr); \
-} while(0)
-
 /* debug printing macro for SSG */
 #ifdef DEBUG
 #define SSG_DEBUG(__g, __fmt, ...) do { \
     double __now = ABT_get_wtime(); \
-    fprintf(__g->dbg_log, "[%.6lf] %20"PRIu64" (%s): " __fmt, __now, \
-        __g->self_id, __g->name, ## __VA_ARGS__); \
+    fprintf(__g->dbg_log, "%.6lf %20"PRIu64" (%s): " __fmt, __now, \
+        __g->ssg_inst->self_id, __g->name, ## __VA_ARGS__); \
     fflush(__g->dbg_log); \
 } while(0)
 #else
@@ -61,6 +41,19 @@ extern "C" {
 #endif
 
 /* SSG internal dataypes */
+
+typedef struct ssg_instance
+{
+    margo_instance_id mid;
+    char *self_addr_str;
+    ssg_member_id_t self_id;
+    struct ssg_group *group_table;
+    struct ssg_attached_group *attached_group_table;
+#ifdef SSG_HAVE_PMIX
+    size_t pmix_failure_evhdlr_ref;
+#endif
+    ABT_rwlock lock;
+} ssg_instance_t;
 
 /* TODO: associate a version number with a descriptor? */
 typedef struct ssg_group_descriptor
@@ -72,6 +65,13 @@ typedef struct ssg_group_descriptor
     int ref_count;
 } ssg_group_descriptor_t;
 
+enum ssg_group_descriptor_owner_status
+{
+    SSG_OWNER_IS_UNASSOCIATED = 0,
+    SSG_OWNER_IS_MEMBER,
+    SSG_OWNER_IS_ATTACHER
+};
+
 typedef struct ssg_member_state
 {
     ssg_member_id_t id;
@@ -80,16 +80,6 @@ typedef struct ssg_member_state
     swim_member_state_t swim_state;
     UT_hash_handle hh;
 } ssg_member_state_t;
-
-typedef struct ssg_member_update
-{
-    ssg_member_update_type_t type;
-    union
-    {
-        char *member_addr_str;
-        ssg_member_id_t member_id;
-    } u;
-} ssg_member_update_t;
 
 typedef struct ssg_group_view
 {
@@ -100,7 +90,7 @@ typedef struct ssg_group_view
 typedef struct ssg_group
 {
     char *name;
-    ssg_member_id_t self_id;
+    ssg_instance_t *ssg_inst;
     ssg_group_view_t view;
     ssg_member_state_t *dead_members;
     ssg_group_descriptor_t *descriptor;
@@ -117,26 +107,22 @@ typedef struct ssg_group
 typedef struct ssg_attached_group
 {
     char *name;
+    ssg_instance_t *ssg_inst;
     ssg_group_view_t view;
     ssg_group_descriptor_t *descriptor;
     ABT_rwlock lock;
     UT_hash_handle hh;
 } ssg_attached_group_t;
 
-typedef struct ssg_instance
+typedef struct ssg_member_update
 {
-    margo_instance_id mid;
-    ssg_group_t *group_table;
-    ssg_attached_group_t *attached_group_table;
-    ABT_rwlock lock;
-} ssg_instance_t;
-
-enum ssg_group_descriptor_owner_status
-{
-    SSG_OWNER_IS_UNASSOCIATED = 0,
-    SSG_OWNER_IS_MEMBER,
-    SSG_OWNER_IS_ATTACHER
-};
+    ssg_member_update_type_t type;
+    union
+    {
+        char *member_addr_str;
+        ssg_member_id_t member_id;
+    } u;
+} ssg_member_update_t;
 
 /* SSG internal function prototypes */
 
