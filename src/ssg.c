@@ -401,28 +401,6 @@ ssg_group_id_t ssg_group_create_pmix(
                 "Unable to put PMIx rank mapping\n");
             PMIx_Deregister_event_handler(ssg_inst->pmix_failure_evhdlr_ref, NULL, NULL);
         }
-
-        /* commit the put data to the local pmix server */
-        ret = PMIx_Commit();
-        if (ret != PMIX_SUCCESS)
-        {
-            fprintf(stderr, "Warning: skipping PMIx event notification registration -- "\
-                "Unable to commit PMIx rank mapping\n");
-            PMIx_Deregister_event_handler(ssg_inst->pmix_failure_evhdlr_ref, NULL, NULL);
-        }
-
-        /* barrier, additionally requesting to collect relevant process data */
-        PMIX_INFO_CREATE(info, 1);
-        flag = true;
-        PMIX_INFO_LOAD(info, PMIX_COLLECT_DATA, &flag, PMIX_BOOL);
-        ret = PMIx_Fence(&proc, 1, info, 1);
-        if (ret != PMIX_SUCCESS)
-        {
-            fprintf(stderr, "Warning: skipping PMIx event notification registration -- "\
-                "Unable to exchange PMIx rank mapping\n");
-            PMIx_Deregister_event_handler(ssg_inst->pmix_failure_evhdlr_ref, NULL, NULL);
-        }
-        PMIX_INFO_FREE(info, 1);
     }
 
     /* XXX note we are assuming every process in the job wants to join this group... */
