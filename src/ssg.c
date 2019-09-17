@@ -1092,7 +1092,6 @@ void ssg_group_dump(
 
     if (group_descriptor->owner_status == SSG_OWNER_IS_MEMBER)
     {
-        fprintf(stderr, "MEMBER DUMP\n");
         ssg_group_t *g;
 
         ABT_rwlock_rdlock(ssg_inst->lock);
@@ -1135,9 +1134,12 @@ void ssg_group_dump(
     if (group_view)
     {
         ssg_member_state_t *member_state, *tmp_ms;
+        char hostname[1024];
+        gethostname(hostname, 1024);
 
         printf("SSG membership information for group '%s':\n", group_name);
-        printf("\trole: '%s'\n", group_role);
+        printf("\trole: %s\n", group_role);
+        printf("\thost: %s\n", hostname);
         if (strcmp(group_role, "member") == 0)
             printf("\tself_id: %s\n", group_self_id);
         printf("\tsize: %d\n", group_size);
