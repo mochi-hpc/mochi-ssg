@@ -670,7 +670,7 @@ hg_return_t hg_proc_ssg_member_update_t(
                     return hret;
                 }
             }
-            else if (update->type == SSG_MEMBER_LEFT)
+            else if (update->type == SSG_MEMBER_LEFT || update->type == SSG_MEMBER_DIED)
             {
                 hret = hg_proc_ssg_member_id_t(proc, &(update->u.member_id));
                 if (hret != HG_SUCCESS)
@@ -700,7 +700,7 @@ hg_return_t hg_proc_ssg_member_update_t(
                     return hret;
                 }
             }
-            else if (update->type == SSG_MEMBER_LEFT)
+            else if (update->type == SSG_MEMBER_LEFT || update->type == SSG_MEMBER_DIED)
             {
                 hret = hg_proc_ssg_member_id_t(proc, &(update->u.member_id));
                 if (hret != HG_SUCCESS)
