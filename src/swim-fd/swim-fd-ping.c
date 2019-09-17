@@ -634,6 +634,7 @@ static hg_return_t hg_proc_swim_message_t(hg_proc_t proc, void *data)
             }
             for(i = 0; i < msg->ssg_pb_buf_count; i++)
             {
+                memset(&(msg->ssg_pb_buf[i]), 0, sizeof(msg->ssg_pb_buf[i]));
                 hret = hg_proc_ssg_member_update_t(proc, &(msg->ssg_pb_buf[i]));
                 if(hret != HG_SUCCESS)
                 {
