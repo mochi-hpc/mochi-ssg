@@ -3,6 +3,7 @@ TESTS_ENVIRONMENT += \
 
 check_PROGRAMS += \
  tests/ssg-launch-group \
+ tests/ssg-test-observe \
  tests/ssg-join-leave-group 
 
 EXTRA_DIST += \

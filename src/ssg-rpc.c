@@ -90,7 +90,6 @@ void ssg_register_rpcs()
     return;
 }
 
-#if 0
 /* ssg_group_join_send
  *
  *
@@ -197,7 +196,6 @@ fini:
 
     return sret;
 }
-#endif
 
 static void ssg_group_join_recv_ult(
     hg_handle_t handle)
@@ -225,11 +223,14 @@ static void ssg_group_join_recv_ult(
     if (hret != HG_SUCCESS) goto fini;
     view_size_requested = margo_bulk_get_size(join_req.bulk_handle);
 
+    ABT_rwlock_rdlock(ssg_inst->lock);
+
     /* look for the given group in my local table of groups */
     HASH_FIND(hh, ssg_inst->g_desc_table, &join_req.group_descriptor.g_id,
         sizeof(uint64_t), g_desc);
     if (!g_desc)
     {
+        ABT_rwlock_unlock(ssg_inst->lock);
         margo_free_input(handle, &join_req);
         goto fini;
     }
@@ -238,9 +239,12 @@ static void ssg_group_join_recv_ult(
     sret = ssg_group_serialize(g_desc->g_data.g, &view_buf, &view_buf_size);
     if (sret != SSG_SUCCESS)
     {
+        ABT_rwlock_unlock(ssg_inst->lock);
         margo_free_input(handle, &join_req);
         goto fini;
     }
+
+    ABT_rwlock_unlock(ssg_inst->lock);
 
     if (view_size_requested >= view_buf_size)
     {
@@ -286,7 +290,6 @@ fini:
 }
 DEFINE_MARGO_RPC_HANDLER(ssg_group_join_recv_ult)
 
-#if 0
 /* ssg_group_leave_send
  *
  *
@@ -323,7 +326,6 @@ fini:
 
     return sret;
 }
-#endif
 
 static void ssg_group_leave_recv_ult(
     hg_handle_t handle)
@@ -345,15 +347,20 @@ static void ssg_group_leave_recv_ult(
     hret = margo_get_input(handle, &leave_req);
     if (hret != HG_SUCCESS) goto fini;
 
+    ABT_rwlock_rdlock(ssg_inst->lock);
+
     /* look for the given group in my local table of groups */
     HASH_FIND(hh, ssg_inst->g_desc_table, &leave_req.group_descriptor.g_id,
         sizeof(uint64_t), g_desc);
     if (!g_desc)
     {
+        ABT_rwlock_unlock(ssg_inst->lock);
         margo_free_input(handle, &leave_req);
         goto fini;
     }
     assert(g_desc->owner_status == SSG_OWNER_IS_MEMBER);
+
+    ABT_rwlock_unlock(ssg_inst->lock);
 
     /* apply group leave locally */
     leave_update.type = SSG_MEMBER_LEFT;
@@ -407,9 +414,9 @@ int ssg_group_observe_send(
         ssg_group_observe_rpc_id, &handle);
     if (hret != HG_SUCCESS) goto fini;
 
-    /* allocate a buffer to try to store the group view in */
+    /* allocate a buffer of the given size to try to store the group view in */
     /* NOTE: We don't know if this buffer is big enough to store the complete
-     * view. If the buffer is not large enough, the group member we are
+     * view. If the buffers is not large enough, the group member we are
      * sending to will send a NACK indicating the necessary buffer size
      */
     tmp_view_buf = malloc(tmp_view_buf_size);
@@ -546,7 +553,7 @@ static void ssg_group_observe_recv_ult(
 
     /* set the response and send back */
     observe_resp.group_name = g_desc->g_data.g->name;
-    observe_resp.group_size = (int)g_desc->g_data.g->view.size;
+    observe_resp.group_size = (int)g_desc->g_data.g->view.size+1;
     observe_resp.view_buf_size = view_buf_size;
     margo_respond(handle, &observe_resp);
 

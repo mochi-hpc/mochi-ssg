@@ -132,16 +132,16 @@ int ssg_group_destroy(
 /**
  * Adds the calling process to an SSG group.
  *
- * @param[in] in_group_id       Input SSG group ID
+ * @param[in] group_id       Input SSG group ID
  * @param[in] update_cb         Callback function executed on group membership changes
  * @param[in] update_cb_dat     User data pointer passed to membership update callback
- * @returns SSG group identifier for joined group on success, SSG_GROUP_ID_NULL otherwise
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
  *
  * NOTE: Use the returned group ID to refer to the group, as the input group ID
  *       becomes stale after the join is completed.
  */
-ssg_group_id_t ssg_group_join(
-    ssg_group_id_t in_group_id,
+int ssg_group_join(
+    ssg_group_id_t group_id,
     ssg_membership_update_cb update_cb,
     void * update_cb_dat);
 
@@ -249,6 +249,7 @@ void ssg_group_id_deserialize(
  *
  * @param[in]   file_name   File to store the group ID in
  * @param[in]   group_id    SSG group ID
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
  */
 int ssg_group_id_store(
     const char * file_name,
@@ -259,6 +260,7 @@ int ssg_group_id_store(
  *
  * @param[in]   file_name   File to store the group ID in
  * @param[out]  group_id_p  Pointer to store group identifier in
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
  */
 int ssg_group_id_load(
     const char * file_name,

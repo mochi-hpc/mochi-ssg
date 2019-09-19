@@ -178,11 +178,11 @@ int main(int argc, char **argv)
     ret = ssg_init(mid);
     assert(ret == 0);
     gid = ssg_group_create_mpi("margo-p2p-latency", MPI_COMM_WORLD, NULL, NULL);
-    assert(gid != SSG_GROUP_ID_NULL);
+    assert(gid != SSG_GROUP_ID_INVALID);
 
     assert(ssg_get_group_size(gid) == 2);
 
-    self = ssg_get_self_id(gid);
+    self = ssg_get_self_id(mid);
 #if 0
     printf("MPI rank %d has SSG ID %lu\n", rank, self);
 #endif
