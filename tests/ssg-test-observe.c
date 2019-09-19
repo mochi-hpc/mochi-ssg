@@ -37,7 +37,7 @@ static void usage()
 {
     fprintf(stderr,
         "Usage: "
-        "ssg-test-attach [-s <time>] <addr> \n"
+        "ssg-test-observe [-s <time>] <addr> \n"
         "\t-s <time> - time to sleep between SSG group operations\n");
 }
 
@@ -46,7 +46,7 @@ static void parse_args(int argc, char *argv[], int *sleep_time, const char **add
     int ndx = 1;
 
 #ifndef SSG_HAVE_MPI
-    fprintf(stderr, "Error: ssg-test-attach currently requries MPI support\n");
+    fprintf(stderr, "Error: ssg-test-observe currently requries MPI support\n");
     exit(1);
 #endif
 
@@ -88,10 +88,10 @@ int main(int argc, char *argv[])
     const char *group_name = "simple_group";
     ssg_group_id_t g_id;
     int group_id_forward_rpc_id;
-    int is_attacher = 0;
-    hg_addr_t attacher_addr;
-    char attacher_addr_str[128];
-    hg_size_t attacher_addr_str_sz = 128;
+    int is_observer = 0;
+    hg_addr_t observer_addr;
+    char observer_addr_str[128];
+    hg_size_t observer_addr_str_sz = 128;
     hg_handle_t handle = HG_HANDLE_NULL;
     hg_return_t hret;
     int sret;
@@ -117,7 +117,6 @@ int main(int argc, char *argv[])
     hret = margo_register_data(mid, group_id_forward_rpc_id, &g_id, NULL);
     DIE_IF(hret != HG_SUCCESS, "margo_register_data");
 
-    /* XXX do something for config file case? */
 #ifdef SSG_HAVE_MPI
     int my_world_rank;
     int world_size;
@@ -125,8 +124,8 @@ int main(int argc, char *argv[])
     MPI_Comm ssg_comm;
 
     /* create a communicator for the SSG group  */
-    /* NOTE: rank 0 will not be in the group and will instead attach
-     * as a client -- ranks 0:n-1 then represent the SSG group
+    /* NOTE: rank 0 will not be in the group and will instead observe
+     * as a client -- ranks 1:n-1 then represent the SSG group
      */
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
     if (world_size < 2)
@@ -138,7 +137,7 @@ int main(int argc, char *argv[])
     MPI_Comm_rank(MPI_COMM_WORLD, &my_world_rank);
     if (my_world_rank == 0)
     {
-        is_attacher = 1;
+        is_observer = 1;
         color = MPI_UNDEFINED;
     }
     else
@@ -147,40 +146,40 @@ int main(int argc, char *argv[])
     }
     MPI_Comm_split(MPI_COMM_WORLD, color, my_world_rank, &ssg_comm);
 
-    if (!is_attacher)
+    if (!is_observer)
     {
         g_id = ssg_group_create_mpi(group_name, ssg_comm, NULL, NULL);
         DIE_IF(g_id == SSG_GROUP_ID_NULL, "ssg_group_create");
 
         if (my_world_rank == 1)
         {
-            MPI_Recv(attacher_addr_str, 128, MPI_BYTE, 0, 0, MPI_COMM_WORLD,
+            MPI_Recv(observer_addr_str, 128, MPI_BYTE, 0, 0, MPI_COMM_WORLD,
                 MPI_STATUS_IGNORE);
 
-            /* send the identifier for the created group back to the attacher */
-            hret = margo_addr_lookup(mid, attacher_addr_str, &attacher_addr);
+            /* send the identifier for the created group back to the observer */
+            hret = margo_addr_lookup(mid, observer_addr_str, &observer_addr);
             DIE_IF(hret != HG_SUCCESS, "margo_addr_lookup");
-            hret = margo_create(mid, attacher_addr, group_id_forward_rpc_id, &handle);
+            hret = margo_create(mid, observer_addr, group_id_forward_rpc_id, &handle);
             DIE_IF(hret != HG_SUCCESS, "margo_create");
             hret = margo_forward(handle, &g_id);
             DIE_IF(hret != HG_SUCCESS, "margo_forward");
-            margo_addr_free(mid, attacher_addr);
+            margo_addr_free(mid, observer_addr);
             margo_destroy(handle);
         }
     }
     else
     {
-        hret = margo_addr_self(mid, &attacher_addr);
+        hret = margo_addr_self(mid, &observer_addr);
         DIE_IF(hret != HG_SUCCESS, "margo_addr_self");
-        hret = margo_addr_to_string(mid, attacher_addr_str, &attacher_addr_str_sz,
-            attacher_addr);
+        hret = margo_addr_to_string(mid, observer_addr_str, &observer_addr_str_sz,
+            observer_addr);
         DIE_IF(hret != HG_SUCCESS, "margo_addr_to_string");
-        margo_addr_free(mid, attacher_addr);
+        margo_addr_free(mid, observer_addr);
 
-        /* send the attacher's address to a group member, so the group
+        /* send the oberver's address to a group member, so the group
          * member can send us back the corresponding SSG group identifier
          */
-        MPI_Send(attacher_addr_str, 128, MPI_BYTE, 1, 0, MPI_COMM_WORLD);
+        MPI_Send(observer_addr_str, 128, MPI_BYTE, 1, 0, MPI_COMM_WORLD);
     }
 #endif
 
@@ -188,14 +187,14 @@ int main(int argc, char *argv[])
     /* XXX: we could replace this with a barrier eventually */
     if (sleep_time > 0) margo_thread_sleep(mid, sleep_time * 1000.0);
 
-    /* attach client process to SSG server group */
-    if (is_attacher)
+    if (is_observer)
     {
-        sret = ssg_group_attach(g_id);
-        DIE_IF(sret != SSG_SUCCESS, "ssg_group_attach");
+        /* start observging the SSG server group */
+        sret = ssg_group_observe(g_id);
+        DIE_IF(sret != SSG_SUCCESS, "ssg_group_observe");
     }
 
-    /* for now, just sleep to give attacher a chance to finish attaching */
+    /* for now, just sleep to give observer a chance to establish connection */
     /* XXX: we could replace this with a barrier eventually */
     if (sleep_time > 0) margo_thread_sleep(mid, sleep_time * 1000.0);
 
@@ -203,9 +202,9 @@ int main(int argc, char *argv[])
     ssg_group_dump(g_id);
 
     /* clean up */
-    if (is_attacher)
+    if (is_observer)
     {
-        ssg_group_detach(g_id);
+        ssg_group_unobserve(g_id);
     }
     else
     {

@@ -48,9 +48,6 @@ typedef struct ssg_instance
     char *self_addr_str;
     ssg_member_id_t self_id;
     struct ssg_group_descriptor *g_desc_table;
-#if 0
-    struct ssg_attached_group *attached_group_table;
-#endif
 #ifdef SSG_HAVE_PMIX
     size_t pmix_failure_evhdlr_ref;
 #endif
@@ -63,7 +60,11 @@ typedef struct ssg_group_descriptor
     ssg_group_id_t g_id;
     char *addr_str;
     int owner_status;
-    struct ssg_group *g;
+    union
+    {
+        struct ssg_group *g;
+        struct ssg_observed_group *og;
+    } g_data;
     UT_hash_handle hh;
 } ssg_group_descriptor_t;
 
@@ -71,7 +72,7 @@ enum ssg_group_descriptor_owner_status
 {
     SSG_OWNER_IS_UNASSOCIATED = 0,
     SSG_OWNER_IS_MEMBER,
-    SSG_OWNER_IS_ATTACHER
+    SSG_OWNER_IS_OBSERVER
 };
 
 typedef struct ssg_member_state
@@ -105,14 +106,14 @@ typedef struct ssg_group
 #endif
 } ssg_group_t;
 
-typedef struct ssg_attached_group
+typedef struct ssg_observed_group
 {
     char *name;
     ssg_instance_t *ssg_inst;
     ssg_group_view_t view;
     ssg_group_descriptor_t *descriptor;
     ABT_rwlock lock;
-} ssg_attached_group_t;
+} ssg_observed_group_t;
 
 typedef struct ssg_member_update
 {
@@ -149,7 +150,7 @@ int ssg_group_leave_send(
     ssg_group_descriptor_t * group_descriptor,
     ssg_member_id_t self_id,
     hg_addr_t group_target_addr);
-int ssg_group_attach_send(
+int ssg_group_observe_send(
     ssg_group_descriptor_t * group_descriptor,
     char ** group_name,
     int * group_size, 

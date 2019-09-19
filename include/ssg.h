@@ -155,25 +155,25 @@ int ssg_group_leave(
     ssg_group_id_t group_id);
 
 /**
- * Attaches a client to an SSG group.
+ * Initiates a client's observation of an SSG group.
  *
  * @param[in] group_id SSG group ID
  * @returns SSG_SUCCESS on success, SSG error code otherwise
  *
- * NOTE: The "client" cannot be a member of the group -- attachment is merely
+ * NOTE: The "client" cannot be a member of the group -- observation is merely
  * a way of making the membership view of an existing SSG group available to
  * non-group members.
  */
-int ssg_group_attach(
+int ssg_group_observe(
     ssg_group_id_t group_id);
 
 /**
- * Detaches a client from an SSG group.
+ * Terminates a client's observation of an SSG group.
  *
  * @param[in] group_id SSG group ID
  * @returns SSG_SUCCESS on success, SSG error code otherwise
  */
-int ssg_group_detach(
+int ssg_group_unobserve(
     ssg_group_id_t group_id);
 
 /*********************************
