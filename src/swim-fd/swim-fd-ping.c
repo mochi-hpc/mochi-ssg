@@ -181,6 +181,7 @@ static void swim_dping_req_recv_ult(
     if (group == NULL || group->swim_ctx == NULL)
     {
         fprintf(stderr, "SWIM dping req recv error -- invalid group state\n");
+        margo_destroy(handle);
         return;
     }
 
@@ -243,6 +244,7 @@ static void swim_dping_ack_recv_ult(
     if (group == NULL || group->swim_ctx == NULL)
     {
         fprintf(stderr, "SWIM dping ack recv error -- invalid group state\n");
+        margo_destroy(handle);
         return;
     }
 
@@ -353,11 +355,11 @@ void swim_iping_req_send_ult(
     }
     swim_ctx = group->swim_ctx;
 
-    ABT_rwlock_wrlock(group->lock);
+    ABT_rwlock_wrlock(swim_ctx->swim_lock);
     iping_target_id = swim_ctx->iping_target_ids[swim_ctx->iping_target_ndx];
     iping_target_addr = swim_ctx->iping_target_addrs[swim_ctx->iping_target_ndx];
     swim_ctx->iping_target_ndx++;
-    ABT_rwlock_unlock(group->lock);
+    ABT_rwlock_unlock(swim_ctx->swim_lock);
 
     hret = margo_create(swim_ctx->mid, iping_target_addr, swim_iping_req_rpc_id, &handle);
     if(hret != HG_SUCCESS)
@@ -402,6 +404,7 @@ static void swim_iping_req_recv_ult(hg_handle_t handle)
     if (group == NULL || group->swim_ctx == NULL)
     {
         fprintf(stderr, "SWIM iping req recv error -- invalid group state\n");
+        margo_destroy(handle);
         return;
     }
 
@@ -471,6 +474,7 @@ static void swim_iping_ack_recv_ult(hg_handle_t handle)
     if (group == NULL || group->swim_ctx == NULL)
     {
         fprintf(stderr, "SWIM iping ack recv error -- invalid group state\n");
+        margo_destroy(handle);
         return;
     }
 

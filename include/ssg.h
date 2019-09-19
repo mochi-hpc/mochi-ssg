@@ -28,8 +28,8 @@ extern "C" {
 #define SSG_FAILURE (-1)
 
 /* opaque SSG group ID type */
-typedef struct ssg_group_descriptor *ssg_group_id_t;
-#define SSG_GROUP_ID_NULL ((ssg_group_id_t)NULL)
+typedef uint64_t ssg_group_id_t;
+#define SSG_GROUP_ID_INVALID 0
 
 /* SSG group member ID type */
 typedef uint64_t ssg_member_id_t;
@@ -49,8 +49,8 @@ typedef void (*ssg_membership_update_cb)(
     ssg_member_update_type_t update_type);
 
 /* HG proc routine prototypes for SSG types */
-#define hg_proc_ssg_member_id_t hg_proc_int64_t
-hg_return_t hg_proc_ssg_group_id_t(hg_proc_t proc, void *data);
+#define hg_proc_ssg_group_id_t hg_proc_uint64_t
+#define hg_proc_ssg_member_id_t hg_proc_uint64_t
 
 /***************************************************
  *** SSG runtime intialization/shutdown routines ***
@@ -208,22 +208,6 @@ int ssg_get_group_size(
 hg_addr_t ssg_get_group_addr(
     ssg_group_id_t group_id,
     ssg_member_id_t member_id);
-
-/**
- * Duplicates the given SSG group identifier.
- *
- * @param[in] group_id SSG group ID
- * @returns SSG group identifier on success, SSG_GROUP_ID_NULL otherwise
- */
-ssg_group_id_t ssg_group_id_dup(
-    ssg_group_id_t group_id);
-
-/** Frees the given SSG group identifier.
- *
- * @param[in] group_id SSG group ID
- */
-void ssg_group_id_free(
-    ssg_group_id_t group_id);
 
 /**
  * Retrieves the HG address string associated with an SSG group identifier.

@@ -70,6 +70,8 @@ struct swim_context
     ABT_pool swim_pool;
     /* swim protocol ULT handle */
     ABT_thread prot_thread;
+    /* swim protocol lock */
+    ABT_rwlock swim_lock;
 };
 
 /* SWIM ping function prototypes */

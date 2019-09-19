@@ -24,9 +24,9 @@
 
 /* NOTE: keep in sync with ssg_group_descriptor_t definition in ssg-internal.h */
 MERCURY_GEN_STRUCT_PROC(ssg_group_descriptor_t, \
-    ((uint64_t)     (magic_nr)) \
-    ((uint64_t)     (name_hash)) \
-    ((hg_string_t)  (addr_str)));
+    ((uint64_t)         (magic_nr)) \
+    ((ssg_group_id_t)   (g_id)) \
+    ((hg_string_t)      (addr_str)));
 
 MERCURY_GEN_PROC(ssg_group_join_request_t, \
     ((ssg_group_descriptor_t)   (group_descriptor))
@@ -36,7 +36,7 @@ MERCURY_GEN_PROC(ssg_group_join_response_t, \
     ((hg_string_t)  (group_name)) \
     ((uint32_t)     (group_size)) \
     ((hg_size_t)    (view_buf_size))
-    ((uint8_t)  (ret)));
+    ((uint8_t)      (ret)));
 
 MERCURY_GEN_PROC(ssg_group_leave_request_t, \
     ((ssg_group_descriptor_t)   (group_descriptor))
@@ -201,7 +201,7 @@ static void ssg_group_join_recv_ult(
     hg_handle_t handle)
 {
     const struct hg_info *hgi = NULL;
-    ssg_group_t *g = NULL;
+    ssg_group_descriptor_t *g_desc = NULL;
     ssg_group_join_request_t join_req;
     ssg_group_join_response_t join_resp;
     hg_size_t view_size_requested;
@@ -224,15 +224,15 @@ static void ssg_group_join_recv_ult(
     view_size_requested = margo_bulk_get_size(join_req.bulk_handle);
 
     /* look for the given group in my local table of groups */
-    HASH_FIND(hh, ssg_inst->group_table, &join_req.group_descriptor.name_hash,
-        sizeof(uint64_t), g);
-    if (!g)
+    HASH_FIND(hh, ssg_inst->g_desc_table, &join_req.group_descriptor.g_id,
+        sizeof(uint64_t), g_desc);
+    if (!g_desc)
     {
         margo_free_input(handle, &join_req);
         goto fini;
     }
 
-    sret = ssg_group_serialize(g, &view_buf, &view_buf_size);
+    sret = ssg_group_serialize(g_desc->g, &view_buf, &view_buf_size);
     if (sret != SSG_SUCCESS)
     {
         margo_free_input(handle, &join_req);
@@ -261,13 +261,13 @@ static void ssg_group_join_recv_ult(
         /* apply group join locally */
         join_update.type = SSG_MEMBER_JOINED;
         join_update.u.member_addr_str = join_req.addr_str;
-        ssg_apply_member_updates(g, &join_update, 1);
+        ssg_apply_member_updates(g_desc->g, &join_update, 1);
     }
     margo_free_input(handle, &join_req);
 
     /* set the response and send back */
-    join_resp.group_name = g->name;
-    join_resp.group_size = (int)g->view.size;
+    join_resp.group_name = g_desc->g->name;
+    join_resp.group_size = (int)g_desc->g->view.size;
     join_resp.view_buf_size = view_buf_size;
     join_resp.ret = SSG_SUCCESS;
 fini:
@@ -324,7 +324,7 @@ static void ssg_group_leave_recv_ult(
     hg_handle_t handle)
 {
     const struct hg_info *hgi = NULL;
-    ssg_group_t *g = NULL;
+    ssg_group_descriptor_t *g_desc = NULL;
     ssg_group_leave_request_t leave_req;
     ssg_group_leave_response_t leave_resp;
     ssg_member_update_t leave_update;
@@ -341,9 +341,9 @@ static void ssg_group_leave_recv_ult(
     if (hret != HG_SUCCESS) goto fini;
 
     /* look for the given group in my local table of groups */
-    HASH_FIND(hh, ssg_inst->group_table, &leave_req.group_descriptor.name_hash,
-        sizeof(uint64_t), g);
-    if (!g)
+    HASH_FIND(hh, ssg_inst->g_desc_table, &leave_req.group_descriptor.g_id,
+        sizeof(uint64_t), g_desc);
+    if (!g_desc)
     {
         margo_free_input(handle, &leave_req);
         goto fini;
@@ -352,7 +352,7 @@ static void ssg_group_leave_recv_ult(
     /* apply group leave locally */
     leave_update.type = SSG_MEMBER_LEFT;
     leave_update.u.member_id = leave_req.member_id;
-    ssg_apply_member_updates(g, &leave_update, 1);
+    ssg_apply_member_updates(g_desc->g, &leave_update, 1);
 
     margo_free_input(handle, &leave_req);
     leave_resp.ret = SSG_SUCCESS;
@@ -482,7 +482,7 @@ static void ssg_group_attach_recv_ult(
     hg_handle_t handle)
 {
     const struct hg_info *hgi = NULL;
-    ssg_group_t *g = NULL;
+    ssg_group_descriptor_t *g_desc = NULL;
     ssg_group_attach_request_t attach_req;
     ssg_group_attach_response_t attach_resp;
     hg_size_t view_size_requested;
@@ -502,15 +502,15 @@ static void ssg_group_attach_recv_ult(
     view_size_requested = margo_bulk_get_size(attach_req.bulk_handle);
 
     /* look for the given group in my local table of groups */
-    HASH_FIND(hh, ssg_inst->group_table, &attach_req.group_descriptor.name_hash,
-        sizeof(uint64_t), g);
-    if (!g)
+    HASH_FIND(hh, ssg_inst->g_desc_table, &attach_req.group_descriptor.g_id,
+        sizeof(uint64_t), g_desc);
+    if (!g_desc)
     {
         margo_free_input(handle, &attach_req);
         goto fini;
     }
 
-    sret = ssg_group_serialize(g, &view_buf, &view_buf_size);
+    sret = ssg_group_serialize(g_desc->g, &view_buf, &view_buf_size);
     if (sret != SSG_SUCCESS)
     {
         margo_free_input(handle, &attach_req);
@@ -538,8 +538,8 @@ static void ssg_group_attach_recv_ult(
     }
 
     /* set the response and send back */
-    attach_resp.group_name = g->name;
-    attach_resp.group_size = (int)g->view.size;
+    attach_resp.group_name = g_desc->g->name;
+    attach_resp.group_size = (int)g_desc->g->view.size;
     attach_resp.view_buf_size = view_buf_size;
     margo_respond(handle, &attach_resp);
 
@@ -564,6 +564,8 @@ static int ssg_group_serialize(
     *buf = NULL;
     *buf_size = 0;
 
+    ABT_rwlock_rdlock(g->lock);
+
     /* first determine size */
     group_buf_size = strlen(ssg_inst->self_addr_str) + 1;
     HASH_ITER(hh, g->view.member_map, member_state, tmp)
@@ -574,6 +576,7 @@ static int ssg_group_serialize(
     group_buf = malloc(group_buf_size);
     if(!group_buf)
     {
+        ABT_rwlock_unlock(g->lock);
         return SSG_FAILURE;
     }
 
@@ -590,61 +593,12 @@ static int ssg_group_serialize(
     *buf = group_buf;
     *buf_size = group_buf_size;
 
+    ABT_rwlock_unlock(g->lock);
+
     return SSG_SUCCESS;
 }
 
 /* custom SSG RPC proc routines */
-
-hg_return_t hg_proc_ssg_group_id_t(
-    hg_proc_t proc, void *data)
-{
-    ssg_group_descriptor_t **group_descriptor = (ssg_group_descriptor_t **)data;
-    hg_return_t hret = HG_PROTOCOL_ERROR;
-
-    switch(hg_proc_get_op(proc))
-    {
-        case HG_ENCODE:
-            hret = hg_proc_ssg_group_descriptor_t(proc, *group_descriptor);
-            if (hret != HG_SUCCESS)
-            {
-                hret = HG_PROTOCOL_ERROR;
-                return hret;
-            }
-            break;
-        case HG_DECODE:
-            *group_descriptor = malloc(sizeof(**group_descriptor));
-            if (!(*group_descriptor))
-            {
-                hret = HG_NOMEM_ERROR;
-                return hret;
-            }
-            memset(*group_descriptor, 0, sizeof(**group_descriptor));
-            hret = hg_proc_ssg_group_descriptor_t(proc, *group_descriptor);
-            if (hret != HG_SUCCESS)
-            {
-                hret = HG_PROTOCOL_ERROR;
-                return hret;
-            }
-            (*group_descriptor)->ref_count = 1;
-            break;
-        case HG_FREE:
-            if ((*group_descriptor)->ref_count == 1)
-            {
-                free((*group_descriptor)->addr_str);
-                free(*group_descriptor);
-            }
-            else
-            {
-                (*group_descriptor)->ref_count--;
-            }
-            hret = HG_SUCCESS;
-            break;
-        default:
-            break;
-    }
-
-    return hret;
-}
 
 hg_return_t hg_proc_ssg_member_update_t(
     hg_proc_t proc, void *data)

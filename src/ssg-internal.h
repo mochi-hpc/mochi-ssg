@@ -47,22 +47,24 @@ typedef struct ssg_instance
     margo_instance_id mid;
     char *self_addr_str;
     ssg_member_id_t self_id;
-    struct ssg_group *group_table;
+    struct ssg_group_descriptor *g_desc_table;
+#if 0
     struct ssg_attached_group *attached_group_table;
+#endif
 #ifdef SSG_HAVE_PMIX
     size_t pmix_failure_evhdlr_ref;
 #endif
     ABT_rwlock lock;
 } ssg_instance_t;
 
-/* TODO: associate a version number with a descriptor? */
 typedef struct ssg_group_descriptor
 {
     uint64_t magic_nr;
-    uint64_t name_hash;
+    ssg_group_id_t g_id;
     char *addr_str;
     int owner_status;
-    int ref_count;
+    struct ssg_group *g;
+    UT_hash_handle hh;
 } ssg_group_descriptor_t;
 
 enum ssg_group_descriptor_owner_status
@@ -101,7 +103,6 @@ typedef struct ssg_group
 #ifdef DEBUG
     FILE *dbg_log;
 #endif
-    UT_hash_handle hh;
 } ssg_group_t;
 
 typedef struct ssg_attached_group
@@ -111,7 +112,6 @@ typedef struct ssg_attached_group
     ssg_group_view_t view;
     ssg_group_descriptor_t *descriptor;
     ABT_rwlock lock;
-    UT_hash_handle hh;
 } ssg_attached_group_t;
 
 typedef struct ssg_member_update

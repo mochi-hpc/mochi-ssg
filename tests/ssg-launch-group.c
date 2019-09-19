@@ -130,7 +130,7 @@ int main(int argc, char *argv[])
 {
     struct group_launch_opts opts;
     margo_instance_id mid = MARGO_INSTANCE_NULL;
-    ssg_group_id_t g_id = SSG_GROUP_ID_NULL;
+    ssg_group_id_t g_id = SSG_GROUP_ID_INVALID;
     ssg_member_id_t my_id;
     int group_size;
     int sret;
@@ -180,7 +180,7 @@ int main(int argc, char *argv[])
     if(strcmp(opts.group_mode, "pmix") == 0)
         g_id = ssg_group_create_pmix(opts.group_name, proc, NULL, NULL);
 #endif
-    DIE_IF(g_id == SSG_GROUP_ID_NULL, "ssg_group_create");
+    DIE_IF(g_id == SSG_GROUP_ID_INVALID, "ssg_group_create");
 
     /* store the gid if requested */
     if (opts.gid_file)
