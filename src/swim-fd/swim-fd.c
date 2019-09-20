@@ -97,14 +97,14 @@ int swim_init(
     margo_get_handler_pool(swim_ctx->mid, &swim_ctx->swim_pool);
     ABT_rwlock_create(&swim_ctx->swim_lock);
 
-    swim_ctx->target_list.targets = malloc(group->view.size *
+    swim_ctx->target_list.targets = malloc((group->view.size-1) *
         sizeof(*swim_ctx->target_list.targets));
     if (swim_ctx->target_list.targets == NULL)
     {
         free(swim_ctx);
         return(SSG_FAILURE);
     }
-    swim_ctx->target_list.nslots = swim_ctx->target_list.len = group->view.size;
+    swim_ctx->target_list.nslots = swim_ctx->target_list.len = group->view.size-1;
     swim_ctx->target_list.dping_ndx = 0;
     i = 0;
     HASH_ITER(hh, group->view.member_map, ms, tmp_ms)

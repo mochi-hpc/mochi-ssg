@@ -72,6 +72,10 @@ static ssg_member_id_t ssg_gen_member_id(
     const char * addr_str);
 static const char ** ssg_addr_str_buf_to_list(
     const char * buf, int num_addrs);
+static int ssg_member_id_sort_cmp( 
+    const void *a, const void *b);
+static int ssg_get_group_member_rank_internal(
+    ssg_group_view_t *view, ssg_member_id_t member_id);
 #ifdef SSG_HAVE_PMIX
 void ssg_pmix_proc_failure_notify_fn(
     size_t evhdlr_registration_id, pmix_status_t status, const pmix_proc_t *source,
@@ -276,7 +280,7 @@ ssg_group_id_t ssg_group_create_config(
     if (!addr_strs) goto fini;
 
     /* invoke the generic group create routine using our list of addrs */
-    g_id = ssg_group_create(group_name, addr_strs, num_addrs,
+    g_id = ssg_group_create_internal(group_name, addr_strs, num_addrs,
         update_cb, update_cb_dat);
 
 fini:
@@ -336,7 +340,7 @@ ssg_group_id_t ssg_group_create_mpi(
     if (!addr_strs) goto fini;
 
     /* invoke the generic group create routine using our list of addrs */
-    g_id = ssg_group_create(group_name, addr_strs, comm_size,
+    g_id = ssg_group_create_internal(group_name, addr_strs, comm_size,
         update_cb, update_cb_dat);
 
 fini:
@@ -446,7 +450,7 @@ ssg_group_id_t ssg_group_create_pmix(
     }
 
     /* invoke the generic group create routine using our list of addrs */
-    g_id = ssg_group_create(group_name, addr_strs, nprocs,
+    g_id = ssg_group_create_internal(group_name, addr_strs, nprocs,
         update_cb, update_cb_dat);
 
 fini:
@@ -785,7 +789,7 @@ int ssg_get_group_size(
     if (g_desc->owner_status == SSG_OWNER_IS_MEMBER)
     {
         ABT_rwlock_rdlock(g_desc->g_data.g->lock);
-        group_size = g_desc->g_data.g->view.size + 1; /* add ourself to view size */
+        group_size = g_desc->g_data.g->view.size;
         ABT_rwlock_unlock(g_desc->g_data.g->lock);
     }
     else if (g_desc->owner_status == SSG_OWNER_IS_OBSERVER)
@@ -805,7 +809,7 @@ int ssg_get_group_size(
     return group_size;
 }
 
-hg_addr_t ssg_get_group_addr(
+hg_addr_t ssg_get_group_member_addr(
     ssg_group_id_t group_id,
     ssg_member_id_t member_id)
 {
@@ -855,6 +859,212 @@ hg_addr_t ssg_get_group_addr(
     ABT_rwlock_unlock(ssg_inst->lock);
 
     return member_addr;
+}
+
+int ssg_get_group_self_rank(
+    ssg_group_id_t group_id)
+{
+    ssg_group_descriptor_t *g_desc;
+    int rank;
+
+    if (!ssg_inst || group_id == SSG_GROUP_ID_INVALID) return 0;
+
+    ABT_rwlock_rdlock(ssg_inst->lock);
+
+    HASH_FIND(hh, ssg_inst->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
+    if (!g_desc)
+    {
+        ABT_rwlock_unlock(ssg_inst->lock);
+        fprintf(stderr, "Error: SSG unable to find expected group ID\n");
+        return -1;
+    }
+
+    if (g_desc->owner_status != SSG_OWNER_IS_MEMBER)
+    {
+        ABT_rwlock_unlock(ssg_inst->lock);
+        fprintf(stderr, "Error: SSG unable to obtain self rank for non-group members\n");
+        return -1;
+    }
+
+
+    ABT_rwlock_rdlock(g_desc->g_data.g->lock);
+    rank = ssg_get_group_member_rank_internal(&g_desc->g_data.g->view,
+        ssg_inst->self_id);
+    ABT_rwlock_unlock(g_desc->g_data.g->lock);
+
+    ABT_rwlock_unlock(ssg_inst->lock);
+
+    return rank;
+}
+
+int ssg_get_group_member_rank(
+    ssg_group_id_t group_id,
+    ssg_member_id_t member_id)
+{
+    ssg_group_descriptor_t *g_desc;
+    int rank;
+
+    if (!ssg_inst || group_id == SSG_GROUP_ID_INVALID) return 0;
+
+    ABT_rwlock_rdlock(ssg_inst->lock);
+
+    HASH_FIND(hh, ssg_inst->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
+    if (!g_desc)
+    {
+        ABT_rwlock_unlock(ssg_inst->lock);
+        fprintf(stderr, "Error: SSG unable to find expected group ID\n");
+        return -1;
+    }
+
+    if (g_desc->owner_status == SSG_OWNER_IS_MEMBER)
+    {
+        ABT_rwlock_rdlock(g_desc->g_data.g->lock);
+        rank = ssg_get_group_member_rank_internal(&g_desc->g_data.g->view, member_id);
+        ABT_rwlock_unlock(g_desc->g_data.g->lock);
+    }
+    else if (g_desc->owner_status == SSG_OWNER_IS_OBSERVER)
+    {
+        ABT_rwlock_rdlock(g_desc->g_data.og->lock);
+        rank = ssg_get_group_member_rank_internal(&g_desc->g_data.og->view, member_id);
+        ABT_rwlock_unlock(g_desc->g_data.og->lock);
+    }
+    else
+    {
+        ABT_rwlock_unlock(ssg_inst->lock);
+        fprintf(stderr, "Error: SSG unable to obtain rank for group caller is"
+            "not a member or an observer of\n");
+        return -1;
+    }
+
+    ABT_rwlock_unlock(ssg_inst->lock);
+
+    return rank;
+}
+
+ssg_member_id_t ssg_get_group_member_id_from_rank(
+    ssg_group_id_t group_id,
+    int rank)
+{
+    ssg_group_descriptor_t *g_desc;
+    ssg_member_id_t member_id;
+
+    if (!ssg_inst || group_id == SSG_GROUP_ID_INVALID || rank < 0)
+        return SSG_MEMBER_ID_INVALID;
+
+    ABT_rwlock_rdlock(ssg_inst->lock);
+
+    HASH_FIND(hh, ssg_inst->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
+    if (!g_desc)
+    {
+        ABT_rwlock_unlock(ssg_inst->lock);
+        fprintf(stderr, "Error: SSG unable to find expected group ID\n");
+        return SSG_MEMBER_ID_INVALID;
+    }
+
+    if (g_desc->owner_status == SSG_OWNER_IS_MEMBER)
+    {
+        ABT_rwlock_rdlock(g_desc->g_data.g->lock);
+        if (rank >= (int)g_desc->g_data.g->view.size)
+        {
+            ABT_rwlock_unlock(g_desc->g_data.g->lock);
+            ABT_rwlock_unlock(ssg_inst->lock);
+            return SSG_MEMBER_ID_INVALID;
+        }
+
+        member_id = *(ssg_member_id_t *)utarray_eltptr(
+            g_desc->g_data.g->view.rank_array, (unsigned int)rank);
+        ABT_rwlock_unlock(g_desc->g_data.g->lock);
+    }
+    else if (g_desc->owner_status == SSG_OWNER_IS_OBSERVER)
+    {
+        ABT_rwlock_rdlock(g_desc->g_data.og->lock);
+        if (rank >= (int)g_desc->g_data.og->view.size)
+        {
+            ABT_rwlock_unlock(g_desc->g_data.og->lock);
+            ABT_rwlock_unlock(ssg_inst->lock);
+            return SSG_MEMBER_ID_INVALID;
+        }
+
+        member_id = *(ssg_member_id_t *)utarray_eltptr(
+            g_desc->g_data.og->view.rank_array, (unsigned int)rank);
+        ABT_rwlock_unlock(g_desc->g_data.og->lock);
+    }
+    else
+    {
+        ABT_rwlock_unlock(ssg_inst->lock);
+        fprintf(stderr, "Error: SSG unable to obtain member ID for group caller is"
+            "not a member or an observer of\n");
+        return SSG_MEMBER_ID_INVALID;
+    }
+
+    ABT_rwlock_unlock(ssg_inst->lock);
+
+    return member_id;
+}
+
+int ssg_get_group_member_ids_from_range(
+    ssg_group_id_t group_id,
+    int rank_start,
+    int rank_end,
+    ssg_member_id_t *range_ids)
+{
+    ssg_group_descriptor_t *g_desc;
+    ssg_member_id_t *member_start;
+
+    if (!ssg_inst || group_id == SSG_GROUP_ID_INVALID || rank_start < 0 ||
+            rank_end < 0 || rank_end <= rank_start)
+        return 0;
+
+    ABT_rwlock_rdlock(ssg_inst->lock);
+
+    HASH_FIND(hh, ssg_inst->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
+    if (!g_desc)
+    {
+        ABT_rwlock_unlock(ssg_inst->lock);
+        fprintf(stderr, "Error: SSG unable to find expected group ID\n");
+        return 0;
+    }
+
+    if (g_desc->owner_status == SSG_OWNER_IS_MEMBER)
+    {
+        ABT_rwlock_rdlock(g_desc->g_data.g->lock);
+        if (rank_end >= (int)g_desc->g_data.g->view.size)
+        {
+            ABT_rwlock_unlock(g_desc->g_data.g->lock);
+            ABT_rwlock_unlock(ssg_inst->lock);
+            return 0;
+        }
+
+        member_start = (ssg_member_id_t *)utarray_eltptr(
+            g_desc->g_data.g->view.rank_array, (unsigned int)rank_start);
+        memcpy(range_ids, member_start, (rank_end-rank_start)*sizeof(ssg_member_id_t));
+        ABT_rwlock_unlock(g_desc->g_data.g->lock);
+    }
+    else if (g_desc->owner_status == SSG_OWNER_IS_OBSERVER)
+    {
+        ABT_rwlock_rdlock(g_desc->g_data.og->lock);
+        if (rank_end >= (int)g_desc->g_data.og->view.size)
+        {
+            ABT_rwlock_unlock(g_desc->g_data.og->lock);
+            ABT_rwlock_unlock(ssg_inst->lock);
+            return 0;
+        }
+
+        member_start = (ssg_member_id_t *)utarray_eltptr(
+            g_desc->g_data.og->view.rank_array, (unsigned int)rank_start);
+        memcpy(range_ids, member_start, (rank_end-rank_start)*sizeof(ssg_member_id_t));
+        ABT_rwlock_unlock(g_desc->g_data.og->lock);
+    }
+    else
+    {
+        ABT_rwlock_unlock(ssg_inst->lock);
+        fprintf(stderr, "Error: SSG unable to obtain member ID for group caller is"
+            "not a member or an observer of\n");
+        return 0;
+    }
+    ABT_rwlock_unlock(ssg_inst->lock);
+
+    return (rank_end-rank_start);
 }
 
 char *ssg_group_id_get_addr_str(
@@ -1115,7 +1325,7 @@ void ssg_group_dump(
         ABT_rwlock_rdlock(g_desc->g_data.g->lock);
         group_view = &g_desc->g_data.g->view;
         group_lock = g_desc->g_data.g->lock;
-        group_size = g_desc->g_data.g->view.size + 1;
+        group_size = g_desc->g_data.g->view.size;
         group_name = g_desc->g_data.g->name;
         strcpy(group_role, "member");
         sprintf(group_self_id, "%lu", ssg_inst->self_id);
@@ -1275,6 +1485,9 @@ static int ssg_group_view_create(
     int aret;
     int sret = SSG_FAILURE;
 
+    utarray_new(view->rank_array, &ut_ssg_member_id_t_icd);
+    utarray_reserve(view->rank_array, group_size);
+
     /* allocate lookup ULTs */
     lookup_ults = malloc(group_size * sizeof(*lookup_ults));
     if (lookup_ults == NULL) goto fini;
@@ -1318,6 +1531,8 @@ static int ssg_group_view_create(
             {
                 /* don't look up our own address, we already know it */
                 self_found = 1;
+                utarray_push_back(view->rank_array, &ssg_inst->self_id);
+                view->size++;
                 continue;
             }
         }
@@ -1359,6 +1574,9 @@ static int ssg_group_view_create(
         fprintf(stderr, "Error: SSG unable to resolve self ID in group\n");
         goto fini;
     }
+
+    /* setup rank-based array */
+    utarray_sort(view->rank_array, ssg_member_id_sort_cmp);
 
     /* clean exit */
     sret = SSG_SUCCESS;
@@ -1427,6 +1645,7 @@ static ssg_member_state_t * ssg_group_view_add_member(
     ms->id = member_id;
 
     HASH_ADD(hh, view->member_map, id, sizeof(ssg_member_id_t), ms);
+    utarray_push_back(view->rank_array, &member_id);
     view->size++;
 
     return ms;
@@ -1507,6 +1726,7 @@ static void ssg_group_view_destroy(
         free(state);
     }
     view->member_map = NULL;
+    utarray_free(view->rank_array);
 
     return;
 }
@@ -1550,6 +1770,33 @@ static const char ** ssg_addr_str_buf_to_list(
         ret[i] = a + strlen(a) + 1;
     }
     return ret;
+}
+
+static int ssg_member_id_sort_cmp(
+    const void *a, const void *b)
+{
+    ssg_member_id_t member_a = *(ssg_member_id_t *)a;
+    ssg_member_id_t member_b = *(ssg_member_id_t *)b;
+    return member_a - member_b;
+}
+
+static int ssg_get_group_member_rank_internal(
+    ssg_group_view_t *view, ssg_member_id_t member_id)
+{
+    unsigned int i;
+    ssg_member_id_t iter_member_id;
+
+    if (member_id == SSG_MEMBER_ID_INVALID) return -1;
+
+    /* XXX need a better way to find rank than just iterating the array */
+    for (i = 0; i < view->size; i++)
+    {
+        iter_member_id = *(ssg_member_id_t *)utarray_eltptr(view->rank_array, i);
+        if (iter_member_id == member_id)
+            return (int)i;
+    }
+
+    return -1;
 }
 
 #ifdef SSG_HAVE_PMIX
@@ -1624,6 +1871,7 @@ void ssg_apply_member_updates(
 {
     hg_size_t i;
     ssg_member_state_t *update_ms;
+    int update_rank;
     hg_return_t hret;
     int ret;
 
@@ -1671,6 +1919,10 @@ void ssg_apply_member_updates(
                 ABT_rwlock_unlock(g->lock);
                 continue;
             }
+
+            /* setup rank-based array */
+            utarray_sort(g->view.rank_array, ssg_member_id_sort_cmp);
+
             ABT_rwlock_unlock(g->lock);
 
             /* lookup address of joining member */
@@ -1724,6 +1976,8 @@ void ssg_apply_member_updates(
 
             /* remove from view and add to dead list */
             HASH_DELETE(hh, g->view.member_map, update_ms);
+            update_rank = ssg_get_group_member_rank_internal(&g->view, update_ms->id);
+            utarray_erase(g->view.rank_array, (unsigned int)update_rank, 1);
             g->view.size--;
             HASH_ADD(hh, g->dead_members, id, sizeof(update_ms->id), update_ms);
             margo_addr_free(ssg_inst->mid, update_ms->addr);
@@ -1779,6 +2033,8 @@ void ssg_apply_member_updates(
 
                 /* remove from view and add to dead list */
                 HASH_DELETE(hh, g->view.member_map, update_ms);
+                update_rank = ssg_get_group_member_rank_internal(&g->view, update_ms->id);
+                utarray_erase(g->view.rank_array, (unsigned int)update_rank, 1);
                 g->view.size--;
                 HASH_ADD(hh, g->dead_members, id, sizeof(update_ms->id), update_ms);
                 margo_addr_free(ssg_inst->mid, update_ms->addr);

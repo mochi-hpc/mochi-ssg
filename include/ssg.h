@@ -184,7 +184,7 @@ int ssg_group_unobserve(
  * Obtains the caller's member ID in the given SSG group.
  *
  * @param[in] mid Corresponding Margo instance identifier
- * @returns caller's group ID on success, SSG_MEMBER_ID_INVALID otherwise
+ * @returns caller's member ID on success, SSG_MEMBER_ID_INVALID otherwise
  */
 ssg_member_id_t ssg_get_self_id(
     margo_instance_id mid);
@@ -205,9 +205,58 @@ int ssg_get_group_size(
  * @param[in] member_id SSG group member ID
  * @returns HG address of given group member on success, HG_ADDR_NULL otherwise
  */
-hg_addr_t ssg_get_group_addr(
+hg_addr_t ssg_get_group_member_addr(
     ssg_group_id_t group_id,
     ssg_member_id_t member_id);
+
+/**
+ * Obtains the rank of the caller in a given SSG group.
+ *
+ * @param[in] group_id SSG group ID
+ * @returns rank on success, -1 on failure
+ */
+int ssg_get_group_self_rank(
+    ssg_group_id_t group_id);
+
+/**
+ * Obtains the rank of a member in a given SSG group.
+ *
+ * @param[in] group_id  SSG group ID
+ * @param[in] member_id SSG group member ID
+ * @returns rank on success, -1 otherwise
+ */
+int ssg_get_group_member_rank(
+    ssg_group_id_t group_id,
+    ssg_member_id_t member_id);
+
+/**
+ * Obtains the SSG member ID of the given group and rank.
+ *
+ * @param[in] group_id SSG group ID
+ * @param[in] rank     SSG group rank
+ * @returns caller's member ID on success, SSG_MEMBER_ID_INVALID otherwise
+ */
+ssg_member_id_t ssg_get_group_member_id_from_rank(
+    ssg_group_id_t group_id,
+    int rank);
+
+/**
+ * Obtains an array of SSG member IDs for a given rank range.
+ *
+ * @param[in] group_id      SSG group ID
+ * @param[in] rank_start    Rank of range start
+ * @param[in] rank_end      Rank of range end
+ * @param[in,out] range_ids Buffer to store member IDs of requested range
+ * @returns number of member IDs returned in range_ids on success, 0 otherwise
+ *
+ * NOTE: range_ids must be allocated by caller and must be large enough to hold
+ *       requested range.
+ */
+int ssg_get_group_member_ids_from_range(
+    ssg_group_id_t group_id,
+    int rank_start,
+    int rank_end,
+    ssg_member_id_t *range_ids);
 
 /**
  * Retrieves the HG address string associated with an SSG group identifier.

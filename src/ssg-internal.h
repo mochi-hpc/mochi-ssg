@@ -20,6 +20,7 @@
 #include "swim-fd/swim-fd.h"
 #include "uthash.h"
 #include "utlist.h"
+#include "utarray.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -88,6 +89,7 @@ typedef struct ssg_group_view
 {
     unsigned int size;
     ssg_member_state_t *member_map;
+    UT_array *rank_array;
 } ssg_group_view_t;
 
 typedef struct ssg_group
@@ -161,6 +163,8 @@ void ssg_apply_member_updates(
     hg_size_t update_count);
 hg_return_t hg_proc_ssg_member_update_t(
     hg_proc_t proc, void *data);
+
+static const UT_icd ut_ssg_member_id_t_icd = {sizeof(ssg_member_id_t),NULL,NULL,NULL};
 
 extern ssg_instance_t *ssg_inst; 
 

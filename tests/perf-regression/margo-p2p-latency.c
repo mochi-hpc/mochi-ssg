@@ -332,7 +332,7 @@ static int run_benchmark(int iterations, hg_id_t id, ssg_member_id_t target,
     int ret;
     double tm1, tm2;
 
-    target_addr = ssg_get_group_addr(gid, target);
+    target_addr = ssg_get_group_member_addr(gid, target);
     assert(target_addr != HG_ADDR_NULL);
 
     ret = margo_create(mid, target_addr, id, &handle);
