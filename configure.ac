@@ -34,6 +34,28 @@ dnl
 PKG_PROG_PKG_CONFIG
 PKG_CONFIG="pkg-config --static"
 
+# coreutils checks for OSX
+AC_ARG_VAR([TIMEOUT], timeout program)
+AC_ARG_VAR([MKTEMP], mktemp program)
+
+if test -z "$TIMEOUT" ; then
+    AC_CHECK_PROGS(TIMEOUT, [timeout gtimeout])
+    if test -z "$TIMEOUT" ; then
+        AC_MSG_ERROR([Could not find timeout command (can optionally provide via the TIMEOUT variable)])
+    fi
+else
+    AC_SUBST([TIMEOUT], ["$TIMEOUT"])
+fi
+
+if test -z "$MKTEMP" ; then
+    AC_CHECK_PROGS(MKTEMP, [mktemp gmktemp])
+    if test -z "$MKTEMP" ; then
+        AC_MSG_ERROR([Could not find mktemp command (can optionally provide via the MKTEMP variable)])
+    fi
+else
+    AC_SUBST([MKTEMP], ["$MKTEMP"])
+fi
+
 check_mpi=auto
 AC_ARG_ENABLE([mpi],
     [  --enable-mpi            enable MPI (default: dynamic check)],
@@ -41,6 +63,16 @@ AC_ARG_ENABLE([mpi],
      yes) check_mpi=yes ;;
      no)  check_mpi=no ;;
      *) AC_MSG_ERROR([bad value ${enableval} for --enable-mpi]) ;;
+     esac],
+    [])
+
+check_pmix=auto
+AC_ARG_ENABLE([pmix],
+    [  --enable-pmix           enable PMIx (default: dynamic check)],
+    [ case "${enableval}" in
+     yes) check_pmix=yes ;;
+     no)  check_pmix=no ;;
+     *) AC_MSG_ERROR([bad value ${enableval} for --enable-pmix]) ;;
      esac],
     [])
 
@@ -55,27 +87,32 @@ if test "x${check_mpi}" = xauto -o "x${check_mpi}" = xyes ; then
         [AC_MSG_RESULT([no])])
 fi
 
+check_pmix_status=fail
+if test "x${check_pmix}" = xauto -o "x${check_pmix}" = xyes ; then
+    AC_MSG_CHECKING([If PMIx programs can be compiled])
+    AC_LINK_IFELSE(
+        [AC_LANG_PROGRAM([[#include<pmix.h>]], [[PMIx_Init(NULL, NULL,0);]])],
+        [AC_DEFINE([SSG_HAVE_PMIX], [1], [Define to 1 if compiled with PMIx support])
+         AC_MSG_RESULT([yes])
+         check_pmix_status=success],
+        [AC_MSG_RESULT([no])])
+fi
+
 if test "x${check_mpi_status}" = xfail -a "x${check_mpi}" = xyes; then
     AC_MSG_ERROR([MPI requested but unable to be used. Did you specify an MPI compiler?])
 fi
+if test "x${check_pmix_status}" = xfail -a "x${check_pmix}" = xyes; then
+    AC_MSG_ERROR([PMIx requested but unable to be used.])
+fi
 
 AM_CONDITIONAL([SSG_HAVE_MPI], [test "x${check_mpi_status}" = xsuccess])
+AM_CONDITIONAL([SSG_HAVE_PMIX], [test "x${check_pmix_status}" = xsuccess])
 
 PKG_CHECK_MODULES([MARGO],[margo],[],
    [AC_MSG_ERROR([Could not find working margo installation!])])
 LIBS="$MARGO_LIBS $LIBS"
 CPPFLAGS="$MARGO_CFLAGS $CPPFLAGS"
 CFLAGS="$MARGO_CFLAGS $CFLAGS"
-
-AC_ARG_ENABLE([swim-fd],
-    [  --enable-swim-fd        enable SWIM failure detection (default: disabled)],
-    [if test "x$enable_swim_fd" = "xyes" ; then
-        AC_DEFINE(SSG_USE_SWIM_FD, 1, Define to 1 if the SWIM failure detector should be used)
-    elif test "x$enableval" != "xno" ; then
-        AC_MSG_ERROR(bad value ${enable_swim_fd} for --enable-swim-fd)
-    fi],)
-
-AM_CONDITIONAL([SSG_USE_SWIM_FD], [test "x${enable_swim_fd}" = xyes])
 
 AC_CONFIG_FILES([Makefile maint/ssg.pc])
 AC_OUTPUT

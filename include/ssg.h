@@ -28,32 +28,29 @@ extern "C" {
 #define SSG_FAILURE (-1)
 
 /* opaque SSG group ID type */
-typedef struct ssg_group_descriptor *ssg_group_id_t;
-#define SSG_GROUP_ID_NULL ((ssg_group_id_t)NULL)
+typedef uint64_t ssg_group_id_t;
+#define SSG_GROUP_ID_INVALID 0
 
 /* SSG group member ID type */
 typedef uint64_t ssg_member_id_t;
-#define SSG_MEMBER_ID_INVALID UINT64_MAX
+#define SSG_MEMBER_ID_INVALID 0
 
 /* SSG group member update types */
-enum ssg_membership_update_type
+typedef enum ssg_member_update_type
 {
-    SSG_MEMBER_ADD = 0,
-    SSG_MEMBER_REMOVE
-};
-
-typedef struct ssg_membership_update
-{
-    ssg_member_id_t member;
-    int type;
-} ssg_membership_update_t;
+    SSG_MEMBER_JOINED = 0,
+    SSG_MEMBER_LEFT,
+    SSG_MEMBER_DIED
+} ssg_member_update_type_t;
 
 typedef void (*ssg_membership_update_cb)(
-    ssg_membership_update_t, void *);
+    void * group_data,
+    ssg_member_id_t member_id,
+    ssg_member_update_type_t update_type);
 
 /* HG proc routine prototypes for SSG types */
-#define hg_proc_ssg_member_id_t hg_proc_int64_t
-hg_return_t hg_proc_ssg_group_id_t(hg_proc_t proc, void *data);
+#define hg_proc_ssg_group_id_t hg_proc_uint64_t
+#define hg_proc_ssg_member_id_t hg_proc_uint64_t
 
 /***************************************************
  *** SSG runtime intialization/shutdown routines ***
@@ -88,7 +85,7 @@ int ssg_finalize(
  * @param[in] group_size        Number of group members
  * @param[in] update_cb         Callback function executed on group membership changes
  * @param[in] update_cb_dat     User data pointer passed to membership update callback
- * @returns SSG group identifier on success, SSG_GROUP_ID_NULL otherwise
+ * @returns SSG group identifier for created group on success, SSG_GROUP_ID_NULL otherwise
  *
  * NOTE: The HG address string of the caller of this function must be present in
  * the list of address strings given in 'group_addr_strs'. That is, the caller
@@ -110,7 +107,7 @@ ssg_group_id_t ssg_group_create(
  *                          HG address strings for this group
  * @param[in] update_cb         Callback function executed on group membership changes
  * @param[in] update_cb_dat     User data pointer passed to membership update callback
- * @returns SSG group identifier on success, SSG_GROUP_ID_NULL otherwise
+ * @returns SSG group identifier for created group on success, SSG_GROUP_ID_NULL otherwise
  *
  * 
  * NOTE: The HG address string of the caller of this function must be present in
@@ -133,25 +130,50 @@ int ssg_group_destroy(
     ssg_group_id_t group_id);
 
 /**
- * Attaches a client to an SSG group.
+ * Adds the calling process to an SSG group.
+ *
+ * @param[in] group_id       Input SSG group ID
+ * @param[in] update_cb         Callback function executed on group membership changes
+ * @param[in] update_cb_dat     User data pointer passed to membership update callback
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
+ *
+ * NOTE: Use the returned group ID to refer to the group, as the input group ID
+ *       becomes stale after the join is completed.
+ */
+int ssg_group_join(
+    ssg_group_id_t group_id,
+    ssg_membership_update_cb update_cb,
+    void * update_cb_dat);
+
+/**
+ * Removes the calling process from an SSG group.
  *
  * @param[in] group_id SSG group ID
  * @returns SSG_SUCCESS on success, SSG error code otherwise
- *
- * NOTE: The "client" cannot be a member of the group -- attachment is merely
- * a way of making the membership view of an existing SSG group available to
- * non-group members.
  */
-int ssg_group_attach(
+int ssg_group_leave(
     ssg_group_id_t group_id);
 
 /**
- * Detaches a client from an SSG group.
+ * Initiates a client's observation of an SSG group.
+ *
+ * @param[in] group_id SSG group ID
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
+ *
+ * NOTE: The "client" cannot be a member of the group -- observation is merely
+ * a way of making the membership view of an existing SSG group available to
+ * non-group members.
+ */
+int ssg_group_observe(
+    ssg_group_id_t group_id);
+
+/**
+ * Terminates a client's observation of an SSG group.
  *
  * @param[in] group_id SSG group ID
  * @returns SSG_SUCCESS on success, SSG error code otherwise
  */
-int ssg_group_detach(
+int ssg_group_unobserve(
     ssg_group_id_t group_id);
 
 /*********************************
@@ -161,11 +183,11 @@ int ssg_group_detach(
 /**
  * Obtains the caller's member ID in the given SSG group.
  *
- * @param[in] group_id SSG group ID
- * @returns caller's group ID on success, SSG_MEMBER_ID_INVALID otherwise
+ * @param[in] mid Corresponding Margo instance identifier
+ * @returns caller's member ID on success, SSG_MEMBER_ID_INVALID otherwise
  */
-ssg_member_id_t ssg_get_group_self_id(
-    ssg_group_id_t group_id);
+ssg_member_id_t ssg_get_self_id(
+    margo_instance_id mid);
 
 /**
  * Obtains the size of a given SSG group.
@@ -183,25 +205,58 @@ int ssg_get_group_size(
  * @param[in] member_id SSG group member ID
  * @returns HG address of given group member on success, HG_ADDR_NULL otherwise
  */
-hg_addr_t ssg_get_addr(
+hg_addr_t ssg_get_group_member_addr(
     ssg_group_id_t group_id,
     ssg_member_id_t member_id);
 
 /**
- * Duplicates the given SSG group identifier.
+ * Obtains the rank of the caller in a given SSG group.
  *
  * @param[in] group_id SSG group ID
- * @returns SSG group identifier on success, SSG_GROUP_ID_NULL otherwise
+ * @returns rank on success, -1 on failure
  */
-ssg_group_id_t ssg_group_id_dup(
+int ssg_get_group_self_rank(
     ssg_group_id_t group_id);
 
-/** Frees the given SSG group identifier.
+/**
+ * Obtains the rank of a member in a given SSG group.
+ *
+ * @param[in] group_id  SSG group ID
+ * @param[in] member_id SSG group member ID
+ * @returns rank on success, -1 otherwise
+ */
+int ssg_get_group_member_rank(
+    ssg_group_id_t group_id,
+    ssg_member_id_t member_id);
+
+/**
+ * Obtains the SSG member ID of the given group and rank.
  *
  * @param[in] group_id SSG group ID
+ * @param[in] rank     SSG group rank
+ * @returns caller's member ID on success, SSG_MEMBER_ID_INVALID otherwise
  */
-void ssg_group_id_free(
-    ssg_group_id_t group_id);
+ssg_member_id_t ssg_get_group_member_id_from_rank(
+    ssg_group_id_t group_id,
+    int rank);
+
+/**
+ * Obtains an array of SSG member IDs for a given rank range.
+ *
+ * @param[in] group_id      SSG group ID
+ * @param[in] rank_start    Rank of range start
+ * @param[in] rank_end      Rank of range end
+ * @param[in,out] range_ids Buffer to store member IDs of requested range
+ * @returns number of member IDs returned in range_ids on success, 0 otherwise
+ *
+ * NOTE: range_ids must be allocated by caller and must be large enough to hold
+ *       requested range.
+ */
+int ssg_get_group_member_ids_from_range(
+    ssg_group_id_t group_id,
+    int rank_start,
+    int rank_end,
+    ssg_member_id_t *range_ids);
 
 /**
  * Retrieves the HG address string associated with an SSG group identifier.
@@ -243,6 +298,7 @@ void ssg_group_id_deserialize(
  *
  * @param[in]   file_name   File to store the group ID in
  * @param[in]   group_id    SSG group ID
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
  */
 int ssg_group_id_store(
     const char * file_name,
@@ -253,6 +309,7 @@ int ssg_group_id_store(
  *
  * @param[in]   file_name   File to store the group ID in
  * @param[out]  group_id_p  Pointer to store group identifier in
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
  */
 int ssg_group_id_load(
     const char * file_name,

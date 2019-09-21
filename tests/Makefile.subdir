@@ -1,8 +1,32 @@
+TESTS_ENVIRONMENT += \
+ MKTEMP="$(MKTEMP)"
+
 check_PROGRAMS += \
- tests/ssg-test-simple \
- tests/ssg-test-attach
+ tests/ssg-launch-group \
+ tests/ssg-test-observe \
+ tests/ssg-join-leave-group 
 
-tests_ssg_test_simple_LDADD = src/libssg.la
+EXTRA_DIST += \
+ tests/test-util.sh
 
-tests_ssg_test_attach_LDADD = src/libssg.la
+if SSG_HAVE_MPI
 
+TESTS += \
+ tests/simple-group-mpi.sh \
+ tests/join-leave-group.sh
+
+EXTRA_DIST += \
+ tests/simple-group-mpi.sh \
+ tests/join-leave-group.sh
+
+endif
+
+if SSG_HAVE_PMIX
+
+TESTS += \
+ tests/simple-group-pmix.sh
+
+EXTRA_DIST += \
+ tests/simple-group-pmix.sh
+
+endif
