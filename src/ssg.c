@@ -1349,7 +1349,10 @@ void ssg_group_dump(
 
     if (group_view)
     {
-        ssg_member_state_t *member_state, *tmp_ms;
+        unsigned int i;
+        ssg_member_id_t member_id;
+        char *member_addr_str;
+        ssg_member_state_t *member_state;
         char hostname[1024];
         gethostname(hostname, 1024);
 
@@ -1361,10 +1364,19 @@ void ssg_group_dump(
         printf("\tsize: %d\n", group_size);
         printf("\tview:\n");
         ABT_rwlock_rdlock(group_lock);
-        HASH_ITER(hh, group_view->member_map, member_state, tmp_ms)
+        for (i = 0; i < group_view->size; i++)
         {
-            printf("\t\tid: %20lu\taddr: %s\n", member_state->id,
-                member_state->addr_str);
+            member_id = *(ssg_member_id_t *)utarray_eltptr(group_view->rank_array, i);
+            if(member_id == ssg_inst->self_id)
+                member_addr_str = ssg_inst->self_addr_str;
+            else
+            {
+                HASH_FIND(hh, group_view->member_map, &member_id,
+                    sizeof(ssg_member_id_t), member_state);
+                member_addr_str = member_state->addr_str;
+            }
+            printf("\t\tid: %20lu\taddr: %s\n", member_id,
+                member_addr_str);
         }
         ABT_rwlock_unlock(group_lock);
     }
@@ -1777,7 +1789,11 @@ static int ssg_member_id_sort_cmp(
 {
     ssg_member_id_t member_a = *(ssg_member_id_t *)a;
     ssg_member_id_t member_b = *(ssg_member_id_t *)b;
-    return member_a - member_b;
+    if(member_a < member_b)
+        return -1;
+    else
+        return 1;
+    return 0;
 }
 
 static int ssg_get_group_member_rank_internal(
