@@ -1846,8 +1846,9 @@ void ssg_pmix_proc_failure_notify_fn(
         fail_update.u.member_id = val_p->data.uint64;
         HASH_ITER(hh, ssg_inst->g_desc_table, g_desc, g_desc_tmp)
         {
-            SSG_DEBUG(g_desc->g, "RECEIVED FAIL UPDATE FOR MEMBER %lu\n", fail_update.u.member_id);
-            ssg_apply_member_updates(g_desc->g, &fail_update, 1);
+            SSG_DEBUG(g_desc->g_data.g, "RECEIVED FAIL UPDATE FOR MEMBER %lu\n",
+                fail_update.u.member_id);
+            ssg_apply_member_updates(g_desc->g_data.g, &fail_update, 1);
         }
     }
 
