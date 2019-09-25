@@ -47,6 +47,7 @@ typedef struct ssg_instance
 {
     margo_instance_id mid;
     char *self_addr_str;
+    hg_addr_t self_addr;
     ssg_member_id_t self_id;
     struct ssg_group_descriptor *g_desc_table;
 #ifdef SSG_HAVE_PMIX

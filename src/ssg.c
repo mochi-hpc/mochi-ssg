@@ -96,7 +96,6 @@ int ssg_init(
     margo_instance_id mid)
 {
     struct timespec ts;
-    hg_addr_t self_addr;
     hg_size_t self_addr_str_size;
 
     if (ssg_inst)
@@ -117,34 +116,33 @@ int ssg_init(
     srand(ts.tv_nsec + getpid());
 
     /* get my self address string and ID (which are constant per-mid) */
-    if (margo_addr_self(mid, &self_addr) != HG_SUCCESS)
+    if (margo_addr_self(mid, &ssg_inst->self_addr) != HG_SUCCESS)
     {
         free(ssg_inst);
         return SSG_FAILURE;
     }
-    if (margo_addr_to_string(mid, NULL, &self_addr_str_size, self_addr) != HG_SUCCESS)
+    if (margo_addr_to_string(mid, NULL, &self_addr_str_size, ssg_inst->self_addr) != HG_SUCCESS)
     {
-        margo_addr_free(mid, self_addr); 
+        margo_addr_free(mid, ssg_inst->self_addr); 
         free(ssg_inst);
         return SSG_FAILURE;
     }
     if ((ssg_inst->self_addr_str = malloc(self_addr_str_size)) == NULL)
     {
-        margo_addr_free(mid, self_addr);
+        margo_addr_free(mid, ssg_inst->self_addr);
         free(ssg_inst);
         return SSG_FAILURE;
     }
-    if (margo_addr_to_string(mid, ssg_inst->self_addr_str, &self_addr_str_size, self_addr) != HG_SUCCESS)
+    if (margo_addr_to_string(mid, ssg_inst->self_addr_str, &self_addr_str_size, ssg_inst->self_addr) != HG_SUCCESS)
     {
         free(ssg_inst->self_addr_str);
-        margo_addr_free(mid, self_addr);
+        margo_addr_free(mid, ssg_inst->self_addr);
         free(ssg_inst);
         return SSG_FAILURE;
     }
 
     ssg_inst->self_id = ssg_gen_member_id(ssg_inst->self_addr_str);
 
-    margo_addr_free(mid, self_addr);
     return SSG_SUCCESS;
 }
 
@@ -177,6 +175,7 @@ int ssg_finalize()
 
     ABT_rwlock_free(&ssg_inst->lock);
 
+    margo_addr_free(ssg_inst->mid, ssg_inst->self_addr);
     free(ssg_inst->self_addr_str);
     free(ssg_inst);
     ssg_inst = NULL;
@@ -834,12 +833,17 @@ hg_addr_t ssg_get_group_member_addr(
 
     if (g_desc->owner_status == SSG_OWNER_IS_MEMBER)
     {
-        ABT_rwlock_rdlock(g_desc->g_data.g->lock);
-        HASH_FIND(hh, g_desc->g_data.g->view.member_map, &member_id,
-            sizeof(ssg_member_id_t), member_state);
-        if (member_state) 
-            member_addr = member_state->addr;
-        ABT_rwlock_unlock(g_desc->g_data.g->lock);
+        if (member_id == ssg_inst->self_id)
+            member_addr = ssg_inst->self_addr;
+        else
+        {
+            ABT_rwlock_rdlock(g_desc->g_data.g->lock);
+            HASH_FIND(hh, g_desc->g_data.g->view.member_map, &member_id,
+                sizeof(ssg_member_id_t), member_state);
+            if (member_state) 
+                member_addr = member_state->addr;
+            ABT_rwlock_unlock(g_desc->g_data.g->lock);
+        }
     }
     else if (g_desc->owner_status == SSG_OWNER_IS_OBSERVER)
     {

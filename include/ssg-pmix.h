@@ -26,7 +26,7 @@ extern "C" {
  * @param[in] proc          PMIx proc handle representing this group member
  * @param[in] update_cb     Callback function executed on group membership changes
  * @param[in] update_cb_dat User data pointer passed to membership update callback
- * @returns SSG group identifier for created group on success, SSG_GROUP_ID_NULL otherwise
+ * @returns SSG group identifier for created group on success, SSG_GROUP_ID_INVALID otherwise
  */
 ssg_group_id_t ssg_group_create_pmix(
     const char * group_name,
