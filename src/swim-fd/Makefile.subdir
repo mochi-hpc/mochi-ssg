@@ -1,5 +1,6 @@
 src_libssg_la_SOURCES += \
  src/swim-fd/swim-fd.h \
  src/swim-fd/swim-fd-internal.h \
+ src/swim-fd/utlist.h \
  src/swim-fd/swim-fd.c \
  src/swim-fd/swim-fd-ping.c

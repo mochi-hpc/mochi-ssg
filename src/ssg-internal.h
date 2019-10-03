@@ -130,11 +130,15 @@ typedef struct ssg_member_update
 
 /* SSG internal function prototypes */
 
+#define ssg_hashlittle2 hashlittle2
+extern void hashlittle2(const void *key, size_t length, uint32_t *pc, uint32_t *pb);
 static inline uint64_t ssg_hash64_str(const char * str)
 {
-    unsigned hash;
-    HASH_JEN(str, strlen(str), hash);
-    return (uint64_t)hash;
+    uint32_t lower = 0, upper = 0;
+    uint64_t hash;
+    ssg_hashlittle2(str, strlen(str), &lower, &upper);
+    hash = lower + (((uint64_t)upper)<<32);
+    return hash;
 }
 
 void ssg_register_rpcs(
