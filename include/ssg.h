@@ -59,11 +59,10 @@ typedef void (*ssg_membership_update_cb)(
 /**
  * Initializes the SSG runtime environment.
  *
- * @param[in] mid Corresponding Margo instance identifier
  * @returns SSG_SUCCESS on success, SSG error code otherwise
  */
 int ssg_init(
-    margo_instance_id mid);
+    void);
 
 /**
  * Finalizes the SSG runtime environment.
@@ -80,6 +79,7 @@ int ssg_finalize(
 /**
  * Creates an SSG group from a given list of HG address strings.
  *
+ * @param[in] mid               Corresponding Margo instance identifier
  * @param[in] group_name        Name of the SSG group
  * @param[in] group_addr_strs   Array of HG address strings for each group member
  * @param[in] group_size        Number of group members
@@ -92,6 +92,7 @@ int ssg_finalize(
  * of this function is required to be a member of the SSG group that is created.
  */
 ssg_group_id_t ssg_group_create(
+    margo_instance_id mid,
     const char * group_name,
     const char * const group_addr_strs[],
     int group_size,
@@ -102,9 +103,10 @@ ssg_group_id_t ssg_group_create(
  * Creates an SSG group from a given config file containing the HG address strings
  * of all group members.
  *
- * @param[in] group_name    Name of the SSG group
- * @param[in] file_name     Name of the config file containing the corresponding
- *                          HG address strings for this group
+ * @param[in] mid               Corresponding Margo instance identifier
+ * @param[in] group_name        Name of the SSG group
+ * @param[in] file_name         Name of the config file containing the corresponding
+ *                              HG address strings for this group
  * @param[in] update_cb         Callback function executed on group membership changes
  * @param[in] update_cb_dat     User data pointer passed to membership update callback
  * @returns SSG group identifier for created group on success, SSG_GROUP_ID_NULL otherwise
@@ -115,6 +117,7 @@ ssg_group_id_t ssg_group_create(
  * this function is required to be a member of the SSG group that is created.
  */
 ssg_group_id_t ssg_group_create_config(
+    margo_instance_id mid,
     const char * group_name,
     const char * file_name,
     ssg_membership_update_cb update_cb,
@@ -132,7 +135,8 @@ int ssg_group_destroy(
 /**
  * Adds the calling process to an SSG group.
  *
- * @param[in] group_id       Input SSG group ID
+ * @param[in] mid               Corresponding Margo instance identifier
+ * @param[in] group_id          Input SSG group ID
  * @param[in] update_cb         Callback function executed on group membership changes
  * @param[in] update_cb_dat     User data pointer passed to membership update callback
  * @returns SSG_SUCCESS on success, SSG error code otherwise
@@ -141,6 +145,7 @@ int ssg_group_destroy(
  *       becomes stale after the join is completed.
  */
 int ssg_group_join(
+    margo_instance_id mid,
     ssg_group_id_t group_id,
     ssg_membership_update_cb update_cb,
     void * update_cb_dat);
@@ -157,7 +162,8 @@ int ssg_group_leave(
 /**
  * Initiates a client's observation of an SSG group.
  *
- * @param[in] group_id SSG group ID
+ * @param[in] mid       Corresponding Margo instance identifier
+ * @param[in] group_id  SSG group ID
  * @returns SSG_SUCCESS on success, SSG error code otherwise
  *
  * NOTE: The "client" cannot be a member of the group -- observation is merely
@@ -165,6 +171,7 @@ int ssg_group_leave(
  * non-group members.
  */
 int ssg_group_observe(
+    margo_instance_id mid,
     ssg_group_id_t group_id);
 
 /**

@@ -103,14 +103,14 @@ int main(int argc, char *argv[])
     DIE_IF(mid == MARGO_INSTANCE_NULL, "margo_init");
 
     /* initialize SSG */
-    sret = ssg_init(mid);
+    sret = ssg_init();
     DIE_IF(sret != SSG_SUCCESS, "ssg_init");
 
     sret = ssg_group_id_load(gid_file, &g_id);
     DIE_IF(sret != SSG_SUCCESS, "ssg_group_id_load");
 
     /* start observging the SSG server group */
-    sret = ssg_group_observe(g_id);
+    sret = ssg_group_observe(mid, g_id);
     DIE_IF(sret != SSG_SUCCESS, "ssg_group_observe");
 
     /* for now, just sleep to give observer a chance to establish connection */
@@ -119,8 +119,6 @@ int main(int argc, char *argv[])
 
     /* have everyone dump their group state */
     ssg_group_dump(g_id);
-
-    if (sleep_time > 0) margo_thread_sleep(mid, sleep_time * 1000.0);
 
     /* clean up */
     ssg_group_unobserve(g_id);

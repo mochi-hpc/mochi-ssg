@@ -35,37 +35,31 @@
 #include "ssg-pmix.h"
 #endif
 #include "ssg-internal.h"
-#include "swim-fd/swim-fd.h"
-
-/* arguments for group lookup ULTs */
-struct ssg_group_lookup_ult_args
-{
-    const char *addr_str;
-    ssg_group_view_t *view;
-    ABT_rwlock lock;
-    int out;
-};
-static void ssg_group_lookup_ult(void * arg);
+//#include "swim-fd/swim-fd.h"
 
 /* SSG helper routine prototypes */
+ssg_mid_state_t *ssg_retrieve_mid_state(
+    margo_instance_id mid);
 static ssg_group_id_t ssg_group_create_internal(
-    const char * group_name, const char * const group_addr_strs[],
-    int group_size, ssg_membership_update_cb update_cb, void *update_cb_dat);
+    ssg_mid_state_t *mid_state, const char * group_name,
+    const char * const group_addr_strs[], int group_size,
+    ssg_membership_update_cb update_cb, void *update_cb_dat);
 static int ssg_group_view_create(
     const char * const group_addr_strs[], int group_size,
-    const char * self_addr_str, ABT_rwlock view_lock,
-    ssg_group_view_t * view);
+    const char * self_addr_str, ssg_mid_state_t *mid_state,
+    ABT_rwlock view_lock, ssg_group_view_t * view);
 static ssg_member_state_t * ssg_group_view_add_member(
     const char * addr_str, hg_addr_t addr, ssg_member_id_t member_id,
     ssg_group_view_t * view);
 static ssg_group_descriptor_t * ssg_group_descriptor_create(
-    ssg_group_id_t g_id, const char * leader_addr_str, int owner_status);
+    ssg_group_id_t g_id, const char * leader_addr_str, int owner_status,
+    ssg_mid_state_t *mid_state);
 static void ssg_group_destroy_internal(
-    ssg_group_t * g);
+    ssg_group_t * g, margo_instance_id mid);
 static void ssg_observed_group_destroy(
-    ssg_observed_group_t * og);
+    ssg_observed_group_t * og, margo_instance_id mid);
 static void ssg_group_view_destroy(
-    ssg_group_view_t * view);
+    ssg_group_view_t * view, margo_instance_id mid);
 static void ssg_group_descriptor_free(
     ssg_group_descriptor_t * descriptor);
 static ssg_member_id_t ssg_gen_member_id(
@@ -85,63 +79,60 @@ void ssg_pmix_proc_failure_reg_cb(
     pmix_status_t status, size_t evhdlr_ref, void *cbdata);
 #endif 
 
-/* XXX: we ultimately need per-mid ssg instances rather than 1 global */
-ssg_instance_t *ssg_inst = NULL;
+/* arguments for group lookup ULTs */
+struct ssg_group_lookup_ult_args
+{
+    margo_instance_id mid;
+    const char *addr_str;
+    ssg_group_view_t *view;
+    ABT_rwlock lock;
+    int out;
+};
+static void ssg_group_lookup_ult(void * arg);
+
+/* global SSG runtime state */
+ssg_runtime_state_t *ssg_rt = NULL;
 
 /***************************************************
  *** SSG runtime intialization/shutdown routines ***
  ***************************************************/
 
-int ssg_init(
-    margo_instance_id mid)
+int ssg_init()
 {
     struct timespec ts;
-    hg_size_t self_addr_str_size;
+    int ret;
 
-    if (ssg_inst)
+    /* XXX: note this init routine is not thread-safe */
+    if (ssg_rt)
         return SSG_FAILURE;
 
-    /* initialize an SSG instance for this margo instance */
-    ssg_inst = malloc(sizeof(*ssg_inst));
-    if (!ssg_inst)
+    /* initialize SSG runtime state */
+    ssg_rt = malloc(sizeof(*ssg_rt));
+    if (!ssg_rt)
         return SSG_FAILURE;
-    memset(ssg_inst, 0, sizeof(*ssg_inst));
-    ssg_inst->mid = mid;
-    ABT_rwlock_create(&ssg_inst->lock);
+    memset(ssg_rt, 0, sizeof(*ssg_rt));
 
-    ssg_register_rpcs();
+    if (ABT_initialized() == ABT_ERR_UNINITIALIZED)
+    {
+        ret = ABT_init(0, NULL); /* XXX: argc/argv not currently used by ABT ... */
+        if (ret != 0)
+            return SSG_FAILURE;
+        ssg_rt->abt_init_flag = 1;
+    }
+    ABT_rwlock_create(&ssg_rt->lock);
+
+#ifdef SSG_HAVE_PMIX 
+    /* XXX config switch for this functionality */
+    /* use PMIx event registrations to inform us of terminated/aborted procs */
+    pmix_status_t err_codes[2] = {PMIX_PROC_TERMINATED, PMIX_ERR_PROC_ABORTED};
+    PMIx_Register_event_handler(err_codes, 2, NULL, 0,
+        ssg_pmix_proc_failure_notify_fn, ssg_pmix_proc_failure_reg_cb,
+        &ssg_rt->pmix_failure_evhdlr_ref);
+#endif
 
     /* seed RNG */
     clock_gettime(CLOCK_MONOTONIC, &ts);
     srand(ts.tv_nsec + getpid());
-
-    /* get my self address string and ID (which are constant per-mid) */
-    if (margo_addr_self(mid, &ssg_inst->self_addr) != HG_SUCCESS)
-    {
-        free(ssg_inst);
-        return SSG_FAILURE;
-    }
-    if (margo_addr_to_string(mid, NULL, &self_addr_str_size, ssg_inst->self_addr) != HG_SUCCESS)
-    {
-        margo_addr_free(mid, ssg_inst->self_addr); 
-        free(ssg_inst);
-        return SSG_FAILURE;
-    }
-    if ((ssg_inst->self_addr_str = malloc(self_addr_str_size)) == NULL)
-    {
-        margo_addr_free(mid, ssg_inst->self_addr);
-        free(ssg_inst);
-        return SSG_FAILURE;
-    }
-    if (margo_addr_to_string(mid, ssg_inst->self_addr_str, &self_addr_str_size, ssg_inst->self_addr) != HG_SUCCESS)
-    {
-        free(ssg_inst->self_addr_str);
-        margo_addr_free(mid, ssg_inst->self_addr);
-        free(ssg_inst);
-        return SSG_FAILURE;
-    }
-
-    ssg_inst->self_id = ssg_gen_member_id(ssg_inst->self_addr_str);
 
     return SSG_SUCCESS;
 }
@@ -149,36 +140,49 @@ int ssg_init(
 int ssg_finalize()
 {
     ssg_group_descriptor_t *g_desc, *g_desc_tmp;
+    ssg_mid_state_t *mid_state, *mid_state_tmp;
 
-    if (!ssg_inst)
+    if (!ssg_rt)
         return SSG_FAILURE;
 
-    /* destroy all active groups */
-    ABT_rwlock_wrlock(ssg_inst->lock);
-    HASH_ITER(hh, ssg_inst->g_desc_table, g_desc, g_desc_tmp)
-    {
-        HASH_DELETE(hh, ssg_inst->g_desc_table, g_desc);
-        ABT_rwlock_unlock(ssg_inst->lock);
-        if (g_desc->owner_status == SSG_OWNER_IS_MEMBER)
-            ssg_group_destroy_internal(g_desc->g_data.g);
-        else if (g_desc->owner_status == SSG_OWNER_IS_OBSERVER)
-            ssg_observed_group_destroy(g_desc->g_data.og);
-        ssg_group_descriptor_free(g_desc);
-        ABT_rwlock_wrlock(ssg_inst->lock);
-    }
-    ABT_rwlock_unlock(ssg_inst->lock);
+    ABT_rwlock_wrlock(ssg_rt->lock);
 
 #ifdef SSG_HAVE_PMIX
-    if (ssg_inst->pmix_failure_evhdlr_ref)
-        PMIx_Deregister_event_handler(ssg_inst->pmix_failure_evhdlr_ref, NULL, NULL);
+    // XXX broken
+    //if (ssg_rt->pmix_failure_evhdlr_ref)
+    //    PMIx_Deregister_event_handler(ssg_rt->pmix_failure_evhdlr_ref, NULL, NULL);
 #endif
 
-    ABT_rwlock_free(&ssg_inst->lock);
+    /* destroy all active groups */
+    HASH_ITER(hh, ssg_rt->g_desc_table, g_desc, g_desc_tmp)
+    {
+        HASH_DEL(ssg_rt->g_desc_table, g_desc);
+        ABT_rwlock_unlock(ssg_rt->lock);
+        if (g_desc->owner_status == SSG_OWNER_IS_MEMBER)
+            ssg_group_destroy_internal(g_desc->g_data.g, g_desc->mid_state->mid);
+        else if (g_desc->owner_status == SSG_OWNER_IS_OBSERVER)
+            ssg_observed_group_destroy(g_desc->g_data.og, g_desc->mid_state->mid);
+        ssg_group_descriptor_free(g_desc);
+        ABT_rwlock_wrlock(ssg_rt->lock);
+    }
 
-    margo_addr_free(ssg_inst->mid, ssg_inst->self_addr);
-    free(ssg_inst->self_addr_str);
-    free(ssg_inst);
-    ssg_inst = NULL;
+    /* free any mid state */
+    LL_FOREACH_SAFE(ssg_rt->mid_list, mid_state, mid_state_tmp)
+    {
+        LL_DELETE(ssg_rt->mid_list, mid_state);
+        ssg_deregister_rpcs(mid_state);
+        margo_addr_free(mid_state->mid, mid_state->self_addr);
+        free(mid_state->self_addr_str);
+        free(mid_state);
+    }
+
+    ABT_rwlock_unlock(ssg_rt->lock);
+
+    ABT_rwlock_free(&ssg_rt->lock);
+    if (ssg_rt->abt_init_flag)
+        ABT_finalize(); /* finalize ABT if SSG initialized it */
+    free(ssg_rt);
+    ssg_rt = NULL;
 
     return SSG_SUCCESS;
 }
@@ -188,26 +192,35 @@ int ssg_finalize()
  *************************************/
 
 ssg_group_id_t ssg_group_create(
+    margo_instance_id mid,
     const char * group_name,
     const char * const group_addr_strs[],
     int group_size,
     ssg_membership_update_cb update_cb,
     void * update_cb_dat)
 {
-    ssg_group_id_t g_id;
+    ssg_mid_state_t *mid_state;
+    ssg_group_id_t g_id = SSG_GROUP_ID_INVALID;
 
-    g_id = ssg_group_create_internal(group_name, group_addr_strs,
+    if (!ssg_rt) return g_id;
+
+    mid_state = ssg_retrieve_mid_state(mid);
+    if(!mid_state) return g_id;
+
+    g_id = ssg_group_create_internal(mid_state, group_name, group_addr_strs,
             group_size, update_cb, update_cb_dat);
 
     return g_id;
 }
 
 ssg_group_id_t ssg_group_create_config(
+    margo_instance_id mid,
     const char * group_name,
     const char * file_name,
     ssg_membership_update_cb update_cb,
     void * update_cb_dat)
 {
+    ssg_mid_state_t *mid_state;
     int fd;
     struct stat st;
     char *rd_buf = NULL;
@@ -218,6 +231,11 @@ ssg_group_id_t ssg_group_create_config(
     const char **addr_strs = NULL;
     int ret;
     ssg_group_id_t g_id = SSG_GROUP_ID_INVALID;
+
+    if (!ssg_rt) goto fini;
+
+    mid_state = ssg_retrieve_mid_state(mid);
+    if(!mid_state) goto fini;
 
     /* open config file for reading */
     fd = open(file_name, O_RDONLY);
@@ -279,7 +297,7 @@ ssg_group_id_t ssg_group_create_config(
     if (!addr_strs) goto fini;
 
     /* invoke the generic group create routine using our list of addrs */
-    g_id = ssg_group_create_internal(group_name, addr_strs, num_addrs,
+    g_id = ssg_group_create_internal(mid_state, group_name, addr_strs, num_addrs,
         update_cb, update_cb_dat);
 
 fini:
@@ -294,11 +312,13 @@ fini:
 
 #ifdef SSG_HAVE_MPI
 ssg_group_id_t ssg_group_create_mpi(
+    margo_instance_id mid,
     const char * group_name,
     MPI_Comm comm,
     ssg_membership_update_cb update_cb,
     void * update_cb_dat)
 {
+    ssg_mid_state_t *mid_state;
     int i;
     int self_addr_str_size = 0;
     char *addr_str_buf = NULL;
@@ -308,14 +328,17 @@ ssg_group_id_t ssg_group_create_mpi(
     const char **addr_strs = NULL;
     ssg_group_id_t g_id = SSG_GROUP_ID_INVALID;
 
-    if (!ssg_inst) goto fini;
+    if (!ssg_rt) goto fini;
+
+    mid_state = ssg_retrieve_mid_state(mid);
+    if(!mid_state) goto fini;
 
     /* gather the buffer sizes */
     MPI_Comm_size(comm, &comm_size);
     MPI_Comm_rank(comm, &comm_rank);
     sizes = malloc(comm_size * sizeof(*sizes));
     if (sizes == NULL) goto fini;
-    self_addr_str_size = (int)strlen(ssg_inst->self_addr_str) + 1;
+    self_addr_str_size = (int)strlen(mid_state->self_addr_str) + 1;
     sizes[comm_rank] = self_addr_str_size;
     MPI_Allgather(MPI_IN_PLACE, 0, MPI_BYTE, sizes, 1, MPI_INT, comm);
 
@@ -331,7 +354,7 @@ ssg_group_id_t ssg_group_create_mpi(
     /* allgather the addresses */
     addr_str_buf = malloc(sizes_psum[comm_size]);
     if (addr_str_buf == NULL) goto fini;
-    MPI_Allgatherv(ssg_inst->self_addr_str, self_addr_str_size, MPI_BYTE,
+    MPI_Allgatherv(mid_state->self_addr_str, self_addr_str_size, MPI_BYTE,
             addr_str_buf, sizes, sizes_psum, MPI_BYTE, comm);
 
     /* set up address string array for group members */
@@ -339,7 +362,7 @@ ssg_group_id_t ssg_group_create_mpi(
     if (!addr_strs) goto fini;
 
     /* invoke the generic group create routine using our list of addrs */
-    g_id = ssg_group_create_internal(group_name, addr_strs, comm_size,
+    g_id = ssg_group_create_internal(mid_state, group_name, addr_strs, comm_size,
         update_cb, update_cb_dat);
 
 fini:
@@ -355,11 +378,13 @@ fini:
 
 #ifdef SSG_HAVE_PMIX
 ssg_group_id_t ssg_group_create_pmix(
+    margo_instance_id mid,
     const char * group_name,
     const pmix_proc_t proc,
     ssg_membership_update_cb update_cb,
     void * update_cb_dat)
 {
+    ssg_mid_state_t *mid_state;
     pmix_proc_t tmp_proc;
     pmix_value_t value;
     pmix_value_t *val_p;
@@ -373,21 +398,20 @@ ssg_group_id_t ssg_group_create_pmix(
     pmix_status_t ret;
     ssg_group_id_t g_id = SSG_GROUP_ID_INVALID;
 
-    if (!ssg_inst || !PMIx_Initialized()) goto fini;
+    if (!ssg_rt || !PMIx_Initialized()) goto fini;
 
+    mid_state = ssg_retrieve_mid_state(mid);
+    if(!mid_state) goto fini;
+
+    /* XXX this is broken with multiple mids */
+#if 0
     /* XXX config switch for this functionality */
-    /* if not already done, register for PMIx process failure notifications */
-    if (!ssg_inst->pmix_failure_evhdlr_ref)
+    ret = PMIx_Get(&tmp_proc, WHAT,, , &val_p)
+    if (WHAT)
     {
-        /* use PMIx event registrations to inform us of terminated/aborted procs */
-        pmix_status_t err_codes[2] = {PMIX_PROC_TERMINATED, PMIX_ERR_PROC_ABORTED};
-        PMIx_Register_event_handler(err_codes, 2, NULL, 0,
-            ssg_pmix_proc_failure_notify_fn, ssg_pmix_proc_failure_reg_cb,
-            &ssg_inst->pmix_failure_evhdlr_ref);
-
         /* exchange information needed to map PMIx ranks to SSG member IDs */
         snprintf(key, 512, "ssg-%s-%d-id", proc.nspace, proc.rank);
-        PMIX_VALUE_LOAD(&value, &ssg_inst->self_id, PMIX_UINT64);
+        PMIX_VALUE_LOAD(&value, &mid_state->self_id, PMIX_UINT64);
         ret = PMIx_Put(PMIX_GLOBAL, key, &value);
         if (ret != PMIX_SUCCESS)
         {
@@ -396,6 +420,8 @@ ssg_group_id_t ssg_group_create_pmix(
             PMIx_Deregister_event_handler(ssg_inst->pmix_failure_evhdlr_ref, NULL, NULL);
         }
     }
+    PMIX_VALUE_RELEASE(val_p);
+#endif
 
     /* XXX note we are assuming every process in the job wants to join this group... */
     /* get the total nprocs in the job */
@@ -407,7 +433,7 @@ ssg_group_id_t ssg_group_create_pmix(
 
     /* put my address string using a well-known key */
     snprintf(key, 512, "ssg-%s-%s-%d-hg-addr", group_name, proc.nspace, proc.rank);
-    PMIX_VALUE_LOAD(&value, ssg_inst->self_addr_str, PMIX_STRING);
+    PMIX_VALUE_LOAD(&value, mid_state->self_addr_str, PMIX_STRING);
     ret = PMIx_Put(PMIX_GLOBAL, key, &value);
     if (ret != PMIX_SUCCESS) goto fini;
 
@@ -433,7 +459,7 @@ ssg_group_id_t ssg_group_create_pmix(
         /* skip ourselves */
         if(n == proc.rank)
         {
-            addr_strs[n] = ssg_inst->self_addr_str;
+            addr_strs[n] = mid_state->self_addr_str;
             continue;
         }
 
@@ -449,7 +475,7 @@ ssg_group_id_t ssg_group_create_pmix(
     }
 
     /* invoke the generic group create routine using our list of addrs */
-    g_id = ssg_group_create_internal(group_name, addr_strs, nprocs,
+    g_id = ssg_group_create_internal(mid, group_name, addr_strs, nprocs,
         update_cb, update_cb_dat);
 
 fini:
@@ -466,81 +492,80 @@ int ssg_group_destroy(
 {
     ssg_group_descriptor_t *g_desc;
 
-    if (!ssg_inst || group_id == SSG_GROUP_ID_INVALID) return SSG_FAILURE;
+    if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID) return SSG_FAILURE;
 
-    ABT_rwlock_wrlock(ssg_inst->lock);
+    ABT_rwlock_wrlock(ssg_rt->lock);
 
     /* find the group structure and destroy it */
-    HASH_FIND(hh, ssg_inst->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
+    HASH_FIND(hh, ssg_rt->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
     if (!g_desc)
     {
-        ABT_rwlock_unlock(ssg_inst->lock);
+        ABT_rwlock_unlock(ssg_rt->lock);
         fprintf(stderr, "Error: SSG unable to find expected group ID\n");
         return SSG_FAILURE;
     }
-    HASH_DELETE(hh, ssg_inst->g_desc_table, g_desc);
+    HASH_DEL(ssg_rt->g_desc_table, g_desc);
 
-    ABT_rwlock_unlock(ssg_inst->lock);
+    ABT_rwlock_unlock(ssg_rt->lock);
 
     /* destroy the group, free the descriptor */
-    ssg_group_destroy_internal(g_desc->g_data.g);
+    ssg_group_destroy_internal(g_desc->g_data.g, g_desc->mid_state->mid);
     ssg_group_descriptor_free(g_desc);
 
     return SSG_SUCCESS;
 }
 
 int ssg_group_join(
+    margo_instance_id mid,
     ssg_group_id_t group_id,
     ssg_membership_update_cb update_cb,
     void * update_cb_dat)
 {
+    ssg_mid_state_t *mid_state;
     ssg_group_descriptor_t *g_desc;
-    hg_addr_t group_target_addr = HG_ADDR_NULL;
     char *group_name = NULL;
     int group_size;
     void *view_buf = NULL;
     const char **addr_strs = NULL;
     ssg_group_id_t create_g_id;
-    hg_return_t hret;
     int sret = SSG_FAILURE;
 
-    if (!ssg_inst || group_id == SSG_GROUP_ID_INVALID) goto fini;
+    if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID) goto fini;
 
-    ABT_rwlock_wrlock(ssg_inst->lock);
+    ABT_rwlock_wrlock(ssg_rt->lock);
 
     /* find the group structure to join */
-    HASH_FIND(hh, ssg_inst->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
+    HASH_FIND(hh, ssg_rt->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
     if (!g_desc)
     {
+        ABT_rwlock_unlock(ssg_rt->lock);
         fprintf(stderr, "Error: SSG unable to find expected group ID\n");
-        ABT_rwlock_unlock(ssg_inst->lock);
         goto fini;
     }
 
     if (g_desc->owner_status == SSG_OWNER_IS_MEMBER)
     {
+        ABT_rwlock_unlock(ssg_rt->lock);
         fprintf(stderr, "Error: SSG unable to join a group it is already a member of\n");
-        ABT_rwlock_unlock(ssg_inst->lock);
         goto fini;
     }
     else if (g_desc->owner_status == SSG_OWNER_IS_OBSERVER)
     {
+        ABT_rwlock_unlock(ssg_rt->lock);
         fprintf(stderr, "Error: SSG unable to join a group it is an observer of\n");
-        ABT_rwlock_unlock(ssg_inst->lock);
         goto fini;
     }
 
     /* remove the descriptor since we re-add it as part of group creation */
-    HASH_DELETE(hh, ssg_inst->g_desc_table, g_desc);
+    HASH_DEL(ssg_rt->g_desc_table, g_desc);
 
-    ABT_rwlock_unlock(ssg_inst->lock);
+    ABT_rwlock_unlock(ssg_rt->lock);
 
-    /* lookup the address of the target group member in the GID */
-    hret = margo_addr_lookup(ssg_inst->mid, g_desc->addr_str, &group_target_addr);
-    if (hret != HG_SUCCESS) goto fini;
+    mid_state = ssg_retrieve_mid_state(mid);
+    if(!mid_state) goto fini;
+    g_desc->mid_state = mid_state;
 
-    sret = ssg_group_join_send(g_desc, group_target_addr,
-        &group_name, &group_size, &view_buf);
+    sret = ssg_group_join_send(g_desc, &group_name, &group_size, &view_buf);
     if (sret != SSG_SUCCESS || !group_name || !view_buf) goto fini;
 
     /* free old descriptor */
@@ -553,9 +578,9 @@ int ssg_group_join(
     /* append self address string to list of group member address strings */
     addr_strs = realloc(addr_strs, (group_size+1)*sizeof(char *));
     if(!addr_strs) goto fini;
-    addr_strs[group_size++] = ssg_inst->self_addr_str;
+    addr_strs[group_size++] = mid_state->self_addr_str;
 
-    create_g_id = ssg_group_create_internal(group_name, addr_strs, group_size,
+    create_g_id = ssg_group_create_internal(mid_state, group_name, addr_strs, group_size,
             update_cb, update_cb_dat);
 
     if (create_g_id != SSG_GROUP_ID_INVALID)
@@ -568,8 +593,6 @@ int ssg_group_join(
     }
 
 fini:
-    if (group_target_addr != HG_ADDR_NULL)
-        margo_addr_free(ssg_inst->mid, group_target_addr);
     free(addr_strs);
     free(view_buf);
     free(group_name);
@@ -581,66 +604,54 @@ int ssg_group_leave(
     ssg_group_id_t group_id)
 {
     ssg_group_descriptor_t *g_desc;
-    hg_addr_t group_target_addr = HG_ADDR_NULL;
-    hg_return_t hret;
     int sret = SSG_FAILURE;
 
-    if (!ssg_inst || group_id == SSG_GROUP_ID_INVALID) goto fini;
+    if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID) return sret;
 
-    ABT_rwlock_wrlock(ssg_inst->lock);
+    ABT_rwlock_wrlock(ssg_rt->lock);
 
     /* find the group structure to leave */
-    HASH_FIND(hh, ssg_inst->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
+    HASH_FIND(hh, ssg_rt->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
     if (!g_desc)
     {
-        ABT_rwlock_unlock(ssg_inst->lock);
+        ABT_rwlock_unlock(ssg_rt->lock);
         fprintf(stderr, "Error: SSG unable to find expected group ID\n");
-        goto fini;
+        return sret;
     }
 
     if (g_desc->owner_status != SSG_OWNER_IS_MEMBER)
     {
+        ABT_rwlock_unlock(ssg_rt->lock);
         fprintf(stderr, "Error: SSG unable to leave group it is not a member of\n");
-        ABT_rwlock_unlock(ssg_inst->lock);
-        goto fini;
+        return sret;
     }
 
     /* remove the descriptor  */
-    HASH_DELETE(hh, ssg_inst->g_desc_table, g_desc);
+    HASH_DEL(ssg_rt->g_desc_table, g_desc);
 
-    /* send the leave req to the first member in the view */
-    hret = margo_addr_dup(ssg_inst->mid, g_desc->g_data.g->view.member_map->addr,
-        &group_target_addr);
-    if (hret != HG_SUCCESS)
-    {
-        ABT_rwlock_unlock(ssg_inst->lock);
-        goto fini;
-    }
-    ABT_rwlock_unlock(ssg_inst->lock);
+    ABT_rwlock_unlock(ssg_rt->lock);
 
-    sret = ssg_group_leave_send(g_desc, ssg_inst->self_id, group_target_addr);
-    if (sret != SSG_SUCCESS) goto fini;
+    sret = ssg_group_leave_send(g_desc);
+    if (sret != SSG_SUCCESS) return sret;
 
     /* at least one group member knows of the leave request -- safe to
      * shutdown the group locally
      */
 
     /* destroy group and free old descriptor */
-    ssg_group_destroy_internal(g_desc->g_data.g);
+    ssg_group_destroy_internal(g_desc->g_data.g, g_desc->mid_state->mid);
     ssg_group_descriptor_free(g_desc);
 
     sret = SSG_SUCCESS;
-
-fini:
-    if (group_target_addr != HG_ADDR_NULL)
-        margo_addr_free(ssg_inst->mid, group_target_addr);
 
     return sret;
 }
 
 int ssg_group_observe(
+    margo_instance_id mid,
     ssg_group_id_t group_id)
 {
+    ssg_mid_state_t *mid_state;
     ssg_group_descriptor_t *g_desc;
     ssg_observed_group_t *og = NULL;
     char *group_name = NULL;
@@ -649,33 +660,42 @@ int ssg_group_observe(
     const char **addr_strs = NULL;
     int sret = SSG_FAILURE;
 
-    if (!ssg_inst || group_id == SSG_GROUP_ID_INVALID) goto fini;
+    if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID) goto fini;
 
-    ABT_rwlock_rdlock(ssg_inst->lock);
+    ABT_rwlock_rdlock(ssg_rt->lock);
 
     /* find the group structure to observe */
-    HASH_FIND(hh, ssg_inst->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
+    HASH_FIND(hh, ssg_rt->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
     if (!g_desc)
     {
         fprintf(stderr, "Error: SSG unable to find expected group ID\n");
-        ABT_rwlock_unlock(ssg_inst->lock);
-        return SSG_FAILURE;
+        ABT_rwlock_unlock(ssg_rt->lock);
+        goto fini;
     }
 
     if (g_desc->owner_status == SSG_OWNER_IS_MEMBER)
     {
         fprintf(stderr, "Error: SSG unable to observe a group it is a member of\n");
-        ABT_rwlock_unlock(ssg_inst->lock);
+        ABT_rwlock_unlock(ssg_rt->lock);
         goto fini;
     }
     else if (g_desc->owner_status == SSG_OWNER_IS_OBSERVER)
     {
         fprintf(stderr, "Error: SSG unable to observe a group it is already observing\n");
-        ABT_rwlock_unlock(ssg_inst->lock);
+        ABT_rwlock_unlock(ssg_rt->lock);
         goto fini;
     }
 
-    ABT_rwlock_unlock(ssg_inst->lock);
+    /* remove the descriptor  */
+    HASH_DEL(ssg_rt->g_desc_table, g_desc);
+
+    ABT_rwlock_unlock(ssg_rt->lock);
+
+    mid_state = ssg_retrieve_mid_state(mid);
+    if(!mid_state) goto fini;
+    g_desc->mid_state = mid_state;
+
+    if(!mid_state) goto fini;
 
     /* send the observe request to a group member to initiate a bulk transfer
      * of the group's membership view
@@ -695,14 +715,16 @@ int ssg_group_observe(
     ABT_rwlock_create(&og->lock);
 
     /* create the view for the group */
-    sret = ssg_group_view_create(addr_strs, group_size, NULL, og->lock, &og->view);
+    sret = ssg_group_view_create(addr_strs, group_size, NULL, mid_state,
+        og->lock, &og->view);
     if (sret != SSG_SUCCESS) goto fini;
 
     /* add this group reference to our group table */
-    ABT_rwlock_wrlock(ssg_inst->lock);
+    ABT_rwlock_wrlock(ssg_rt->lock);
     g_desc->owner_status = SSG_OWNER_IS_OBSERVER;
     g_desc->g_data.og = og;
-    ABT_rwlock_unlock(ssg_inst->lock);
+    HASH_ADD(hh, ssg_rt->g_desc_table, g_id, sizeof(ssg_group_id_t), g_desc);
+    ABT_rwlock_unlock(ssg_rt->lock);
 
     sret = SSG_SUCCESS;
 
@@ -710,7 +732,7 @@ int ssg_group_observe(
     group_name = NULL;
     og = NULL;
 fini:
-    if (og) ssg_observed_group_destroy(og);
+    if (og) ssg_observed_group_destroy(og, g_desc->mid_state->mid);
     free(addr_strs);
     free(view_buf);
     free(group_name);
@@ -723,30 +745,30 @@ int ssg_group_unobserve(
 {
     ssg_group_descriptor_t *g_desc;
 
-    if (!ssg_inst || group_id == SSG_GROUP_ID_INVALID) return SSG_FAILURE;
+    if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID) return SSG_FAILURE;
 
-    ABT_rwlock_wrlock(ssg_inst->lock);
+    ABT_rwlock_wrlock(ssg_rt->lock);
 
     /* find the group structure to unobserve */
-    HASH_FIND(hh, ssg_inst->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
+    HASH_FIND(hh, ssg_rt->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
     if (!g_desc)
     {
         fprintf(stderr, "Error: SSG unable to find expected group ID\n");
-        ABT_rwlock_unlock(ssg_inst->lock);
+        ABT_rwlock_unlock(ssg_rt->lock);
         return SSG_FAILURE;
     }
 
     if (g_desc->owner_status != SSG_OWNER_IS_OBSERVER)
     {
         fprintf(stderr, "Error: SSG unable to unobserve group that was never observed\n");
-        ABT_rwlock_unlock(ssg_inst->lock);
+        ABT_rwlock_unlock(ssg_rt->lock);
         return SSG_FAILURE;
     }
-    HASH_DELETE(hh, ssg_inst->g_desc_table, g_desc);
+    HASH_DEL(ssg_rt->g_desc_table, g_desc);
 
-    ABT_rwlock_unlock(ssg_inst->lock);
+    ABT_rwlock_unlock(ssg_rt->lock);
 
-    ssg_observed_group_destroy(g_desc->g_data.og);
+    ssg_observed_group_destroy(g_desc->g_data.og, g_desc->mid_state->mid);
     ssg_group_descriptor_free(g_desc);
 
     return SSG_SUCCESS;
@@ -759,11 +781,17 @@ int ssg_group_unobserve(
 ssg_member_id_t ssg_get_self_id(
     margo_instance_id mid)
 {
-    /* XXX eventually mid needed to distinguish multiple ssg contexts */
+    ssg_mid_state_t *mid_state;
+    ssg_member_id_t self_id = SSG_MEMBER_ID_INVALID;
 
-    if (!ssg_inst) return SSG_MEMBER_ID_INVALID;
+    if (!ssg_rt) return SSG_MEMBER_ID_INVALID;
 
-    return ssg_inst->self_id;
+    ABT_rwlock_rdlock(ssg_rt->lock);
+    LL_SEARCH_SCALAR(ssg_rt->mid_list, mid_state, mid, mid);
+    if(mid_state) self_id = mid_state->self_id;
+    ABT_rwlock_unlock(ssg_rt->lock);
+
+    return self_id;
 }
 
 int ssg_get_group_size(
@@ -772,15 +800,15 @@ int ssg_get_group_size(
     ssg_group_descriptor_t *g_desc;
     int group_size = 0;
 
-    if (!ssg_inst || group_id == SSG_GROUP_ID_INVALID) return 0;
+    if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID) return 0;
 
-    ABT_rwlock_rdlock(ssg_inst->lock);
+    ABT_rwlock_rdlock(ssg_rt->lock);
 
     /* find the group descriptor */
-    HASH_FIND(hh, ssg_inst->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
+    HASH_FIND(hh, ssg_rt->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
     if (!g_desc)
     {
-        ABT_rwlock_unlock(ssg_inst->lock);
+        ABT_rwlock_unlock(ssg_rt->lock);
         fprintf(stderr, "Error: SSG unable to find expected group ID\n");
         return 0;
     }
@@ -803,7 +831,7 @@ int ssg_get_group_size(
             " is a member of or an observer of\n");
     }
 
-    ABT_rwlock_unlock(ssg_inst->lock);
+    ABT_rwlock_unlock(ssg_rt->lock);
 
     return group_size;
 }
@@ -816,25 +844,25 @@ hg_addr_t ssg_get_group_member_addr(
     ssg_member_state_t *member_state;
     hg_addr_t member_addr = HG_ADDR_NULL;
 
-    if (!ssg_inst || group_id == SSG_GROUP_ID_INVALID ||
+    if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID ||
             member_id == SSG_MEMBER_ID_INVALID)
         return HG_ADDR_NULL;
 
-    ABT_rwlock_rdlock(ssg_inst->lock);
+    ABT_rwlock_rdlock(ssg_rt->lock);
 
     /* find the group descriptor */
-    HASH_FIND(hh, ssg_inst->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
+    HASH_FIND(hh, ssg_rt->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
     if (!g_desc)
     {
-        ABT_rwlock_unlock(ssg_inst->lock);
+        ABT_rwlock_unlock(ssg_rt->lock);
         fprintf(stderr, "Error: SSG unable to find expected group ID\n");
         return HG_ADDR_NULL;
     }
 
     if (g_desc->owner_status == SSG_OWNER_IS_MEMBER)
     {
-        if (member_id == ssg_inst->self_id)
-            member_addr = ssg_inst->self_addr;
+        if (member_id == g_desc->mid_state->self_id)
+            member_addr = g_desc->mid_state->self_addr;
         else
         {
             ABT_rwlock_rdlock(g_desc->g_data.g->lock);
@@ -860,7 +888,7 @@ hg_addr_t ssg_get_group_member_addr(
             " that the caller is a member of or an observer of\n");
     }
 
-    ABT_rwlock_unlock(ssg_inst->lock);
+    ABT_rwlock_unlock(ssg_rt->lock);
 
     return member_addr;
 }
@@ -871,32 +899,31 @@ int ssg_get_group_self_rank(
     ssg_group_descriptor_t *g_desc;
     int rank;
 
-    if (!ssg_inst || group_id == SSG_GROUP_ID_INVALID) return 0;
+    if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID) return -1;
 
-    ABT_rwlock_rdlock(ssg_inst->lock);
+    ABT_rwlock_rdlock(ssg_rt->lock);
 
-    HASH_FIND(hh, ssg_inst->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
+    HASH_FIND(hh, ssg_rt->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
     if (!g_desc)
     {
-        ABT_rwlock_unlock(ssg_inst->lock);
+        ABT_rwlock_unlock(ssg_rt->lock);
         fprintf(stderr, "Error: SSG unable to find expected group ID\n");
         return -1;
     }
 
     if (g_desc->owner_status != SSG_OWNER_IS_MEMBER)
     {
-        ABT_rwlock_unlock(ssg_inst->lock);
+        ABT_rwlock_unlock(ssg_rt->lock);
         fprintf(stderr, "Error: SSG unable to obtain self rank for non-group members\n");
         return -1;
     }
 
-
     ABT_rwlock_rdlock(g_desc->g_data.g->lock);
     rank = ssg_get_group_member_rank_internal(&g_desc->g_data.g->view,
-        ssg_inst->self_id);
+        g_desc->mid_state->self_id);
     ABT_rwlock_unlock(g_desc->g_data.g->lock);
 
-    ABT_rwlock_unlock(ssg_inst->lock);
+    ABT_rwlock_unlock(ssg_rt->lock);
 
     return rank;
 }
@@ -908,14 +935,14 @@ int ssg_get_group_member_rank(
     ssg_group_descriptor_t *g_desc;
     int rank;
 
-    if (!ssg_inst || group_id == SSG_GROUP_ID_INVALID) return 0;
+    if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID) return -1;
 
-    ABT_rwlock_rdlock(ssg_inst->lock);
+    ABT_rwlock_rdlock(ssg_rt->lock);
 
-    HASH_FIND(hh, ssg_inst->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
+    HASH_FIND(hh, ssg_rt->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
     if (!g_desc)
     {
-        ABT_rwlock_unlock(ssg_inst->lock);
+        ABT_rwlock_unlock(ssg_rt->lock);
         fprintf(stderr, "Error: SSG unable to find expected group ID\n");
         return -1;
     }
@@ -934,13 +961,13 @@ int ssg_get_group_member_rank(
     }
     else
     {
-        ABT_rwlock_unlock(ssg_inst->lock);
+        ABT_rwlock_unlock(ssg_rt->lock);
         fprintf(stderr, "Error: SSG unable to obtain rank for group caller is"
             "not a member or an observer of\n");
         return -1;
     }
 
-    ABT_rwlock_unlock(ssg_inst->lock);
+    ABT_rwlock_unlock(ssg_rt->lock);
 
     return rank;
 }
@@ -952,15 +979,15 @@ ssg_member_id_t ssg_get_group_member_id_from_rank(
     ssg_group_descriptor_t *g_desc;
     ssg_member_id_t member_id;
 
-    if (!ssg_inst || group_id == SSG_GROUP_ID_INVALID || rank < 0)
+    if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID || rank < 0)
         return SSG_MEMBER_ID_INVALID;
 
-    ABT_rwlock_rdlock(ssg_inst->lock);
+    ABT_rwlock_rdlock(ssg_rt->lock);
 
-    HASH_FIND(hh, ssg_inst->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
+    HASH_FIND(hh, ssg_rt->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
     if (!g_desc)
     {
-        ABT_rwlock_unlock(ssg_inst->lock);
+        ABT_rwlock_unlock(ssg_rt->lock);
         fprintf(stderr, "Error: SSG unable to find expected group ID\n");
         return SSG_MEMBER_ID_INVALID;
     }
@@ -971,7 +998,7 @@ ssg_member_id_t ssg_get_group_member_id_from_rank(
         if (rank >= (int)g_desc->g_data.g->view.size)
         {
             ABT_rwlock_unlock(g_desc->g_data.g->lock);
-            ABT_rwlock_unlock(ssg_inst->lock);
+            ABT_rwlock_unlock(ssg_rt->lock);
             return SSG_MEMBER_ID_INVALID;
         }
 
@@ -985,7 +1012,7 @@ ssg_member_id_t ssg_get_group_member_id_from_rank(
         if (rank >= (int)g_desc->g_data.og->view.size)
         {
             ABT_rwlock_unlock(g_desc->g_data.og->lock);
-            ABT_rwlock_unlock(ssg_inst->lock);
+            ABT_rwlock_unlock(ssg_rt->lock);
             return SSG_MEMBER_ID_INVALID;
         }
 
@@ -995,13 +1022,13 @@ ssg_member_id_t ssg_get_group_member_id_from_rank(
     }
     else
     {
-        ABT_rwlock_unlock(ssg_inst->lock);
+        ABT_rwlock_unlock(ssg_rt->lock);
         fprintf(stderr, "Error: SSG unable to obtain member ID for group caller is"
             "not a member or an observer of\n");
         return SSG_MEMBER_ID_INVALID;
     }
 
-    ABT_rwlock_unlock(ssg_inst->lock);
+    ABT_rwlock_unlock(ssg_rt->lock);
 
     return member_id;
 }
@@ -1015,16 +1042,16 @@ int ssg_get_group_member_ids_from_range(
     ssg_group_descriptor_t *g_desc;
     ssg_member_id_t *member_start;
 
-    if (!ssg_inst || group_id == SSG_GROUP_ID_INVALID || rank_start < 0 ||
+    if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID || rank_start < 0 ||
             rank_end < 0 || rank_end <= rank_start)
         return 0;
 
-    ABT_rwlock_rdlock(ssg_inst->lock);
+    ABT_rwlock_rdlock(ssg_rt->lock);
 
-    HASH_FIND(hh, ssg_inst->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
+    HASH_FIND(hh, ssg_rt->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
     if (!g_desc)
     {
-        ABT_rwlock_unlock(ssg_inst->lock);
+        ABT_rwlock_unlock(ssg_rt->lock);
         fprintf(stderr, "Error: SSG unable to find expected group ID\n");
         return 0;
     }
@@ -1035,7 +1062,7 @@ int ssg_get_group_member_ids_from_range(
         if (rank_end >= (int)g_desc->g_data.g->view.size)
         {
             ABT_rwlock_unlock(g_desc->g_data.g->lock);
-            ABT_rwlock_unlock(ssg_inst->lock);
+            ABT_rwlock_unlock(ssg_rt->lock);
             return 0;
         }
 
@@ -1050,7 +1077,7 @@ int ssg_get_group_member_ids_from_range(
         if (rank_end >= (int)g_desc->g_data.og->view.size)
         {
             ABT_rwlock_unlock(g_desc->g_data.og->lock);
-            ABT_rwlock_unlock(ssg_inst->lock);
+            ABT_rwlock_unlock(ssg_rt->lock);
             return 0;
         }
 
@@ -1061,12 +1088,12 @@ int ssg_get_group_member_ids_from_range(
     }
     else
     {
-        ABT_rwlock_unlock(ssg_inst->lock);
+        ABT_rwlock_unlock(ssg_rt->lock);
         fprintf(stderr, "Error: SSG unable to obtain member ID for group caller is"
             "not a member or an observer of\n");
         return 0;
     }
-    ABT_rwlock_unlock(ssg_inst->lock);
+    ABT_rwlock_unlock(ssg_rt->lock);
 
     return (rank_end-rank_start);
 }
@@ -1077,22 +1104,22 @@ char *ssg_group_id_get_addr_str(
     ssg_group_descriptor_t *g_desc;
     char *addr_str;
 
-    if (!ssg_inst || group_id == SSG_GROUP_ID_INVALID) return 0;
+    if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID) return 0;
 
-    ABT_rwlock_rdlock(ssg_inst->lock);
+    ABT_rwlock_rdlock(ssg_rt->lock);
 
     /* find the group descriptor */
-    HASH_FIND(hh, ssg_inst->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
+    HASH_FIND(hh, ssg_rt->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
     if (!g_desc)
     {
-        ABT_rwlock_unlock(ssg_inst->lock);
+        ABT_rwlock_unlock(ssg_rt->lock);
         fprintf(stderr, "Error: SSG unable to find expected group ID\n");
         return NULL;
     }
 
     addr_str = strdup(g_desc->addr_str);
 
-    ABT_rwlock_unlock(ssg_inst->lock);
+    ABT_rwlock_unlock(ssg_rt->lock);
 
     return addr_str;
 }
@@ -1109,15 +1136,15 @@ void ssg_group_id_serialize(
     *buf_p = NULL;
     *buf_size_p = 0;
 
-    if (!ssg_inst || group_id == SSG_GROUP_ID_INVALID) return;
+    if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID) return;
 
-    ABT_rwlock_rdlock(ssg_inst->lock);
+    ABT_rwlock_rdlock(ssg_rt->lock);
 
     /* find the group descriptor */
-    HASH_FIND(hh, ssg_inst->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
+    HASH_FIND(hh, ssg_rt->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
     if (!g_desc)
     {
-        ABT_rwlock_unlock(ssg_inst->lock);
+        ABT_rwlock_unlock(ssg_rt->lock);
         fprintf(stderr, "Error: SSG unable to find expected group ID\n");
         return;
     }
@@ -1128,7 +1155,10 @@ void ssg_group_id_serialize(
 
     gid_buf = malloc(alloc_size);
     if (!gid_buf)
+    {
+        ABT_rwlock_unlock(ssg_rt->lock);
         return;
+    }
 
     /* serialize */
     p = gid_buf;
@@ -1139,7 +1169,7 @@ void ssg_group_id_serialize(
     strcpy(p, g_desc->addr_str);
     /* the rest of the descriptor is stateful and not appropriate for serializing... */
 
-    ABT_rwlock_unlock(ssg_inst->lock);
+    ABT_rwlock_unlock(ssg_rt->lock);
 
     *buf_p = gid_buf;
     *buf_size_p = alloc_size;
@@ -1160,7 +1190,7 @@ void ssg_group_id_deserialize(
 
     *group_id_p = SSG_GROUP_ID_INVALID;
 
-    if (!ssg_inst || !buf || buf_size == 0) return;
+    if (!ssg_rt || !buf || buf_size == 0) return;
 
     /* check to ensure the buffer contains enough data to make a group ID */
     min_buf_size = (sizeof(g_desc->magic_nr) + sizeof(g_desc->g_id) + 1);
@@ -1182,15 +1212,16 @@ void ssg_group_id_deserialize(
     buf += sizeof(ssg_group_id_t);
     addr_str = buf;
 
-    g_desc = ssg_group_descriptor_create(g_id, addr_str, SSG_OWNER_IS_UNASSOCIATED);
+    g_desc = ssg_group_descriptor_create(g_id, addr_str,
+        SSG_OWNER_IS_UNASSOCIATED, NULL);
     if (!g_desc)
         return;
 
     /* add this group descriptor to our global table */
     /* NOTE: g_id is not associated with any group -- caller must join or observe first */
-    ABT_rwlock_wrlock(ssg_inst->lock);
-    HASH_ADD(hh, ssg_inst->g_desc_table, g_id, sizeof(ssg_group_id_t), g_desc);
-    ABT_rwlock_unlock(ssg_inst->lock);
+    ABT_rwlock_wrlock(ssg_rt->lock);
+    HASH_ADD(hh, ssg_rt->g_desc_table, g_id, sizeof(ssg_group_id_t), g_desc);
+    ABT_rwlock_unlock(ssg_rt->lock);
 
     *group_id_p = g_id;
 
@@ -1311,15 +1342,15 @@ void ssg_group_dump(
     char group_role[32];
     char group_self_id[32];
 
-    if (!ssg_inst || group_id == SSG_GROUP_ID_INVALID) return;
+    if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID) return;
 
-    ABT_rwlock_rdlock(ssg_inst->lock);
+    ABT_rwlock_rdlock(ssg_rt->lock);
 
     /* find the group descriptor */
-    HASH_FIND(hh, ssg_inst->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
+    HASH_FIND(hh, ssg_rt->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
     if (!g_desc)
     {
-        ABT_rwlock_unlock(ssg_inst->lock);
+        ABT_rwlock_unlock(ssg_rt->lock);
         fprintf(stderr, "Error: SSG unable to find expected group ID\n");
         return;
     }
@@ -1332,8 +1363,7 @@ void ssg_group_dump(
         group_size = g_desc->g_data.g->view.size;
         group_name = g_desc->g_data.g->name;
         strcpy(group_role, "member");
-        sprintf(group_self_id, "%lu", ssg_inst->self_id);
-        ABT_rwlock_unlock(g_desc->g_data.g->lock);
+        sprintf(group_self_id, "%lu", g_desc->mid_state->self_id);
     }
     else if (g_desc->owner_status == SSG_OWNER_IS_OBSERVER)
     {
@@ -1343,7 +1373,6 @@ void ssg_group_dump(
         group_size = g_desc->g_data.og->view.size;
         group_name = g_desc->g_data.og->name;
         strcpy(group_role, "observer");
-        ABT_rwlock_unlock(g_desc->g_data.og->lock);
     }
     else
     {
@@ -1367,12 +1396,12 @@ void ssg_group_dump(
             printf("\tself_id: %s\n", group_self_id);
         printf("\tsize: %d\n", group_size);
         printf("\tview:\n");
-        ABT_rwlock_rdlock(group_lock);
         for (i = 0; i < group_view->size; i++)
         {
             member_id = *(ssg_member_id_t *)utarray_eltptr(group_view->rank_array, i);
-            if(member_id == ssg_inst->self_id)
-                member_addr_str = ssg_inst->self_addr_str;
+            if((strcmp(group_role, "member") == 0) && 
+                (member_id == g_desc->mid_state->self_id))
+                member_addr_str = g_desc->mid_state->self_addr_str;
             else
             {
                 HASH_FIND(hh, group_view->member_map, &member_id,
@@ -1385,7 +1414,7 @@ void ssg_group_dump(
         ABT_rwlock_unlock(group_lock);
     }
 
-    ABT_rwlock_unlock(ssg_inst->lock);
+    ABT_rwlock_unlock(ssg_rt->lock);
 
     return;
 }
@@ -1394,25 +1423,86 @@ void ssg_group_dump(
  *** SSG internal helper routines ***
  ************************************/
 
-static ssg_group_id_t ssg_group_create_internal(
-    const char * group_name, const char * const group_addr_strs[],
-    int group_size, ssg_membership_update_cb update_cb, void *update_cb_dat)
+ssg_mid_state_t *ssg_retrieve_mid_state(
+    margo_instance_id mid)
 {
-    ssg_group_id_t g_id;
+    ssg_mid_state_t *mid_state;
+    hg_size_t self_addr_str_size;
+    hg_return_t hret;
+
+    ABT_rwlock_wrlock(ssg_rt->lock);
+    LL_SEARCH_SCALAR(ssg_rt->mid_list, mid_state, mid, mid);
+    if(!mid_state)
+    {
+        mid_state = malloc(sizeof(*mid_state));
+        if(!mid_state)
+        {
+            ABT_rwlock_unlock(ssg_rt->lock);
+            return NULL;
+        }
+        mid_state->mid = mid;
+
+        /* get my self address string and ID (which are constant per-mid) */
+        hret = margo_addr_self(mid, &mid_state->self_addr);
+        if (hret != HG_SUCCESS)
+        {
+            ABT_rwlock_unlock(ssg_rt->lock);
+            free(mid_state);
+            return NULL;
+        }
+
+        hret = margo_addr_to_string(mid, NULL, &self_addr_str_size, mid_state->self_addr);
+        if (hret != HG_SUCCESS)
+        {
+            ABT_rwlock_unlock(ssg_rt->lock);
+            margo_addr_free(mid, mid_state->self_addr);
+            free(mid_state);
+            return NULL;
+        }
+
+        mid_state->self_addr_str = malloc(self_addr_str_size);
+        if (mid_state->self_addr_str == NULL)
+        {
+            ABT_rwlock_unlock(ssg_rt->lock);
+            margo_addr_free(mid, mid_state->self_addr);
+            free(mid_state);
+            return NULL;
+        }
+
+        hret = margo_addr_to_string(mid, mid_state->self_addr_str, &self_addr_str_size,
+            mid_state->self_addr);
+        if (hret != HG_SUCCESS)
+        {
+            ABT_rwlock_unlock(ssg_rt->lock);
+            free(mid_state->self_addr_str);
+            margo_addr_free(mid, mid_state->self_addr);
+            free(mid_state);
+            return NULL;
+        }
+
+        mid_state->self_id = ssg_gen_member_id(mid_state->self_addr_str);
+
+        /* register RPCs */
+        ssg_register_rpcs(mid_state);
+
+        /* add to mid list */
+        LL_APPEND(ssg_rt->mid_list, mid_state);
+    }
+    ABT_rwlock_unlock(ssg_rt->lock);
+
+    return mid_state;
+}
+
+static ssg_group_id_t ssg_group_create_internal(
+    ssg_mid_state_t *mid_state, const char * group_name,
+    const char * const group_addr_strs[], int group_size,
+    ssg_membership_update_cb update_cb, void *update_cb_dat)
+{
     ssg_group_descriptor_t *g_desc = NULL, *g_desc_check;
+    ssg_group_id_t g_id;
     ssg_group_t *g;
     int success = 0;
     int sret;
-
-    if (!ssg_inst) goto fini;
-
-    g_id = ssg_hash64_str(group_name);
-
-    /* make sure we aren't re-creating an existing group */
-    ABT_rwlock_rdlock(ssg_inst->lock);
-    HASH_FIND(hh, ssg_inst->g_desc_table, &g_id, sizeof(ssg_group_id_t), g_desc_check);
-    ABT_rwlock_unlock(ssg_inst->lock);
-    if (g_desc_check) goto fini;
 
     /* allocate an SSG group data structure and initialize some of it */
     g = malloc(sizeof(*g));
@@ -1420,15 +1510,9 @@ static ssg_group_id_t ssg_group_create_internal(
     memset(g, 0, sizeof(*g));
     g->name = strdup(group_name);
     if (!g->name) goto fini;
-    g->ssg_inst = ssg_inst;
     g->update_cb = update_cb;
     g->update_cb_dat = update_cb_dat;
     ABT_rwlock_create(&g->lock);
-
-    /* initialize the group view */
-    sret = ssg_group_view_create(group_addr_strs, group_size, ssg_inst->self_addr_str,
-        g->lock, &g->view);
-    if (sret != SSG_SUCCESS) goto fini;
 
 #ifdef DEBUG
     /* set debug output pointer */
@@ -1437,7 +1521,7 @@ static ssg_group_id_t ssg_group_create_internal(
     {
         char dbg_log_path[PATH_MAX];
         snprintf(dbg_log_path, PATH_MAX, "%s/ssg-%s-%lu.log",
-            dbg_log_dir, g->name, g->ssg_inst->self_id);
+            dbg_log_dir, g->name, mid_state->self_id);
         g->dbg_log = fopen(dbg_log_path, "a");
         if (!g->dbg_log) goto fini;
     }
@@ -1447,23 +1531,48 @@ static ssg_group_id_t ssg_group_create_internal(
     }
 #endif
 
-    /* generate unique descriptor for this group  */
-    g_desc = ssg_group_descriptor_create(g_id, ssg_inst->self_addr_str,
-        SSG_OWNER_IS_MEMBER);
+    /* generate unique descriptor for this group */
+    g_id = ssg_hash64_str(group_name);
+    g_desc = ssg_group_descriptor_create(g_id, mid_state->self_addr_str,
+        SSG_OWNER_IS_MEMBER, mid_state);
     if (g_desc == NULL) goto fini;
     g_desc->g_data.g = g;
 
-    /* initialize swim failure detector if everything succeeds */
-    sret = swim_init(g, ssg_inst->mid, 1);
-    if (sret != SSG_SUCCESS) goto fini;
+    /* first make sure we aren't re-creating an existing group, then go ahead and
+     * stash this group descriptor -- we will use the group lock while we finish
+     * group creation
+     */
+    ABT_rwlock_wrlock(ssg_rt->lock);
+    HASH_FIND(hh, ssg_rt->g_desc_table, &g_id, sizeof(ssg_group_id_t), g_desc_check);
+    if(g_desc_check)
+    {
+        ABT_rwlock_unlock(ssg_rt->lock);
+        goto fini;
+    }
+    HASH_ADD(hh, ssg_rt->g_desc_table, g_id, sizeof(ssg_group_id_t), g_desc);
+    ABT_rwlock_unlock(ssg_rt->lock);
 
-    /* add this group reference to the group table */
-    ABT_rwlock_wrlock(ssg_inst->lock);
-    HASH_ADD(hh, ssg_inst->g_desc_table, g_id, sizeof(ssg_group_id_t), g_desc);
-    ABT_rwlock_unlock(ssg_inst->lock);
+    /* initialize the group view */
+    sret = ssg_group_view_create(group_addr_strs, group_size, mid_state->self_addr_str,
+        mid_state, g->lock, &g->view);
+    if (sret != SSG_SUCCESS)
+    {
+        HASH_DEL(ssg_rt->g_desc_table, g_desc);
+        goto fini;
+    }
+
+#if 0
+    /* initialize swim failure detector if everything succeeds */
+    sret = swim_init(g, mid, 1);
+    if (sret != SSG_SUCCESS)
+    {
+        HASH_DEL(ssg_rt->g_desc_table, g_desc);
+        goto fini;
+    }
+#endif
 
     SSG_DEBUG(g, "group create successful (size=%d, self=%s)\n",
-        group_size, ssg_inst->self_addr_str);
+        group_size, mid_state->self_addr_str);
     success = 1;
 
 fini:
@@ -1477,7 +1586,7 @@ fini:
 #ifdef DEBUG
             if (g->dbg_log && getenv("SSG_DEBUG_LOGDIR")) fclose(g->dbg_log);
 #endif
-            ssg_group_view_destroy(&g->view);
+            ssg_group_view_destroy(&g->view, mid_state->mid);
             ABT_rwlock_free(&g->lock);
             free(g->name);
             free(g);
@@ -1489,8 +1598,8 @@ fini:
 
 static int ssg_group_view_create(
     const char * const group_addr_strs[], int group_size,
-    const char * self_addr_str, ABT_rwlock view_lock,
-    ssg_group_view_t * view)
+    const char * self_addr_str, ssg_mid_state_t * mid_state,
+    ABT_rwlock view_lock, ssg_group_view_t * view)
 {
     int i, j, r;
     ABT_thread *lookup_ults = NULL;
@@ -1547,18 +1656,19 @@ static int ssg_group_view_create(
             {
                 /* don't look up our own address, we already know it */
                 self_found = 1;
-                utarray_push_back(view->rank_array, &ssg_inst->self_id);
+                utarray_push_back(view->rank_array, &mid_state->self_id);
                 view->size++;
                 continue;
             }
         }
 
         /* XXX limit outstanding lookups to some max */
+        lookup_ult_args[j].mid = mid_state->mid;
         lookup_ult_args[j].addr_str = group_addr_strs[j];
         lookup_ult_args[j].view = view;
         lookup_ult_args[j].lock = view_lock;
         ABT_pool pool;
-        margo_get_handler_pool(ssg_inst->mid, &pool);
+        margo_get_handler_pool(mid_state->mid, &pool);
         aret = ABT_thread_create(pool, &ssg_group_lookup_ult,
             &lookup_ult_args[j], ABT_THREAD_ATTR_NULL,
             &lookup_ults[j]);
@@ -1608,7 +1718,7 @@ fini:
                 ABT_thread_free(&lookup_ults[i]);
             }
         }
-        ssg_group_view_destroy(view);
+        ssg_group_view_destroy(view, mid_state->mid);
     }
     free(lookup_ults);
     free(lookup_ult_args);
@@ -1625,7 +1735,7 @@ static void ssg_group_lookup_ult(
     ssg_member_state_t *ms;
     hg_return_t hret;
 
-    hret = margo_addr_lookup(ssg_inst->mid, l->addr_str, &member_addr);
+    hret = margo_addr_lookup(l->mid, l->addr_str, &member_addr);
     if (hret != HG_SUCCESS)
     {
         l->out = SSG_FAILURE;
@@ -1668,7 +1778,8 @@ static ssg_member_state_t * ssg_group_view_add_member(
 }
 
 static ssg_group_descriptor_t * ssg_group_descriptor_create(
-    ssg_group_id_t g_id, const char * leader_addr_str, int owner_status)
+    ssg_group_id_t g_id, const char * leader_addr_str, int owner_status,
+    ssg_mid_state_t *mid_state)
 {
     ssg_group_descriptor_t *descriptor;
 
@@ -1686,23 +1797,36 @@ static ssg_group_descriptor_t * ssg_group_descriptor_create(
         return NULL;
     }
     descriptor->owner_status = owner_status;
+    descriptor->mid_state = mid_state;
     return descriptor;
 }
 
 static void ssg_group_destroy_internal(
-    ssg_group_t * g)
+    ssg_group_t * g, margo_instance_id mid)
 {
+    ssg_member_state_t *state, *tmp;
+
+#if 0
     /* free up SWIM state */
     swim_finalize(g);
+#endif
 
     /* destroy group state */
     ABT_rwlock_wrlock(g->lock);
-    ssg_group_view_destroy(&g->view);
+    ssg_group_view_destroy(&g->view, mid);
+
+    HASH_ITER(hh, g->dead_members, state, tmp)
+    {
+        HASH_DEL(g->dead_members, state);
+        free(state->addr_str);
+        /* address freed earlier */
+        free(state);
+    }
 
 #ifdef DEBUG
-    fflush(g->dbg_log);
-
     char *dbg_log_dir = getenv("SSG_DEBUG_LOGDIR");
+
+    fflush(g->dbg_log);
     if (dbg_log_dir)
         fclose(g->dbg_log);
 #endif
@@ -1716,10 +1840,10 @@ static void ssg_group_destroy_internal(
 }
 
 static void ssg_observed_group_destroy(
-    ssg_observed_group_t * og)
+    ssg_observed_group_t * og, margo_instance_id mid)
 {
     ABT_rwlock_wrlock(og->lock);
-    ssg_group_view_destroy(&og->view);
+    ssg_group_view_destroy(&og->view, mid);
     ABT_rwlock_unlock(og->lock);
 
     ABT_rwlock_free(&og->lock);
@@ -1729,7 +1853,7 @@ static void ssg_observed_group_destroy(
 }
 
 static void ssg_group_view_destroy(
-    ssg_group_view_t * view)
+    ssg_group_view_t * view, margo_instance_id mid)
 {
     ssg_member_state_t *state, *tmp;
 
@@ -1738,10 +1862,9 @@ static void ssg_group_view_destroy(
     {
         HASH_DEL(view->member_map, state);
         free(state->addr_str);
-        margo_addr_free(ssg_inst->mid, state->addr);
+        margo_addr_free(mid, state->addr);
         free(state);
     }
-    view->member_map = NULL;
     utarray_free(view->rank_array);
 
     return;
@@ -1820,6 +1943,7 @@ static int ssg_get_group_member_rank_internal(
 }
 
 #ifdef SSG_HAVE_PMIX
+// XXX BROKEN
 void ssg_pmix_proc_failure_notify_fn(
     size_t evhdlr_registration_id, pmix_status_t status, const pmix_proc_t *source,
     pmix_info_t info[], size_t ninfo, pmix_info_t results[], size_t nresults,
@@ -1885,6 +2009,7 @@ void ssg_pmix_proc_failure_reg_cb(
  *** SWIM group management routines ***
  **************************************/
 
+#if 0
 void ssg_apply_member_updates(
     ssg_group_t  * g,
     ssg_member_update_t * updates,
@@ -1954,7 +2079,7 @@ void ssg_apply_member_updates(
                 SSG_DEBUG(g, "Warning: SSG unable to lookup joining group member %s addr\n",
                     updates[i].u.member_addr_str);
                 ABT_rwlock_wrlock(g->lock);
-                HASH_DELETE(hh, g->view.member_map, update_ms);
+                HASH_DEL(g->view.member_map, update_ms);
                 g->view.size--;
                 free(update_ms->addr_str);
                 free(update_ms);
@@ -1969,7 +2094,7 @@ void ssg_apply_member_updates(
                 SSG_DEBUG(g, "Warning: SWIM unable to apply SSG update for joining"\
                     "group member %s\n", updates[i].u.member_addr_str);
                 ABT_rwlock_wrlock(g->lock);
-                HASH_DELETE(hh, g->view.member_map, update_ms);
+                HASH_DEL(g->view.member_map, update_ms);
                 g->view.size--;
                 free(update_ms->addr_str);
                 free(update_ms);
@@ -1996,7 +2121,7 @@ void ssg_apply_member_updates(
             }
 
             /* remove from view and add to dead list */
-            HASH_DELETE(hh, g->view.member_map, update_ms);
+            HASH_DEL(g->view.member_map, update_ms);
             update_rank = ssg_get_group_member_rank_internal(&g->view, update_ms->id);
             utarray_erase(g->view.rank_array, (unsigned int)update_rank, 1);
             g->view.size--;
@@ -2033,7 +2158,7 @@ void ssg_apply_member_updates(
                 {
                     if (g_desc->g_data.g == g)
                     {
-                        HASH_DELETE(hh, ssg_inst->g_desc_table, g_desc);
+                        HASH_DEL(ssg_inst->g_desc_table, g_desc);
                         break;
                     }
                 }
@@ -2053,7 +2178,7 @@ void ssg_apply_member_updates(
                 }
 
                 /* remove from view and add to dead list */
-                HASH_DELETE(hh, g->view.member_map, update_ms);
+                HASH_DEL(g->view.member_map, update_ms);
                 update_rank = ssg_get_group_member_rank_internal(&g->view, update_ms->id);
                 utarray_erase(g->view.rank_array, (unsigned int)update_rank, 1);
                 g->view.size--;
@@ -2086,3 +2211,4 @@ void ssg_apply_member_updates(
 
     return;
 }
+#endif

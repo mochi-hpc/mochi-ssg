@@ -168,17 +168,17 @@ int main(int argc, char *argv[])
     DIE_IF(mid == MARGO_INSTANCE_NULL, "margo_init");
 
     /* initialize SSG */
-    sret = ssg_init(mid);
+    sret = ssg_init();
     DIE_IF(sret != SSG_SUCCESS, "ssg_init");
 
     /* XXX do we want to use callback for testing anything about group??? */
 #ifdef SSG_HAVE_MPI
     if(strcmp(opts.group_mode, "mpi") == 0)
-        g_id = ssg_group_create_mpi(opts.group_name, MPI_COMM_WORLD, NULL, NULL);
+        g_id = ssg_group_create_mpi(mid, opts.group_name, MPI_COMM_WORLD, NULL, NULL);
 #endif
 #ifdef SSG_HAVE_PMIX
     if(strcmp(opts.group_mode, "pmix") == 0)
-        g_id = ssg_group_create_pmix(opts.group_name, proc, NULL, NULL);
+        g_id = ssg_group_create_pmix(mid, opts.group_name, proc, NULL, NULL);
 #endif
     DIE_IF(g_id == SSG_GROUP_ID_INVALID, "ssg_group_create");
 
