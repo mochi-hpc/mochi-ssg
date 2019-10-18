@@ -9,9 +9,16 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
+#ifdef SSG_HAVE_MPI
+#include <mpi.h>
+#endif
 
 #include <margo.h>
 #include <ssg.h>
+#ifdef SSG_HAVE_MPI
+#include <ssg-mpi.h>
+#endif
 
 #define DIE_IF(cond_expr, err_fmt, ...) \
     do { \
@@ -123,24 +130,29 @@ int main(int argc, char *argv[])
     /* parse cmdline arguments */
     parse_args(argc, argv, &opts);
 
+#ifdef SSG_HAVE_MPI
+    MPI_Init(&argc, &argv);
+#endif
+
     /* init margo */
     /* use the main xstream to drive progress & run handlers */
     mid = margo_init(opts.addr_str, MARGO_SERVER_MODE, 0, -1);
     DIE_IF(mid == MARGO_INSTANCE_NULL, "margo_init");
 
     /* initialize SSG */
-    sret = ssg_init(mid);
+    sret = ssg_init();
     DIE_IF(sret != SSG_SUCCESS, "ssg_init");
 
     /* load GID from file */
-    ssg_group_id_load(opts.gid_file, &g_id);
+    sret = ssg_group_id_load(opts.gid_file, &g_id);
+    DIE_IF(sret != SSG_SUCCESS, "ssg_group_id_load");
 
     /* sleep until time to join */
     if (opts.join_time > 0)
         margo_thread_sleep(mid, opts.join_time * 1000.0);
 
     /* XXX do we want to use callback for testing anything about group??? */
-    sret = ssg_group_join(g_id, NULL, NULL);
+    sret = ssg_group_join(mid, g_id, NULL, NULL);
     DIE_IF(sret != SSG_SUCCESS, "ssg_group_join");
 
     /* sleep for given duration to allow group time to run */
@@ -166,6 +178,10 @@ int main(int argc, char *argv[])
 
     ssg_finalize();
     margo_finalize(mid);
+
+#ifdef SSG_HAVE_MPI
+    MPI_Finalize();
+#endif
 
     return 0;
 }

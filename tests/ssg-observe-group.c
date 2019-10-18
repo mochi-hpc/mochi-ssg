@@ -15,7 +15,6 @@
 #endif
 
 #include <margo.h>
-#include <mercury.h>
 #include <ssg.h>
 #ifdef SSG_HAVE_MPI
 #include <ssg-mpi.h>
@@ -37,7 +36,7 @@ static void usage()
 {
     fprintf(stderr,
         "Usage: "
-        "ssg-test-observe [-s <time>] <addr> <GID>\n"
+        "ssg-observe-group [-s <time>] <addr> <GID>\n"
         "Observe group given by GID using Mercury address ADDR.\n"
         "\t-s <time> - time to sleep between SSG group operations\n");
 }
@@ -45,11 +44,6 @@ static void usage()
 static void parse_args(int argc, char *argv[], int *sleep_time, const char **addr_str, const char **gid_file)
 {
     int ndx = 1;
-
-#ifndef SSG_HAVE_MPI
-    fprintf(stderr, "Error: ssg-test-observe currently requries MPI support\n");
-    exit(1);
-#endif
 
     if (argc < 3)
     {
@@ -75,12 +69,6 @@ static void parse_args(int argc, char *argv[], int *sleep_time, const char **add
 
     return;   
 }
-
-struct group_id_forward_context
-{
-    margo_instance_id mid;
-    ssg_group_id_t *g_id_p;
-};
 
 int main(int argc, char *argv[])
 {
