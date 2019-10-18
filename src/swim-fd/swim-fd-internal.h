@@ -43,19 +43,17 @@ typedef struct swim_member_update
 /* internal swim context implementation */
 struct swim_context
 {
-    margo_instance_id mid;
     /* SWIM protocol parameters */
     double prot_period_len;
     int prot_susp_timeout;
     int prot_subgroup_sz;
     /* SWIM protocol internal state */
+    ssg_group_id_t g_id;
     swim_member_inc_nr_t self_inc_nr;
     ssg_member_id_t dping_target_id;
     swim_member_inc_nr_t dping_target_inc_nr;
-    hg_addr_t dping_target_addr;
     double dping_timeout;
     ssg_member_id_t iping_target_ids[SWIM_MAX_SUBGROUP_SIZE];
-    hg_addr_t iping_target_addrs[SWIM_MAX_SUBGROUP_SIZE];
     int iping_target_ndx;
     int ping_target_acked;
     int shutdown_flag;
@@ -75,8 +73,6 @@ struct swim_context
 };
 
 /* SWIM ping function prototypes */
-void swim_register_ping_rpcs(
-    ssg_group_t * group);
 void swim_dping_req_send_ult(
     void * t_arg);
 void swim_iping_req_send_ult(

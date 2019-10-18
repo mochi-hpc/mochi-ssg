@@ -36,21 +36,38 @@ typedef struct swim_member_state
 } swim_member_state_t;
 
 /* forward declarations to work around weird SSG/SWIM circular dependency */
+struct ssg_mid_state;
 struct ssg_group;
 struct ssg_member_state;
 struct ssg_member_update;
 
 /**
+ * Register SWIM RPCs with a given margo instance
+ * 
+ * @param[in] mid_state   mid state structure to register RPCs with
+ */
+void swim_register_ping_rpcs(
+    struct ssg_mid_state *mid_state);
+
+/**
+ * De-register SWIM RPCs with a given margo instance
+ * 
+ * @param[in] mid_state   mid state structure to de-register RPCs with
+ */
+void swim_deregister_ping_rpcs(
+    struct ssg_mid_state *mid_state);
+
+/**
  * Initialize SWIM protocol for the given SSG group and Margo instance.
  *
  * @param[in] group             pointer to SSG group associated with this SWIM context
- * @param[in] mid               Margo instance ID
+ * @param[in] g_id              SSG group identifier for group
  * @param[in] active            boolean value indicating whether member should actively ping
  * @returns SSG_SUCCESS on success, SSG_FAILURE otherwise
  */
 int swim_init(
     struct ssg_group * group,
-    margo_instance_id mid,
+    ssg_member_id_t g_id,
     int active);
 
 /**
@@ -62,7 +79,8 @@ void swim_finalize(
     struct ssg_group * group);
 
 /**
- *
+ * Applies SSG member updates to SWIM internal state.
+ * 
  * @returns SSG_SUCCESS on success, SSG_FAILURE otherwise
  */
 int swim_apply_ssg_member_update(

@@ -17,7 +17,7 @@
 #include <margo.h>
 
 #include "ssg.h"
-//#include "swim-fd/swim-fd.h"
+#include "swim-fd/swim-fd.h"
 #include "uthash.h"
 #include "utlist.h"
 #include "utarray.h"
@@ -33,7 +33,7 @@ extern "C" {
 #define SSG_DEBUG(__g, __fmt, ...) do { \
     double __now = ABT_get_wtime(); \
     fprintf(__g->dbg_log, "%.6lf %20"PRIu64" (%s): " __fmt, __now, \
-        __g->ssg_inst->self_id, __g->name, ## __VA_ARGS__); \
+        __g->mid_state->self_id, __g->name, ## __VA_ARGS__); \
     fflush(__g->dbg_log); \
 } while(0)
 #else
@@ -63,6 +63,10 @@ typedef struct ssg_mid_state
     hg_id_t join_rpc_id;
     hg_id_t leave_rpc_id;
     hg_id_t observe_rpc_id;
+    hg_id_t swim_dping_req_rpc_id;
+    hg_id_t swim_dping_ack_rpc_id;
+    hg_id_t swim_iping_req_rpc_id;
+    hg_id_t swim_iping_ack_rpc_id;
     struct ssg_mid_state *next;
 } ssg_mid_state_t;
 
@@ -77,7 +81,6 @@ typedef struct ssg_group_descriptor
         struct ssg_group *g;
         struct ssg_observed_group *og;
     } g_data;
-    ssg_mid_state_t *mid_state;
     UT_hash_handle hh;
 } ssg_group_descriptor_t;
 
@@ -93,7 +96,7 @@ typedef struct ssg_member_state
     ssg_member_id_t id;
     char *addr_str;
     hg_addr_t addr;
-    //swim_member_state_t swim_state;
+    swim_member_state_t swim_state;
     UT_hash_handle hh;
 } ssg_member_state_t;
 
@@ -104,13 +107,13 @@ typedef struct ssg_group_view
     UT_array *rank_array;
 } ssg_group_view_t;
 
-/* XXX figure out swim */
 typedef struct ssg_group
 {
+    ssg_mid_state_t *mid_state;
     char *name;
     ssg_group_view_t view;
     ssg_member_state_t *dead_members;
-    //swim_context_t *swim_ctx;
+    swim_context_t *swim_ctx;
     ssg_membership_update_cb update_cb;
     void *update_cb_dat;
     ABT_rwlock lock;
@@ -121,6 +124,7 @@ typedef struct ssg_group
 
 typedef struct ssg_observed_group
 {
+    ssg_mid_state_t *mid_state;
     char *name;
     ssg_group_view_t view;
     ABT_rwlock lock;
@@ -154,14 +158,20 @@ void ssg_register_rpcs(
 void ssg_deregister_rpcs(
     ssg_mid_state_t *mid_state);
 int ssg_group_join_send(
-    ssg_group_descriptor_t * group_descriptor,
+    ssg_group_id_t g_id,
+    const char * target_addr_str,
+    ssg_mid_state_t * mid_state,
     char ** group_name,
     int * group_size, 
     void ** view_buf);
 int ssg_group_leave_send(
-    ssg_group_descriptor_t * group_descriptor);
+    ssg_group_id_t g_id,
+    hg_addr_t target_addr,
+    ssg_mid_state_t * mid_state);
 int ssg_group_observe_send(
-    ssg_group_descriptor_t * group_descriptor,
+    ssg_group_id_t g_id,
+    const char * target_addr_str,
+    ssg_mid_state_t * mid_state,
     char ** group_name,
     int * group_size, 
     void ** view_buf);
