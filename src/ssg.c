@@ -43,7 +43,8 @@ ssg_mid_state_t *ssg_retrieve_mid_state(
 static ssg_group_id_t ssg_group_create_internal(
     ssg_mid_state_t *mid_state, const char * group_name,
     const char * const group_addr_strs[], int group_size,
-    ssg_membership_update_cb update_cb, void *update_cb_dat);
+    ssg_group_config_t *group_conf, ssg_membership_update_cb update_cb,
+    void *update_cb_dat);
 static int ssg_group_view_create(
     const char * const group_addr_strs[], int group_size,
     const char * self_addr_str, ssg_mid_state_t *mid_state,
@@ -193,6 +194,7 @@ ssg_group_id_t ssg_group_create(
     const char * group_name,
     const char * const group_addr_strs[],
     int group_size,
+    ssg_group_config_t *group_conf,
     ssg_membership_update_cb update_cb,
     void * update_cb_dat)
 {
@@ -205,7 +207,7 @@ ssg_group_id_t ssg_group_create(
     if(!mid_state) return g_id;
 
     g_id = ssg_group_create_internal(mid_state, group_name, group_addr_strs,
-            group_size, update_cb, update_cb_dat);
+            group_size, group_conf, update_cb, update_cb_dat);
 
     return g_id;
 }
@@ -214,6 +216,7 @@ ssg_group_id_t ssg_group_create_config(
     margo_instance_id mid,
     const char * group_name,
     const char * file_name,
+    ssg_group_config_t *group_conf,
     ssg_membership_update_cb update_cb,
     void * update_cb_dat)
 {
@@ -295,7 +298,7 @@ ssg_group_id_t ssg_group_create_config(
 
     /* invoke the generic group create routine using our list of addrs */
     g_id = ssg_group_create_internal(mid_state, group_name, addr_strs, num_addrs,
-        update_cb, update_cb_dat);
+        group_conf, update_cb, update_cb_dat);
 
 fini:
     /* cleanup before returning */
@@ -312,6 +315,7 @@ ssg_group_id_t ssg_group_create_mpi(
     margo_instance_id mid,
     const char * group_name,
     MPI_Comm comm,
+    ssg_group_config_t *group_conf,
     ssg_membership_update_cb update_cb,
     void * update_cb_dat)
 {
@@ -360,7 +364,7 @@ ssg_group_id_t ssg_group_create_mpi(
 
     /* invoke the generic group create routine using our list of addrs */
     g_id = ssg_group_create_internal(mid_state, group_name, addr_strs, comm_size,
-        update_cb, update_cb_dat);
+        group_conf, update_cb, update_cb_dat);
 
 fini:
     /* cleanup before returning */
@@ -378,6 +382,7 @@ ssg_group_id_t ssg_group_create_pmix(
     margo_instance_id mid,
     const char * group_name,
     const pmix_proc_t proc,
+    ssg_group_config_t *group_conf,
     ssg_membership_update_cb update_cb,
     void * update_cb_dat)
 {
@@ -524,7 +529,7 @@ ssg_group_id_t ssg_group_create_pmix(
 
     /* invoke the generic group create routine using our list of addrs */
     g_id = ssg_group_create_internal(mid_state, group_name, addr_strs, nprocs,
-        update_cb, update_cb_dat);
+        group_conf, update_cb, update_cb_dat);
 
 fini:
     /* cleanup before returning */
@@ -628,8 +633,9 @@ int ssg_group_join(
     if(!addr_strs) goto fini;
     addr_strs[group_size++] = mid_state->self_addr_str;
 
+    /* XXX how to config group? */
     create_g_id = ssg_group_create_internal(mid_state, group_name, addr_strs, group_size,
-            update_cb, update_cb_dat);
+            NULL, update_cb, update_cb_dat);
 
     if (create_g_id != SSG_GROUP_ID_INVALID)
     {
@@ -1568,7 +1574,8 @@ ssg_mid_state_t *ssg_retrieve_mid_state(
 static ssg_group_id_t ssg_group_create_internal(
     ssg_mid_state_t *mid_state, const char * group_name,
     const char * const group_addr_strs[], int group_size,
-    ssg_membership_update_cb update_cb, void *update_cb_dat)
+    ssg_group_config_t *group_conf, ssg_membership_update_cb update_cb,
+    void *update_cb_dat)
 {
     ssg_group_descriptor_t *g_desc = NULL, *g_desc_check;
     ssg_group_id_t g_id;
@@ -1635,7 +1642,7 @@ static ssg_group_id_t ssg_group_create_internal(
     }
 
     /* initialize swim failure detector if everything succeeds */
-    sret = swim_init(g, g_desc->g_id, 1);
+    sret = swim_init(g, g_desc->g_id, group_conf, 1);
     if (sret != SSG_SUCCESS)
     {
         HASH_DEL(ssg_rt->g_desc_table, g_desc);

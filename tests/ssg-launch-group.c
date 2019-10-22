@@ -132,6 +132,7 @@ int main(int argc, char *argv[])
     margo_instance_id mid = MARGO_INSTANCE_NULL;
     ssg_group_id_t g_id = SSG_GROUP_ID_INVALID;
     ssg_member_id_t my_id;
+    ssg_group_config_t g_conf = SSG_GROUP_CONFIG_INITIALIZER;
     int group_size;
     int sret;
 
@@ -171,14 +172,21 @@ int main(int argc, char *argv[])
     sret = ssg_init();
     DIE_IF(sret != SSG_SUCCESS, "ssg_init");
 
+    /* set non-default group config parameters */
+    g_conf.swim_period_length_ms = 1000; /* 1-second period length */
+    g_conf.swim_suspect_timeout_periods = 4; /* 4-period suspicion length */
+    g_conf.swim_subgroup_member_count = 3; /* 3-member subgroups for SWIM */
+
     /* XXX do we want to use callback for testing anything about group??? */
 #ifdef SSG_HAVE_MPI
     if(strcmp(opts.group_mode, "mpi") == 0)
-        g_id = ssg_group_create_mpi(mid, opts.group_name, MPI_COMM_WORLD, NULL, NULL);
+        g_id = ssg_group_create_mpi(mid, opts.group_name, MPI_COMM_WORLD, &g_conf,
+            NULL, NULL);
 #endif
 #ifdef SSG_HAVE_PMIX
     if(strcmp(opts.group_mode, "pmix") == 0)
-        g_id = ssg_group_create_pmix(mid, opts.group_name, proc, NULL, NULL);
+        g_id = ssg_group_create_pmix(mid, opts.group_name, proc, &g_conf,
+            NULL, NULL);
 #endif
     DIE_IF(g_id == SSG_GROUP_ID_INVALID, "ssg_group_create");
 

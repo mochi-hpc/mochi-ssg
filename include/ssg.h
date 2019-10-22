@@ -35,6 +35,21 @@ typedef uint64_t ssg_group_id_t;
 typedef uint64_t ssg_member_id_t;
 #define SSG_MEMBER_ID_INVALID 0
 
+typedef struct ssg_group_config
+{
+    int swim_period_length_ms;          /* period length in miliseconds */
+    int swim_suspect_timeout_periods;   /* suspicion timeout in periods */
+    int swim_subgroup_member_count;     /* iping subgroup count */
+} ssg_group_config_t;
+
+/* initializer macro to ensure SSG ignores unset config params */
+#define SSG_GROUP_CONFIG_INITIALIZER \
+{\
+    .swim_period_length_ms = 0, \
+    .swim_suspect_timeout_periods = -1, \
+    .swim_subgroup_member_count = -1, \
+}\
+
 /* SSG group member update types */
 typedef enum ssg_member_update_type
 {
@@ -77,12 +92,14 @@ int ssg_finalize(
  *************************************/
 
 /**
- * Creates an SSG group from a given list of HG address strings.
+ * Creates an SSG group from a given list of HG address strings. A 'NULL' value for
+ * 'group_conf' will use SSG defaults for all configuration parameters.
  *
  * @param[in] mid               Corresponding Margo instance identifier
  * @param[in] group_name        Name of the SSG group
  * @param[in] group_addr_strs   Array of HG address strings for each group member
  * @param[in] group_size        Number of group members
+ * @param[in] group_conf        Configuration parameters for the group
  * @param[in] update_cb         Callback function executed on group membership changes
  * @param[in] update_cb_dat     User data pointer passed to membership update callback
  * @returns SSG group identifier for created group on success, SSG_GROUP_ID_NULL otherwise
@@ -96,17 +113,20 @@ ssg_group_id_t ssg_group_create(
     const char * group_name,
     const char * const group_addr_strs[],
     int group_size,
+    ssg_group_config_t *group_conf,
     ssg_membership_update_cb update_cb,
     void * update_cb_dat);
 
 /**
  * Creates an SSG group from a given config file containing the HG address strings
- * of all group members.
+ * of all group members. A 'NULL' value for 'group_conf' will use SSG defaults for
+ * all configuration parameters.
  *
  * @param[in] mid               Corresponding Margo instance identifier
  * @param[in] group_name        Name of the SSG group
  * @param[in] file_name         Name of the config file containing the corresponding
  *                              HG address strings for this group
+ * @param[in] group_conf        Configuration parameters for the group
  * @param[in] update_cb         Callback function executed on group membership changes
  * @param[in] update_cb_dat     User data pointer passed to membership update callback
  * @returns SSG group identifier for created group on success, SSG_GROUP_ID_NULL otherwise
@@ -120,6 +140,7 @@ ssg_group_id_t ssg_group_create_config(
     margo_instance_id mid,
     const char * group_name,
     const char * file_name,
+    ssg_group_config_t *group_conf,
     ssg_membership_update_cb update_cb,
     void * update_cb_dat);
 

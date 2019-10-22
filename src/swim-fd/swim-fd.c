@@ -77,7 +77,8 @@ static void swim_register_ssg_member_update(
 
 int swim_init(
     ssg_group_t * group,
-    ssg_member_id_t g_id,
+    ssg_group_id_t group_id,
+    ssg_group_config_t *group_conf,
     int active)
 {
     swim_context_t *swim_ctx;
@@ -89,7 +90,7 @@ int swim_init(
     swim_ctx = malloc(sizeof(*swim_ctx));
     if (!swim_ctx) return(SSG_FAILURE);
     memset(swim_ctx, 0, sizeof(*swim_ctx));
-    swim_ctx->g_id = g_id;
+    swim_ctx->g_id = group_id;
     swim_ctx->self_inc_nr = 0;
     swim_ctx->dping_target_id = SSG_MEMBER_ID_INVALID;
     for (i = 0; i < SWIM_MAX_SUBGROUP_SIZE; i++)
@@ -116,9 +117,18 @@ int swim_init(
     }
 
     /* set protocol parameters */
-    swim_ctx->prot_period_len = SWIM_DEF_PROTOCOL_PERIOD_LEN;
-    swim_ctx->prot_susp_timeout = SWIM_DEF_SUSPECT_TIMEOUT;
-    swim_ctx->prot_subgroup_sz = SWIM_DEF_SUBGROUP_SIZE;
+    if (group_conf && group_conf->swim_period_length_ms > 0)
+        swim_ctx->prot_period_len = group_conf->swim_period_length_ms;
+    else
+        swim_ctx->prot_period_len = SWIM_DEF_PROTOCOL_PERIOD_LEN;
+    if (group_conf && group_conf->swim_suspect_timeout_periods >= 0)
+        swim_ctx->prot_susp_timeout = group_conf->swim_suspect_timeout_periods;
+    else
+        swim_ctx->prot_susp_timeout = SWIM_DEF_SUSPECT_TIMEOUT;
+    if (group_conf && group_conf->swim_subgroup_member_count >= 0)
+        swim_ctx->prot_subgroup_sz = group_conf->swim_subgroup_member_count;
+    else
+        swim_ctx->prot_subgroup_sz = SWIM_DEF_SUBGROUP_SIZE;
 
     group->swim_ctx = swim_ctx;
 

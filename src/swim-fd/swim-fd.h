@@ -61,13 +61,14 @@ void swim_deregister_ping_rpcs(
  * Initialize SWIM protocol for the given SSG group and Margo instance.
  *
  * @param[in] group             pointer to SSG group associated with this SWIM context
- * @param[in] g_id              SSG group identifier for group
+ * @param[in] group_id          SSG group identifier for group
  * @param[in] active            boolean value indicating whether member should actively ping
  * @returns SSG_SUCCESS on success, SSG_FAILURE otherwise
  */
 int swim_init(
     struct ssg_group * group,
-    ssg_member_id_t g_id,
+    ssg_group_id_t group_id,
+    ssg_group_config_t *group_conf,
     int active);
 
 /**
