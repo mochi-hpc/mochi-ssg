@@ -6,7 +6,8 @@ check_PROGRAMS += \
  tests/ssg-launch-double-group \
  tests/ssg-launch-double-mid-group \
  tests/ssg-observe-group \
- tests/ssg-join-leave-group 
+ tests/ssg-join-leave-group \
+ tests/ssg-test-fail
 
 EXTRA_DIST += \
  tests/test-util.sh
@@ -24,6 +25,9 @@ EXTRA_DIST += \
 endif
 
 if SSG_HAVE_PMIX
+
+check_PROGRAMS += \
+ tests/ssg-test-pmix-fail
 
 TESTS += \
  tests/simple-group-pmix.sh

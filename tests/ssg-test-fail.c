@@ -36,8 +36,8 @@ struct group_launch_opts
     char *addr_str;
     char *group_mode;
     int shutdown_time;
-    char *gid_file;
-    char *group_name;
+    int kill_time;
+    int kill_rank;
 };
 
 static void usage()
@@ -49,14 +49,15 @@ static void usage()
         "\n"
         "OPTIONS:\n"
         "\t-s <TIME>\t\tTime duration (in seconds) to run the group before shutting down\n"
-        "\t-f <FILE>\t\tFile path to store group ID in\n"
-        "\t-n <NAME>\t\tName of the group to launch\n");
+        "\t-k <TIME>\t\tTime duration (in seconds) to kill group member\n"
+        "\t-r <rank>\t\tPMIx rank to kill\n"
+);
 }
 
 static void parse_args(int argc, char *argv[], struct group_launch_opts *opts)
 {
     int c;
-    const char *options = "s:f:n:";
+    const char *options = "s:k:r:";
     char *check = NULL;
 
     while ((c = getopt(argc, argv, options)) != -1)
@@ -71,11 +72,21 @@ static void parse_args(int argc, char *argv[], struct group_launch_opts *opts)
                     exit(EXIT_FAILURE);
                 }
                 break;
-            case 'f':
-                opts->gid_file = optarg;
+            case 'k':
+                opts->kill_time = (int)strtol(optarg, &check, 0);
+                if (opts->kill_time < 0 || (check && *check != '\0'))
+                {
+                    usage();
+                    exit(EXIT_FAILURE);
+                }
                 break;
-            case 'n':
-                opts->group_name = optarg;
+            case 'r':
+                opts->kill_rank = (int)strtol(optarg, &check, 0);
+                if (opts->kill_rank < 0 || (check && *check != '\0'))
+                {
+                    usage();
+                    exit(EXIT_FAILURE);
+                }
                 break;
             default:
                 usage();
@@ -129,6 +140,7 @@ static void parse_args(int argc, char *argv[], struct group_launch_opts *opts)
 int main(int argc, char *argv[])
 {
     struct group_launch_opts opts;
+    int my_rank;
     margo_instance_id mid = MARGO_INSTANCE_NULL;
     ssg_group_id_t g_id = SSG_GROUP_ID_INVALID;
     ssg_member_id_t my_id;
@@ -136,9 +148,9 @@ int main(int argc, char *argv[])
     int sret;
 
     /* set any default options (that may be overwritten by cmd args) */
-    opts.shutdown_time = 10; /* default to running group for 10 seconds */
-    opts.group_name = "simple_group";
-    opts.gid_file = NULL;
+    opts.shutdown_time = 30; /* default to running group for 30 seconds */
+    opts.kill_time = 10; /* default to kill process in 10 seconds */
+    opts.kill_rank = 0; /* default to kill rank 0 */
 
     /* parse cmdline arguments */
     parse_args(argc, argv, &opts);
@@ -151,6 +163,7 @@ int main(int argc, char *argv[])
         MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
         MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
     }
+    my_rank = mpi_rank;
 #endif
 #ifdef SSG_HAVE_PMIX
     pmix_status_t ret;
@@ -160,11 +173,12 @@ int main(int argc, char *argv[])
         ret = PMIx_Init(&proc, NULL, 0);
         DIE_IF(ret != PMIX_SUCCESS, "PMIx_Init");
     }
+    my_rank = proc.rank;
 #endif
 
     /* init margo */
     /* use the main xstream to drive progress & run handlers */
-    mid = margo_init(opts.addr_str, MARGO_SERVER_MODE, 0, -1);
+    mid = margo_init(opts.addr_str, MARGO_SERVER_MODE, 0, 1);
     DIE_IF(mid == MARGO_INSTANCE_NULL, "margo_init");
 
     /* initialize SSG */
@@ -174,21 +188,13 @@ int main(int argc, char *argv[])
     /* XXX do we want to use callback for testing anything about group??? */
 #ifdef SSG_HAVE_MPI
     if(strcmp(opts.group_mode, "mpi") == 0)
-        g_id = ssg_group_create_mpi(mid, opts.group_name, MPI_COMM_WORLD, NULL, NULL);
+        g_id = ssg_group_create_mpi(mid, "fail_group", MPI_COMM_WORLD, NULL, NULL);
 #endif
 #ifdef SSG_HAVE_PMIX
     if(strcmp(opts.group_mode, "pmix") == 0)
-        g_id = ssg_group_create_pmix(mid, opts.group_name, proc, NULL, NULL);
+        g_id = ssg_group_create_pmix(mid, "fail_group", proc, NULL, NULL);
 #endif
     DIE_IF(g_id == SSG_GROUP_ID_INVALID, "ssg_group_create");
-
-    /* store the gid if requested */
-    if (opts.gid_file)
-        ssg_group_id_store(opts.gid_file, g_id);
-
-    /* sleep for given duration to allow group time to run */
-    if (opts.shutdown_time > 0)
-        margo_thread_sleep(mid, opts.shutdown_time * 1000.0);
 
     /* get my group id and the size of the group */
     my_id = ssg_get_self_id(mid);
@@ -196,13 +202,35 @@ int main(int argc, char *argv[])
     group_size = ssg_get_group_size(g_id);
     DIE_IF(group_size == 0, "ssg_get_group_size");
 
-    /* print group at each member */
-    ssg_group_dump(g_id);
-    ssg_group_destroy(g_id);
+    if (my_rank == opts.kill_rank)
+    {
+        /* sleep for given duration before killing rank */
+        margo_thread_sleep(mid, opts.kill_time * 1000.0);
+        fprintf(stderr, "%.6lf: KILL member %lu (PMIx rank %d)\n", ABT_get_wtime(), my_id, my_rank);
+	/* XXX we can't really terminate the rank (or MPI would abort, for instance)... */
+        ssg_group_destroy(g_id);
+        ssg_finalize();
+        margo_thread_sleep(mid, (opts.shutdown_time - opts.kill_time) * 1000.0);
+        margo_finalize(mid);
+    }
+    else
+    {
+        /* sleep for given duration to allow group time to run */
+        margo_thread_sleep(mid, opts.shutdown_time * 1000.0);
+    }
 
-    /** cleanup **/
-    ssg_finalize();
-    margo_finalize(mid);
+    if (my_rank != opts.kill_rank)
+    {
+        /* print group at each alive member */
+        ssg_group_dump(g_id);
+        ssg_group_destroy(g_id);
+
+        /** cleanup **/
+        /* XXX cleanup fails on dead process currently */
+        ssg_finalize();
+        margo_finalize(mid);
+    }
+
 #ifdef SSG_HAVE_MPI
     if (strcmp(opts.group_mode, "mpi") == 0)
         MPI_Finalize();
