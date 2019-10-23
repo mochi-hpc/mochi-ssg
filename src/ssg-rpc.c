@@ -22,15 +22,21 @@
 
 /* TODO join and observe are nearly identical -- refactor */
 
+MERCURY_GEN_STRUCT_PROC(ssg_group_config_t, \
+    ((int32_t) (swim_period_length_ms))
+    ((int32_t) (swim_suspect_timeout_periods))
+    ((int32_t) (swim_subgroup_member_count)));
+
 MERCURY_GEN_PROC(ssg_group_join_request_t, \
     ((ssg_group_id_t)   (g_id))
     ((hg_string_t)      (addr_str))
     ((hg_bulk_t)        (bulk_handle)));
 MERCURY_GEN_PROC(ssg_group_join_response_t, \
-    ((hg_string_t)  (group_name)) \
-    ((uint32_t)     (group_size)) \
-    ((hg_size_t)    (view_buf_size))
-    ((uint8_t)      (ret)));
+    ((hg_string_t)          (group_name))
+    ((uint32_t)             (group_size))
+    ((ssg_group_config_t)   (group_config))
+    ((hg_size_t)            (view_buf_size))
+    ((uint8_t)              (ret)));
 
 MERCURY_GEN_PROC(ssg_group_leave_request_t, \
     ((ssg_group_id_t)   (g_id)) \
@@ -110,6 +116,7 @@ int ssg_group_join_send(
     ssg_mid_state_t * mid_state,
     char ** group_name,
     int * group_size,
+    ssg_group_config_t * group_config,
     void ** view_buf)
 {
     hg_addr_t group_target_addr;
@@ -199,6 +206,7 @@ int ssg_group_join_send(
     *group_name = strdup(join_resp.group_name);
     *group_size = (int)join_resp.group_size;
     *view_buf = tmp_view_buf;
+    memcpy(group_config, &join_resp.group_config, sizeof(*group_config));
     sret = join_resp.ret;
     margo_free_output(handle, &join_resp);
 
@@ -300,6 +308,8 @@ static void ssg_group_join_recv_ult(
     /* set the response and send back */
     join_resp.group_name = g_desc->g_data.g->name;
     join_resp.group_size = (int)g_desc->g_data.g->view.size;
+    memcpy(&join_resp.group_config, &g_desc->g_data.g->config,
+        sizeof(join_resp.group_config));
     join_resp.view_buf_size = view_buf_size;
     join_resp.ret = SSG_SUCCESS;
 fini:

@@ -37,9 +37,9 @@ typedef uint64_t ssg_member_id_t;
 
 typedef struct ssg_group_config
 {
-    int swim_period_length_ms;          /* period length in miliseconds */
-    int swim_suspect_timeout_periods;   /* suspicion timeout in periods */
-    int swim_subgroup_member_count;     /* iping subgroup count */
+    int32_t swim_period_length_ms;          /* period length in miliseconds */
+    int32_t swim_suspect_timeout_periods;   /* suspicion timeout in periods */
+    int32_t swim_subgroup_member_count;     /* iping subgroup count */
 } ssg_group_config_t;
 
 /* initializer macro to ensure SSG ignores unset config params */

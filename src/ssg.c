@@ -578,6 +578,7 @@ int ssg_group_join(
     ssg_group_descriptor_t *g_desc;
     char *group_name = NULL;
     int group_size;
+    ssg_group_config_t group_config;
     void *view_buf = NULL;
     const char **addr_strs = NULL;
     ssg_group_id_t create_g_id;
@@ -618,7 +619,7 @@ int ssg_group_join(
     if(!mid_state) goto fini;
 
     sret = ssg_group_join_send(group_id, g_desc->addr_str, mid_state,
-        &group_name, &group_size, &view_buf);
+        &group_name, &group_size, &group_config, &view_buf);
     if (sret != SSG_SUCCESS || !group_name || !view_buf) goto fini;
 
     /* free old descriptor */
@@ -633,9 +634,8 @@ int ssg_group_join(
     if(!addr_strs) goto fini;
     addr_strs[group_size++] = mid_state->self_addr_str;
 
-    /* XXX how to config group? */
     create_g_id = ssg_group_create_internal(mid_state, group_name, addr_strs, group_size,
-            NULL, update_cb, update_cb_dat);
+            &group_config, update_cb, update_cb_dat);
 
     if (create_g_id != SSG_GROUP_ID_INVALID)
     {
@@ -1580,8 +1580,11 @@ static ssg_group_id_t ssg_group_create_internal(
     ssg_group_descriptor_t *g_desc = NULL, *g_desc_check;
     ssg_group_id_t g_id;
     ssg_group_t *g;
+    ssg_group_config_t tmp_group_conf = SSG_GROUP_CONFIG_INITIALIZER;
     int success = 0;
     int sret;
+
+    if (!group_conf) group_conf = &tmp_group_conf;
 
     /* allocate an SSG group data structure and initialize some of it */
     g = malloc(sizeof(*g));
@@ -1590,6 +1593,7 @@ static ssg_group_id_t ssg_group_create_internal(
     g->mid_state = mid_state;
     g->name = strdup(group_name);
     if (!g->name) goto fini;
+    memcpy(&g->config, group_conf, sizeof(*group_conf));
     g->update_cb = update_cb;
     g->update_cb_dat = update_cb_dat;
     ABT_rwlock_create(&g->lock);

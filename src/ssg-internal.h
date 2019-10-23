@@ -112,6 +112,7 @@ typedef struct ssg_group
     ssg_mid_state_t *mid_state;
     char *name;
     ssg_group_view_t view;
+    ssg_group_config_t config;
     ssg_member_state_t *dead_members;
     swim_context_t *swim_ctx;
     ssg_membership_update_cb update_cb;
@@ -162,7 +163,8 @@ int ssg_group_join_send(
     const char * target_addr_str,
     ssg_mid_state_t * mid_state,
     char ** group_name,
-    int * group_size, 
+    int * group_size,
+    ssg_group_config_t * group_config,
     void ** view_buf);
 int ssg_group_leave_send(
     ssg_group_id_t g_id,
