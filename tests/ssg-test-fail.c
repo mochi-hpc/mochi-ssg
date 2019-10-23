@@ -188,11 +188,11 @@ int main(int argc, char *argv[])
     /* XXX do we want to use callback for testing anything about group??? */
 #ifdef SSG_HAVE_MPI
     if(strcmp(opts.group_mode, "mpi") == 0)
-        g_id = ssg_group_create_mpi(mid, "fail_group", MPI_COMM_WORLD, NULL, NULL);
+        g_id = ssg_group_create_mpi(mid, "fail_group", MPI_COMM_WORLD, NULL, NULL, NULL);
 #endif
 #ifdef SSG_HAVE_PMIX
     if(strcmp(opts.group_mode, "pmix") == 0)
-        g_id = ssg_group_create_pmix(mid, "fail_group", proc, NULL, NULL);
+        g_id = ssg_group_create_pmix(mid, "fail_group", proc, NULL, NULL, NULL);
 #endif
     DIE_IF(g_id == SSG_GROUP_ID_INVALID, "ssg_group_create");
 

@@ -192,18 +192,18 @@ int main(int argc, char *argv[])
     if(strcmp(opts.group_mode, "mpi") == 0)
     {
         snprintf(scratch, 1024, "%s-%d", opts.group_name, 1);
-        g1_id = ssg_group_create_mpi(mid1, scratch, MPI_COMM_WORLD, NULL, NULL);
+        g1_id = ssg_group_create_mpi(mid1, scratch, MPI_COMM_WORLD, NULL, NULL, NULL);
         snprintf(scratch, 1024, "%s-%d", opts.group_name, 2);
-        g2_id = ssg_group_create_mpi(mid2, scratch, MPI_COMM_WORLD, NULL, NULL);
+        g2_id = ssg_group_create_mpi(mid2, scratch, MPI_COMM_WORLD, NULL, NULL, NULL);
     }
 #endif
 #ifdef SSG_HAVE_PMIX
     if(strcmp(opts.group_mode, "pmix") == 0)
     {
         snprintf(scratch, 1024, "%s-%d", opts.group_name, 1);
-        g1_id = ssg_group_create_pmix(mid1, scratch, proc, NULL, NULL);
+        g1_id = ssg_group_create_pmix(mid1, scratch, proc, NULL, NULL, NULL);
         snprintf(scratch, 1024, "%s-%d", opts.group_name, 2);
-        g2_id = ssg_group_create_pmix(mid2, scratch, proc, NULL, NULL);
+        g2_id = ssg_group_create_pmix(mid2, scratch, proc, NULL, NULL, NULL);
     }
 #endif
     DIE_IF(g1_id == SSG_GROUP_ID_INVALID, "ssg_group_create");

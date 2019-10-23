@@ -126,7 +126,7 @@ int main(int argc, char *argv[])
     DIE_IF(sret != SSG_SUCCESS, "ssg_init");
 
     /* XXX do we want to use callback for testing anything about group??? */
-    g_id = ssg_group_create_pmix(mid, "fail_group", proc, NULL, NULL);
+    g_id = ssg_group_create_pmix(mid, "fail_group", proc, NULL, NULL, NULL);
     DIE_IF(g_id == SSG_GROUP_ID_INVALID, "ssg_group_create");
 
     /* get my group id and the size of the group */
