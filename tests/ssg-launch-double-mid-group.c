@@ -12,6 +12,9 @@
 #ifdef SSG_HAVE_MPI
 #include <mpi.h>
 #endif
+#ifdef SSG_HAVE_PMIX
+#include <pmix.h>
+#endif
 
 #include <margo.h>
 #include <ssg.h>

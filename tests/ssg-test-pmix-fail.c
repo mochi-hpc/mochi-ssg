@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
+#include <pmix.h>
 
 #include <margo.h>
 #include <ssg.h>
