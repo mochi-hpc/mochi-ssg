@@ -67,6 +67,7 @@ typedef struct ssg_mid_state
     hg_id_t swim_dping_ack_rpc_id;
     hg_id_t swim_iping_req_rpc_id;
     hg_id_t swim_iping_ack_rpc_id;
+    int ref_count;
     struct ssg_mid_state *next;
 } ssg_mid_state_t;
 
