@@ -444,7 +444,6 @@ ssg_group_id_t ssg_group_create_pmix(
                 if (ids[i] == mid_state->self_id)
                 {
                     match = 1;
-                    fprintf(stderr, "FOUND OLD MID\n");
                     break;
                 }
             }
@@ -463,7 +462,6 @@ ssg_group_id_t ssg_group_create_pmix(
                 PMIX_VALUE_LOAD(&value, &my_ids_array, PMIX_DATA_ARRAY);
                 ret = PMIx_Put(PMIX_GLOBAL, key, &value);
                 free(ids);
-                fprintf(stderr, "ADDED NEW MID\n");
                 if (ret != PMIX_SUCCESS)
                     fprintf(stderr, "Warning: unable to store PMIx rank->ID mapping for"\
                         "SSG member %lu\n", mid_state->self_id);
@@ -1195,6 +1193,32 @@ char *ssg_group_id_get_addr_str(
     return addr_str;
 }
 
+int64_t ssg_group_id_get_cred(
+    ssg_group_id_t group_id)
+{
+    ssg_group_descriptor_t *g_desc;
+    int64_t cred;
+
+    if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID) return -1;
+
+    ABT_rwlock_rdlock(ssg_rt->lock);
+
+    /* find the group descriptor */
+    HASH_FIND(hh, ssg_rt->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
+    if (!g_desc)
+    {
+        ABT_rwlock_unlock(ssg_rt->lock);
+        fprintf(stderr, "Error: SSG unable to find expected group ID\n");
+        return -1;
+    }
+
+    cred = g_desc->cred;
+
+    ABT_rwlock_unlock(ssg_rt->lock);
+
+    return cred;
+}
+
 void ssg_group_id_serialize(
     ssg_group_id_t group_id,
     char ** buf_p,
@@ -1223,6 +1247,8 @@ void ssg_group_id_serialize(
     /* determine needed buffer size */
     alloc_size = (sizeof(g_desc->magic_nr) + sizeof(g_desc->g_id) +
         strlen(g_desc->addr_str) + 1);
+    if (g_desc->cred >= 0)
+        alloc_size += sizeof(g_desc->cred);
 
     gid_buf = malloc(alloc_size);
     if (!gid_buf)
@@ -1238,6 +1264,11 @@ void ssg_group_id_serialize(
     *(ssg_group_id_t *)p = g_desc->g_id;
     p += sizeof(ssg_group_id_t);
     strcpy(p, g_desc->addr_str);
+    if (g_desc->cred >= 0)
+    {
+        p += strlen(g_desc->addr_str) + 1;
+        *(int64_t *)p = g_desc->cred;
+    }
     /* the rest of the descriptor is stateful and not appropriate for serializing... */
 
     ABT_rwlock_unlock(ssg_rt->lock);
@@ -1253,6 +1284,7 @@ void ssg_group_id_deserialize(
     size_t buf_size,
     ssg_group_id_t * group_id_p)
 {
+    const char *tmp_buf = buf;
     size_t min_buf_size;
     uint64_t magic_nr;
     ssg_group_id_t g_id;
@@ -1272,21 +1304,27 @@ void ssg_group_id_deserialize(
     }
 
     /* deserialize */
-    magic_nr = *(uint64_t *)buf;
+    magic_nr = *(uint64_t *)tmp_buf;
     if (magic_nr != SSG_MAGIC_NR)
     {
         fprintf(stderr, "Error: Magic number mismatch when deserializing SSG group ID\n");
         return;
     }
-    buf += sizeof(uint64_t);
-    g_id = *(ssg_group_id_t *)buf;
-    buf += sizeof(ssg_group_id_t);
-    addr_str = buf;
+    tmp_buf += sizeof(uint64_t);
+    g_id = *(ssg_group_id_t *)tmp_buf;
+    tmp_buf += sizeof(ssg_group_id_t);
+    addr_str = tmp_buf;
+    tmp_buf += strlen(addr_str) + 1;
 
     g_desc = ssg_group_descriptor_create(g_id, addr_str,
         SSG_OWNER_IS_UNASSOCIATED);
     if (!g_desc)
         return;
+
+    if ((buf_size - (tmp_buf - buf)) == sizeof(int64_t))
+    {
+        g_desc->cred = *(int64_t *)tmp_buf;
+    }
 
     /* add this group descriptor to our global table */
     /* NOTE: g_id is not associated with any group -- caller must join or observe first */
@@ -1490,6 +1528,7 @@ void ssg_group_dump(
                 member_addr_str);
         }
         ABT_rwlock_unlock(group_lock);
+        fflush(stdout);
     }
 
     ABT_rwlock_unlock(ssg_rt->lock);
@@ -1621,6 +1660,14 @@ static ssg_group_id_t ssg_group_create_internal(
         SSG_OWNER_IS_MEMBER);
     if (g_desc == NULL) goto fini;
     g_desc->g_data.g = g;
+
+    /* add credential to descriptor if given */
+    if (group_conf)
+    {
+        g_desc->cred = group_conf->ssg_credential;
+    }
+    else
+        g_desc->cred = -1;
 
     /* first make sure we aren't re-creating an existing group, then go ahead and
      * stash this group descriptor -- we will use the group lock while we finish

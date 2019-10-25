@@ -25,7 +25,8 @@
 MERCURY_GEN_STRUCT_PROC(ssg_group_config_t, \
     ((int32_t) (swim_period_length_ms))
     ((int32_t) (swim_suspect_timeout_periods))
-    ((int32_t) (swim_subgroup_member_count)));
+    ((int32_t) (swim_subgroup_member_count))
+    ((int64_t) (ssg_credential)));
 
 MERCURY_GEN_PROC(ssg_group_join_request_t, \
     ((ssg_group_id_t)   (g_id))

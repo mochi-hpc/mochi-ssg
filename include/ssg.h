@@ -40,6 +40,7 @@ typedef struct ssg_group_config
     int32_t swim_period_length_ms;          /* period length in miliseconds */
     int32_t swim_suspect_timeout_periods;   /* suspicion timeout in periods */
     int32_t swim_subgroup_member_count;     /* iping subgroup count */
+    int64_t ssg_credential;                 /* generic credential to be stored with group */
 } ssg_group_config_t;
 
 /* initializer macro to ensure SSG ignores unset config params */
@@ -48,6 +49,7 @@ typedef struct ssg_group_config
     .swim_period_length_ms = 0, \
     .swim_suspect_timeout_periods = -1, \
     .swim_subgroup_member_count = -1, \
+    .ssg_credential = -1, \
 }\
 
 /* SSG group member update types */
@@ -295,6 +297,15 @@ int ssg_get_group_member_ids_from_range(
  * NOTE: returned string must be freed by caller.
  */
 char *ssg_group_id_get_addr_str(
+    ssg_group_id_t group_id);
+
+/**
+ * Retrieves the credential associated with an SSG group identifier.
+ *
+ * @param[in] group_id SSG group ID
+ * @returns credential on success, -1 on error or mising credential
+ */
+int64_t ssg_group_id_get_cred(
     ssg_group_id_t group_id);
 
 /**

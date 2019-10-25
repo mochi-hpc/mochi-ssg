@@ -75,6 +75,7 @@ typedef struct ssg_group_descriptor
     ssg_group_id_t g_id;
     uint64_t magic_nr;
     char *addr_str;
+    int64_t cred;
     int owner_status;
     union
     {
