@@ -76,6 +76,16 @@ AC_ARG_ENABLE([pmix],
      esac],
     [])
 
+check_drc=no
+AC_ARG_ENABLE([drc],
+    [  --enable-drc           enable DRC  (default: disabled)],
+    [ case "${enableval}" in
+     yes) check_drc=yes ;;
+     no)  check_drc=no ;;
+     *) AC_MSG_ERROR([bad value ${enableval} for --enable-drc]) ;;
+     esac],
+    [])
+
 check_mpi_status=fail
 if test "x${check_mpi}" = xauto -o "x${check_mpi}" = xyes ; then
     AC_MSG_CHECKING([If MPI programs can be compiled])
@@ -98,15 +108,30 @@ if test "x${check_pmix}" = xauto -o "x${check_pmix}" = xyes ; then
         [AC_MSG_RESULT([no])])
 fi
 
+check_drc_status=fail
+if test "x${check_drc}" = xauto -o "x${check_drc}" = xyes ; then
+    AC_MSG_CHECKING([If DRC programs can be compiled])
+    AC_LINK_IFELSE(
+        [AC_LANG_PROGRAM([[#include<rdmacred.h>]], [[drc_acquire(0,0);]])],
+        [AC_DEFINE([SSG_HAVE_DRC], [1], [Define to 1 if compiled with DRC support])
+         AC_MSG_RESULT([yes])
+         check_drc_status=success],
+        [AC_MSG_RESULT([no])])
+fi
+
 if test "x${check_mpi_status}" = xfail -a "x${check_mpi}" = xyes; then
     AC_MSG_ERROR([MPI requested but unable to be used. Did you specify an MPI compiler?])
 fi
 if test "x${check_pmix_status}" = xfail -a "x${check_pmix}" = xyes; then
     AC_MSG_ERROR([PMIx requested but unable to be used.])
 fi
+if test "x${check_drc_status}" = xfail -a "x${check_drc}" = xyes; then
+    AC_MSG_ERROR([DRC requested but unable to be used.])
+fi
 
 AM_CONDITIONAL([SSG_HAVE_MPI], [test "x${check_mpi_status}" = xsuccess])
 AM_CONDITIONAL([SSG_HAVE_PMIX], [test "x${check_pmix_status}" = xsuccess])
+AM_CONDITIONAL([SSG_HAVE_DRC], [test "x${check_drc_status}" = xsuccess])
 
 PKG_CHECK_MODULES([MARGO],[margo],[],
    [AC_MSG_ERROR([Could not find working margo installation!])])

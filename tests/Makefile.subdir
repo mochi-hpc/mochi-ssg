@@ -36,3 +36,11 @@ EXTRA_DIST += \
  tests/simple-group-pmix.sh
 
 endif
+
+if SSG_HAVE_DRC
+
+check_PROGRAMS += \
+ tests/ssg-launch-group-drc \
+ tests/ssg-observe-group-drc
+
+endif
