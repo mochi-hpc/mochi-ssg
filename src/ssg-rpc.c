@@ -113,14 +113,13 @@ void ssg_deregister_rpcs(
  */
 int ssg_group_join_send(
     ssg_group_id_t g_id,
-    const char * target_addr_str,
+    hg_addr_t group_target_addr,
     ssg_mid_state_t * mid_state,
     char ** group_name,
     int * group_size,
     ssg_group_config_t * group_config,
     void ** view_buf)
 {
-    hg_addr_t group_target_addr;
     hg_handle_t handle = HG_HANDLE_NULL;
     hg_bulk_t bulk_handle = HG_BULK_NULL;
     void *tmp_view_buf = NULL, *b;
@@ -135,10 +134,6 @@ int ssg_group_join_send(
     *view_buf = NULL;
 
     /* send join request to given group member */
-    hret = margo_addr_lookup(mid_state->mid, target_addr_str,
-        &group_target_addr);
-    if (hret != HG_SUCCESS) goto fini;
-
     hret = margo_create(mid_state->mid, group_target_addr,
         mid_state->join_rpc_id, &handle);
     if (hret != HG_SUCCESS) goto fini;
@@ -214,8 +209,6 @@ int ssg_group_join_send(
     if (sret == SSG_SUCCESS)
         tmp_view_buf = NULL; /* don't free on success */
 fini:
-    if (group_target_addr != HG_ADDR_NULL)
-        margo_addr_free(mid_state->mid, group_target_addr);
     if (handle != HG_HANDLE_NULL) margo_destroy(handle);
     if (bulk_handle != HG_BULK_NULL) margo_bulk_free(bulk_handle);
     free(tmp_view_buf);
@@ -236,6 +229,7 @@ static void ssg_group_join_recv_ult(
     hg_size_t view_buf_size;
     hg_bulk_t bulk_handle = HG_BULK_NULL;
     ssg_member_update_t join_update;
+    int group_size;
     int sret;
     hg_return_t hret;
 
@@ -274,6 +268,7 @@ static void ssg_group_join_recv_ult(
         margo_free_input(handle, &join_req);
         goto fini;
     }
+    group_size = g_desc->g_data.g->view.size;
 
     if (view_size_requested >= view_buf_size)
     {
@@ -308,7 +303,7 @@ static void ssg_group_join_recv_ult(
 
     /* set the response and send back */
     join_resp.group_name = g_desc->g_data.g->name;
-    join_resp.group_size = (int)g_desc->g_data.g->view.size;
+    join_resp.group_size = group_size;
     memcpy(&join_resp.group_config, &g_desc->g_data.g->config,
         sizeof(join_resp.group_config));
     join_resp.view_buf_size = view_buf_size;
@@ -332,17 +327,18 @@ DEFINE_MARGO_RPC_HANDLER(ssg_group_join_recv_ult)
  */
 int ssg_group_leave_send(
     ssg_group_id_t g_id,
-    hg_addr_t target_addr,
+    hg_addr_t group_target_addr,
     ssg_mid_state_t * mid_state)
 {
     hg_handle_t handle = HG_HANDLE_NULL;
+
     ssg_group_leave_request_t leave_req;
     ssg_group_leave_response_t leave_resp;
     hg_return_t hret;
     int sret = SSG_FAILURE;
 
     /* send leave request to given group member */
-    hret = margo_create(mid_state->mid, target_addr,
+    hret = margo_create(mid_state->mid, group_target_addr,
         mid_state->leave_rpc_id, &handle);
     if (hret != HG_SUCCESS) goto fini;
 
@@ -427,13 +423,12 @@ DEFINE_MARGO_RPC_HANDLER(ssg_group_leave_recv_ult)
  */
 int ssg_group_observe_send(
     ssg_group_id_t g_id,
-    const char * target_addr_str,
+    hg_addr_t group_target_addr,
     ssg_mid_state_t * mid_state,
     char ** group_name,
     int * group_size,
     void ** view_buf)
 {
-    hg_addr_t group_target_addr = HG_ADDR_NULL;
     hg_handle_t handle = HG_HANDLE_NULL;
     hg_bulk_t bulk_handle = HG_BULK_NULL;
     void *tmp_view_buf = NULL, *b;
@@ -448,10 +443,6 @@ int ssg_group_observe_send(
     *view_buf = NULL;
 
     /* lookup the address of the group member associated with the descriptor */
-    hret = margo_addr_lookup(mid_state->mid, target_addr_str,
-        &group_target_addr);
-    if (hret != HG_SUCCESS) goto fini;
-
     hret = margo_create(mid_state->mid, group_target_addr,
         mid_state->observe_rpc_id, &handle);
     if (hret != HG_SUCCESS) goto fini;
@@ -526,8 +517,6 @@ int ssg_group_observe_send(
     if (sret == SSG_SUCCESS)
         tmp_view_buf = NULL; /* don't free on success */
 fini:
-    if (group_target_addr != HG_ADDR_NULL)
-        margo_addr_free(mid_state->mid, group_target_addr);
     if (handle != HG_HANDLE_NULL) margo_destroy(handle);
     if (bulk_handle != HG_BULK_NULL) margo_bulk_free(bulk_handle);
     free(tmp_view_buf);
@@ -547,6 +536,7 @@ static void ssg_group_observe_recv_ult(
     void *view_buf = NULL;
     hg_size_t view_buf_size;
     hg_bulk_t bulk_handle = HG_BULK_NULL;
+    int group_size;
     int sret;
     hg_return_t hret;
 
@@ -585,6 +575,7 @@ static void ssg_group_observe_recv_ult(
         margo_free_input(handle, &observe_req);
         goto fini;
     }
+    group_size = g_desc->g_data.g->view.size;
 
     ABT_rwlock_unlock(ssg_rt->lock);
 
@@ -611,7 +602,7 @@ static void ssg_group_observe_recv_ult(
 
     /* set the response and send back */
     observe_resp.group_name = g_desc->g_data.g->name;
-    observe_resp.group_size = (int)g_desc->g_data.g->view.size;
+    observe_resp.group_size = group_size;
     observe_resp.view_buf_size = view_buf_size;
     observe_resp.ret = SSG_SUCCESS;
 fini:

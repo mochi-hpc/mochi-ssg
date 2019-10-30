@@ -120,6 +120,7 @@ int main(int argc, char *argv[])
     struct group_join_leave_opts opts;
     margo_instance_id mid = MARGO_INSTANCE_NULL;
     ssg_group_id_t g_id = SSG_GROUP_ID_INVALID;
+    int num_addrs;
     int sret;
 
     /* set any default options (that may be overwritten by cmd args) */
@@ -144,8 +145,10 @@ int main(int argc, char *argv[])
     DIE_IF(sret != SSG_SUCCESS, "ssg_init");
 
     /* load GID from file */
-    sret = ssg_group_id_load(opts.gid_file, &g_id);
+    num_addrs = SSG_ALL_MEMBERS;
+    sret = ssg_group_id_load(opts.gid_file, &num_addrs, &g_id);
     DIE_IF(sret != SSG_SUCCESS, "ssg_group_id_load");
+    DIE_IF(num_addrs < 1, "ssg_group_id_load");
 
     /* sleep until time to join */
     if (opts.join_time > 0)

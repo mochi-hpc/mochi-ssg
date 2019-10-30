@@ -85,6 +85,7 @@ int main(int argc, char *argv[])
     const char *addr_str;
     const char *gid_file;
     ssg_group_id_t g_id;
+    int num_addrs;
     int64_t ssg_cred;
     uint32_t drc_credential_id;
     drc_info_handle_t drc_credential_info;
@@ -112,8 +113,10 @@ int main(int argc, char *argv[])
     ret = ssg_init();
     DIE_IF(ret != SSG_SUCCESS, "ssg_init");
 
-    ret = ssg_group_id_load(gid_file, &g_id);
+    num_addrs = 1;
+    ret = ssg_group_id_load(gid_file, &num_addrs, &g_id);
     DIE_IF(ret != SSG_SUCCESS, "ssg_group_id_load");
+    DIE_IF(num_addrs != 1, "ssg_group_id_load");
 
     ssg_cred = ssg_group_id_get_cred(g_id);
     DIE_IF(ssg_cred == -1, "ssg_group_id_get_cred");

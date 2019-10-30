@@ -35,6 +35,8 @@ typedef uint64_t ssg_group_id_t;
 typedef uint64_t ssg_member_id_t;
 #define SSG_MEMBER_ID_INVALID 0
 
+#define SSG_ALL_MEMBERS (-1)
+
 typedef struct ssg_group_config
 {
     int32_t swim_period_length_ms;          /* period length in miliseconds */
@@ -167,9 +169,27 @@ int ssg_group_destroy(
  * NOTE: Use the returned group ID to refer to the group, as the input group ID
  *       becomes stale after the join is completed.
  */
-int ssg_group_join(
+#define ssg_group_join(mid, group_id, update_cb, update_cb_dat) \
+    ssg_group_join_target(mid, group_id, NULL, update_cb, update_cb_dat)
+
+/**
+ * Adds the calling process to an SSG group, specifying the address string
+ * of the target group member to send the request to.
+ *
+ * @param[in] mid               Corresponding Margo instance identifier
+ * @param[in] group_id          Input SSG group ID
+ * @param[in] target_addr_str   Address string of group member target
+ * @param[in] update_cb         Callback function executed on group membership changes
+ * @param[in] update_cb_dat     User data pointer passed to membership update callback
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
+ *
+ * NOTE: Use the returned group ID to refer to the group, as the input group ID
+ *       becomes stale after the join is completed.
+ */
+int ssg_group_join_target(
     margo_instance_id mid,
     ssg_group_id_t group_id,
+    const char * target_addr_str,
     ssg_membership_update_cb update_cb,
     void * update_cb_dat);
 
@@ -179,8 +199,20 @@ int ssg_group_join(
  * @param[in] group_id SSG group ID
  * @returns SSG_SUCCESS on success, SSG error code otherwise
  */
-int ssg_group_leave(
-    ssg_group_id_t group_id);
+#define ssg_group_leave(group_id) \
+    ssg_group_leave_target(group_id, NULL)
+
+/**
+ * Removes the calling process from an SSG group, specifying the address string
+ * of the target group member to send the request to.
+ *
+ * @param[in] group_id SSG group ID
+ * @param[in] target_addr_str   Address string of group member target
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
+ */
+int ssg_group_leave_target(
+    ssg_group_id_t group_id,
+    const char * target_addr_str);
 
 /**
  * Initiates a client's observation of an SSG group.
@@ -193,9 +225,26 @@ int ssg_group_leave(
  * a way of making the membership view of an existing SSG group available to
  * non-group members.
  */
-int ssg_group_observe(
+#define ssg_group_observe(mid, group_id) \
+    ssg_group_observe_target(mid, group_id, NULL)
+
+/**
+ * Initiates a client's observation of an SSG group, specifying the address string
+ * of the target group member to send the request to.
+ *
+ * @param[in] mid               Corresponding Margo instance identifier
+ * @param[in] group_id          SSG group ID
+ * @param[in] target_addr_str   Address string of group member target
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
+ *
+ * NOTE: The "client" cannot be a member of the group -- observation is merely
+ * a way of making the membership view of an existing SSG group available to
+ * non-group members.
+ */
+int ssg_group_observe_target(
     margo_instance_id mid,
-    ssg_group_id_t group_id);
+    ssg_group_id_t group_id,
+    const char * target_addr_str);
 
 /**
  * Terminates a client's observation of an SSG group.
@@ -291,13 +340,15 @@ int ssg_get_group_member_ids_from_range(
 /**
  * Retrieves the HG address string associated with an SSG group identifier.
  *
- * @param[in] group_id SSG group ID
+ * @param[in] group_id      SSG group ID
+ * @param[in] addr_index    Index (0-based) in GID's address list array
  * @returns address string on success, NULL otherwise
  * 
  * NOTE: returned string must be freed by caller.
  */
 char *ssg_group_id_get_addr_str(
-    ssg_group_id_t group_id);
+    ssg_group_id_t group_id,
+    unsigned int addr_index);
 
 /**
  * Retrieves the credential associated with an SSG group identifier.
@@ -312,24 +363,28 @@ int64_t ssg_group_id_get_cred(
  * Serializes an SSG group identifier into a buffer.
  *
  * @param[in]   group_id    SSG group ID
+ * @param[in]   num_addrs   Number of group addressses to serialize (SSG_ALL_MEMBERS for all)
  * @param[out]  buf_p       Pointer to store allocated buffer in
  * @param[out]  buf_size_p  Pointer to store buffer size in
  */
 void ssg_group_id_serialize(
     ssg_group_id_t group_id,
+    int num_addrs,
     char ** buf_p,
     size_t * buf_size_p);
 
 /**
  * Deserializes an SSG group identifier from a buffer.
  *
- * @param[in]   buf         Buffer containing the SSG group identifier
- * @param[in]   buf_size    Size of given buffer
- * @param[out]  group_id_p  Pointer to store group identifier in
+ * @param[in]       buf         Buffer containing the SSG group identifier
+ * @param[in]       buf_size    Size of given buffer
+ * @param[in/out]   num_addrs   Number of group addresses deserialized (input serves as max)
+ * @param[out]      group_id_p  Pointer to store group identifier in
  */
 void ssg_group_id_deserialize(
     const char * buf,
     size_t buf_size,
+    int * num_addrs,
     ssg_group_id_t * group_id_p);
 
 /**
@@ -337,21 +392,25 @@ void ssg_group_id_deserialize(
  *
  * @param[in]   file_name   File to store the group ID in
  * @param[in]   group_id    SSG group ID
+ * @param[in]   num_addrs   Number of group addressses to serialize (SSG_ALL_MEMBERS for all)
  * @returns SSG_SUCCESS on success, SSG error code otherwise
  */
 int ssg_group_id_store(
     const char * file_name,
-    ssg_group_id_t group_id);
+    ssg_group_id_t group_id,
+    int num_addrs);
 
 /**
  * Loads an SSG group identifier from the given file name.
  *
- * @param[in]   file_name   File to store the group ID in
- * @param[out]  group_id_p  Pointer to store group identifier in
+ * @param[in]       file_name   File to store the group ID in
+ * @param[in/out]   num_addrs   Number of group addresses deserialized (input serves as max)
+ * @param[out]      group_id_p  Pointer to store group identifier in
  * @returns SSG_SUCCESS on success, SSG error code otherwise
  */
 int ssg_group_id_load(
     const char * file_name,
+    int * num_addrs,
     ssg_group_id_t * group_id_p);
 
 /** Dumps details of caller's membership in a given group to stdout.

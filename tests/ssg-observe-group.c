@@ -77,6 +77,7 @@ int main(int argc, char *argv[])
     const char *addr_str;
     const char *gid_file;
     ssg_group_id_t g_id;
+    int num_addrs;
     int sret;
 
     parse_args(argc, argv, &sleep_time, &addr_str, &gid_file);
@@ -94,8 +95,10 @@ int main(int argc, char *argv[])
     sret = ssg_init();
     DIE_IF(sret != SSG_SUCCESS, "ssg_init");
 
-    sret = ssg_group_id_load(gid_file, &g_id);
+    num_addrs = SSG_ALL_MEMBERS;
+    sret = ssg_group_id_load(gid_file, &num_addrs, &g_id);
     DIE_IF(sret != SSG_SUCCESS, "ssg_group_id_load");
+    DIE_IF(num_addrs < 1, "ssg_group_id_load");
 
     /* start observging the SSG server group */
     sret = ssg_group_observe(mid, g_id);

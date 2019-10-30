@@ -271,7 +271,7 @@ int main(int argc, char *argv[])
 
     /* store the gid if requested */
     if (opts.gid_file)
-        ssg_group_id_store(opts.gid_file, g_id);
+        ssg_group_id_store(opts.gid_file, g_id, 1);
 
     /* sleep for given duration to allow group time to run */
     if (opts.shutdown_time > 0)

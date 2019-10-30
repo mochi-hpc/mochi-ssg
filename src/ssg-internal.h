@@ -74,8 +74,8 @@ typedef struct ssg_mid_state
 typedef struct ssg_group_descriptor
 {
     ssg_group_id_t g_id;
-    uint64_t magic_nr;
-    char *addr_str;
+    size_t num_addr_strs;
+    char **addr_strs;
     int64_t cred;
     int owner_status;
     union
@@ -162,7 +162,7 @@ void ssg_deregister_rpcs(
     ssg_mid_state_t *mid_state);
 int ssg_group_join_send(
     ssg_group_id_t g_id,
-    const char * target_addr_str,
+    hg_addr_t group_target_addr,
     ssg_mid_state_t * mid_state,
     char ** group_name,
     int * group_size,
@@ -170,11 +170,11 @@ int ssg_group_join_send(
     void ** view_buf);
 int ssg_group_leave_send(
     ssg_group_id_t g_id,
-    hg_addr_t target_addr,
+    hg_addr_t group_target_addr,
     ssg_mid_state_t * mid_state);
 int ssg_group_observe_send(
     ssg_group_id_t g_id,
-    const char * target_addr_str,
+    hg_addr_t group_target_addr,
     ssg_mid_state_t * mid_state,
     char ** group_name,
     int * group_size, 

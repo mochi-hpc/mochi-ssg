@@ -55,7 +55,8 @@ static ssg_member_state_t * ssg_group_view_add_member(
     const char * addr_str, hg_addr_t addr, ssg_member_id_t member_id,
     ssg_group_view_t * view);
 static ssg_group_descriptor_t * ssg_group_descriptor_create(
-    ssg_group_id_t g_id, const char * leader_addr_str, int owner_status);
+    ssg_group_id_t g_id, int num_addrs, char ** addr_strs,
+    int64_t cred, int owner_status);
 static void ssg_group_destroy_internal(
     ssg_group_t * g);
 static void ssg_observed_group_destroy(
@@ -66,7 +67,7 @@ static void ssg_group_descriptor_free(
     ssg_group_descriptor_t * descriptor);
 static ssg_member_id_t ssg_gen_member_id(
     const char * addr_str);
-static const char ** ssg_addr_str_buf_to_list(
+static char ** ssg_addr_str_buf_to_list(
     const char * buf, int num_addrs);
 static int ssg_member_id_sort_cmp( 
     const void *a, const void *b);
@@ -297,7 +298,7 @@ ssg_group_id_t ssg_group_create_config(
     }
 
     /* set up address string array for group members */
-    addr_strs = ssg_addr_str_buf_to_list(addr_str_buf, num_addrs);
+    addr_strs = (const char **)ssg_addr_str_buf_to_list(addr_str_buf, num_addrs);
     if (!addr_strs) goto fini;
 
     /* invoke the generic group create routine using our list of addrs */
@@ -365,7 +366,7 @@ ssg_group_id_t ssg_group_create_mpi(
             addr_str_buf, sizes, sizes_psum, MPI_BYTE, comm);
 
     /* set up address string array for group members */
-    addr_strs = ssg_addr_str_buf_to_list(addr_str_buf, comm_size);
+    addr_strs = (const char **)ssg_addr_str_buf_to_list(addr_str_buf, comm_size);
     if (!addr_strs) goto fini;
 
     /* invoke the generic group create routine using our list of addrs */
@@ -576,20 +577,23 @@ int ssg_group_destroy(
     return SSG_SUCCESS;
 }
 
-int ssg_group_join(
+int ssg_group_join_target(
     margo_instance_id mid,
     ssg_group_id_t group_id,
+    const char *target_addr_str,
     ssg_membership_update_cb update_cb,
     void * update_cb_dat)
 {
     ssg_mid_state_t *mid_state;
     ssg_group_descriptor_t *g_desc;
+    hg_addr_t target_addr = HG_ADDR_NULL;
     char *group_name = NULL;
     int group_size;
     ssg_group_config_t group_config;
     void *view_buf = NULL;
     const char **addr_strs = NULL;
     ssg_group_id_t create_g_id;
+    hg_return_t hret;
     int sret = SSG_FAILURE;
 
     if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID) goto fini;
@@ -626,7 +630,18 @@ int ssg_group_join(
     mid_state = ssg_acquire_mid_state(mid);
     if(!mid_state) goto fini;
 
-    sret = ssg_group_join_send(group_id, g_desc->addr_str, mid_state,
+    /* if no target specified, use random address string from descriptor */
+    if (!target_addr_str)
+    {
+        int addr_index = mid_state->self_id % g_desc->num_addr_strs;
+        target_addr_str = g_desc->addr_strs[addr_index];
+    }
+
+    hret = margo_addr_lookup(mid_state->mid, target_addr_str,
+        &target_addr);
+    if (hret != HG_SUCCESS) goto fini;
+
+    sret = ssg_group_join_send(group_id, target_addr, mid_state,
         &group_name, &group_size, &group_config, &view_buf);
     if (sret != SSG_SUCCESS || !group_name || !view_buf) goto fini;
 
@@ -634,7 +649,7 @@ int ssg_group_join(
     ssg_group_descriptor_free(g_desc);
 
     /* set up address string array for all group members */
-    addr_strs = ssg_addr_str_buf_to_list(view_buf, group_size);
+    addr_strs = (const char **)ssg_addr_str_buf_to_list(view_buf, group_size);
     if (!addr_strs) goto fini;
 
     /* append self address string to list of group member address strings */
@@ -655,6 +670,8 @@ int ssg_group_join(
     }
 
 fini:
+    if (target_addr != HG_ADDR_NULL)
+        margo_addr_free(mid_state->mid, target_addr);
     free(addr_strs);
     free(view_buf);
     free(group_name);
@@ -662,10 +679,13 @@ fini:
     return sret;
 }
 
-int ssg_group_leave(
-    ssg_group_id_t group_id)
+int ssg_group_leave_target(
+    ssg_group_id_t group_id,
+    const char *target_addr_str)
 {
     ssg_group_descriptor_t *g_desc;
+    hg_addr_t target_addr;
+    hg_return_t hret;
     int sret = SSG_FAILURE;
 
     if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID) return sret;
@@ -693,9 +713,25 @@ int ssg_group_leave(
 
     ABT_rwlock_unlock(ssg_rt->lock);
 
-    /* send leave request to first member in our group view */
-    sret = ssg_group_leave_send(group_id, g_desc->g_data.g->view.member_map->addr,
+    if (!target_addr_str)
+    {
+        /* if no target specified, just send to first member in our view */
+        target_addr = g_desc->g_data.g->view.member_map->addr;
+    }
+    else
+    {
+        hret = margo_addr_lookup(g_desc->g_data.g->mid_state->mid, target_addr_str,
+            &target_addr);
+        if (hret != HG_SUCCESS) return sret;
+    }
+
+    /* send leave request to target member */
+    sret = ssg_group_leave_send(group_id, target_addr,
         g_desc->g_data.g->mid_state);
+
+    if (target_addr_str)
+        margo_addr_free(g_desc->g_data.g->mid_state->mid, target_addr);
+
     if (sret != SSG_SUCCESS) return sret;
 
     /* at least one group member knows of the leave request -- safe to
@@ -711,17 +747,20 @@ int ssg_group_leave(
     return sret;
 }
 
-int ssg_group_observe(
+int ssg_group_observe_target(
     margo_instance_id mid,
-    ssg_group_id_t group_id)
+    ssg_group_id_t group_id,
+    const char *target_addr_str)
 {
     ssg_mid_state_t *mid_state = NULL;
     ssg_group_descriptor_t *g_desc;
+    hg_addr_t target_addr = HG_ADDR_NULL;
     ssg_observed_group_t *og = NULL;
     char *group_name = NULL;
     int group_size;
     void *view_buf = NULL;
     const char **addr_strs = NULL;
+    hg_return_t hret;
     int sret = SSG_FAILURE;
 
     if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID) goto fini;
@@ -758,15 +797,26 @@ int ssg_group_observe(
     mid_state = ssg_acquire_mid_state(mid);
     if(!mid_state) goto fini;
 
-    /* send the observe request to a group member to initiate a bulk transfer
+    /* if no target specified, use random address string from descriptor */
+    if (!target_addr_str)
+    {
+        int addr_index = mid_state->self_id % g_desc->num_addr_strs;
+        target_addr_str = g_desc->addr_strs[addr_index];
+    }
+
+    hret = margo_addr_lookup(mid_state->mid, target_addr_str,
+        &target_addr);
+    if (hret != HG_SUCCESS) goto fini;
+
+    /* send the observe request to the target to initiate a bulk transfer
      * of the group's membership view
      */
-    sret = ssg_group_observe_send(group_id, g_desc->addr_str, mid_state,
+    sret = ssg_group_observe_send(group_id, target_addr, mid_state,
         &group_name, &group_size, &view_buf);
     if (sret != SSG_SUCCESS || !group_name || !view_buf) goto fini;
 
     /* set up address string array for all group members */
-    addr_strs = ssg_addr_str_buf_to_list(view_buf, group_size);
+    addr_strs = (const char **)ssg_addr_str_buf_to_list(view_buf, group_size);
     if (!addr_strs) goto fini;
 
     /* allocate an SSG observed group data structure and initialize some of it */
@@ -795,6 +845,8 @@ int ssg_group_observe(
     group_name = NULL;
     og = NULL;
 fini:
+    if (target_addr != HG_ADDR_NULL)
+        margo_addr_free(mid_state->mid, target_addr);
     if (og)
     {
         ssg_group_view_destroy(&og->view, og->mid_state->mid);
@@ -1186,12 +1238,13 @@ int ssg_get_group_member_ids_from_range(
 }
 
 char *ssg_group_id_get_addr_str(
-    ssg_group_id_t group_id)
+    ssg_group_id_t group_id,
+    unsigned int addr_index)
 {
     ssg_group_descriptor_t *g_desc;
     char *addr_str;
 
-    if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID) return 0;
+    if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID) return NULL;
 
     ABT_rwlock_rdlock(ssg_rt->lock);
 
@@ -1204,7 +1257,13 @@ char *ssg_group_id_get_addr_str(
         return NULL;
     }
 
-    addr_str = strdup(g_desc->addr_str);
+    if (addr_index >= g_desc->num_addr_strs)
+    {
+        ABT_rwlock_unlock(ssg_rt->lock);
+        return NULL;
+    }
+
+    addr_str = strdup(g_desc->addr_strs[addr_index]);
 
     ABT_rwlock_unlock(ssg_rt->lock);
 
@@ -1239,17 +1298,24 @@ int64_t ssg_group_id_get_cred(
 
 void ssg_group_id_serialize(
     ssg_group_id_t group_id,
+    int num_addrs,
     char ** buf_p,
     size_t * buf_size_p)
 {
     ssg_group_descriptor_t *g_desc;
-    size_t alloc_size;
-    char *gid_buf, *p; 
+    uint64_t magic_nr = SSG_MAGIC_NR;
+    uint64_t gid_size, addr_str_size = 0;
+    uint32_t num_addrs_buf;
+    char *gid_buf, *p;
+    unsigned int i;
+    ssg_group_view_t *view = NULL;
+    ABT_rwlock view_lock;
+    ssg_member_state_t *state, *tmp;
 
     *buf_p = NULL;
     *buf_size_p = 0;
 
-    if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID) return;
+    if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID || num_addrs == 0) return;
 
     ABT_rwlock_rdlock(ssg_rt->lock);
 
@@ -1263,12 +1329,51 @@ void ssg_group_id_serialize(
     }
 
     /* determine needed buffer size */
-    alloc_size = (sizeof(g_desc->magic_nr) + sizeof(g_desc->g_id) +
-        strlen(g_desc->addr_str) + 1);
+    gid_size = (sizeof(magic_nr) + sizeof(g_desc->g_id) + sizeof(num_addrs_buf));
+    switch (g_desc->owner_status)
+    {
+        case SSG_OWNER_IS_UNASSOCIATED:
+            assert(g_desc->addr_strs);
+            if ((num_addrs == SSG_ALL_MEMBERS) ||
+                    (g_desc->num_addr_strs < (unsigned int)num_addrs))
+                num_addrs_buf = g_desc->num_addr_strs;
+            else
+                num_addrs_buf = num_addrs;
+            for (i = 0; i < num_addrs_buf; i++)
+                addr_str_size += strlen(g_desc->addr_strs[i]) + 1;
+            break;
+        case SSG_OWNER_IS_MEMBER:
+            view = &g_desc->g_data.g->view;
+            view_lock = g_desc->g_data.g->lock;
+            i = 1;
+            /* serialize self string first ... */
+            addr_str_size += strlen(g_desc->g_data.g->mid_state->self_addr_str) + 1;
+            /* fall through to view serialization */
+        case SSG_OWNER_IS_OBSERVER:
+            if (!view)
+            {
+                view = &g_desc->g_data.og->view;
+                view_lock = g_desc->g_data.og->lock;
+                i = 0;
+            }
+            if ((num_addrs == SSG_ALL_MEMBERS) || (view->size < (unsigned int)num_addrs))
+                num_addrs_buf = view->size;
+            else
+                num_addrs_buf = num_addrs;
+            ABT_rwlock_rdlock(view_lock);
+            HASH_ITER(hh, view->member_map, state, tmp)
+            {
+                if (i == num_addrs_buf) break;
+                addr_str_size += strlen(state->addr_str) + 1;
+                i++;
+            }
+            ABT_rwlock_unlock(view_lock);
+            break;
+    }
     if (g_desc->cred >= 0)
-        alloc_size += sizeof(g_desc->cred);
+        gid_size += sizeof(g_desc->cred);
 
-    gid_buf = malloc(alloc_size);
+    gid_buf = malloc((size_t)(gid_size + addr_str_size));
     if (!gid_buf)
     {
         ABT_rwlock_unlock(ssg_rt->lock);
@@ -1277,22 +1382,46 @@ void ssg_group_id_serialize(
 
     /* serialize */
     p = gid_buf;
-    *(uint64_t *)p = g_desc->magic_nr;
-    p += sizeof(uint64_t);
+    *(uint64_t *)p = magic_nr;
+    p += sizeof(magic_nr);
     *(ssg_group_id_t *)p = g_desc->g_id;
-    p += sizeof(ssg_group_id_t);
-    strcpy(p, g_desc->addr_str);
-    if (g_desc->cred >= 0)
+    p += sizeof(g_desc->g_id);
+    *(uint32_t *)p = num_addrs_buf;
+    p += sizeof(num_addrs_buf);
+    i = 0;
+    switch (g_desc->owner_status)
     {
-        p += strlen(g_desc->addr_str) + 1;
-        *(int64_t *)p = g_desc->cred;
+        case SSG_OWNER_IS_UNASSOCIATED:
+            for (; i < num_addrs_buf; i++)
+            {
+                strcpy(p, g_desc->addr_strs[i]);
+                p += strlen(g_desc->addr_strs[i]) + 1;
+            }
+            break;
+        case SSG_OWNER_IS_MEMBER:
+            /* serialize self string first ... */
+            i = 1;
+            strcpy(p, g_desc->g_data.g->mid_state->self_addr_str);
+            p += strlen(g_desc->g_data.g->mid_state->self_addr_str) + 1;
+            /* fall through to view serialization */
+        case SSG_OWNER_IS_OBSERVER:
+            HASH_ITER(hh, view->member_map, state, tmp)
+            {
+                if (i == num_addrs_buf) break;
+                strcpy(p, state->addr_str);
+                p += strlen(state->addr_str) + 1;
+                i++;
+            }
+            break;
     }
+    if (g_desc->cred >= 0)
+        *(int64_t *)p = g_desc->cred;
     /* the rest of the descriptor is stateful and not appropriate for serializing... */
 
     ABT_rwlock_unlock(ssg_rt->lock);
 
     *buf_p = gid_buf;
-    *buf_size_p = alloc_size;
+    *buf_size_p = gid_size + addr_str_size;
 
     return;
 }
@@ -1300,21 +1429,27 @@ void ssg_group_id_serialize(
 void ssg_group_id_deserialize(
     const char * buf,
     size_t buf_size,
+    int * num_addrs,
     ssg_group_id_t * group_id_p)
 {
     const char *tmp_buf = buf;
     size_t min_buf_size;
     uint64_t magic_nr;
     ssg_group_id_t g_id;
-    const char *addr_str;
+    uint32_t num_addrs_buf;
+    int tmp_num_addrs = *num_addrs;
+    char **addr_strs;
+    int64_t cred;
+    int i;
     ssg_group_descriptor_t *g_desc;
 
     *group_id_p = SSG_GROUP_ID_INVALID;
+    *num_addrs = 0;
 
-    if (!ssg_rt || !buf || buf_size == 0) return;
+    if (!ssg_rt || !buf || buf_size == 0 || tmp_num_addrs == 0) return;
 
     /* check to ensure the buffer contains enough data to make a group ID */
-    min_buf_size = (sizeof(g_desc->magic_nr) + sizeof(g_desc->g_id) + 1);
+    min_buf_size = (sizeof(magic_nr) + sizeof(g_desc->g_id) + sizeof(num_addrs_buf) + 1);
     if (buf_size < min_buf_size)
     {
         fprintf(stderr, "Error: Serialized buffer does not contain a valid SSG group ID\n");
@@ -1331,17 +1466,36 @@ void ssg_group_id_deserialize(
     tmp_buf += sizeof(uint64_t);
     g_id = *(ssg_group_id_t *)tmp_buf;
     tmp_buf += sizeof(ssg_group_id_t);
-    addr_str = tmp_buf;
-    tmp_buf += strlen(addr_str) + 1;
+    num_addrs_buf = *(uint32_t *)tmp_buf;
+    tmp_buf += sizeof(uint32_t);
+    if ((tmp_num_addrs == SSG_ALL_MEMBERS) ||
+            (num_addrs_buf < (unsigned int)tmp_num_addrs))
+        tmp_num_addrs = num_addrs_buf;
 
-    g_desc = ssg_group_descriptor_create(g_id, addr_str,
+    /* convert buffer of address strings to an arrray */
+    addr_strs = ssg_addr_str_buf_to_list(tmp_buf, tmp_num_addrs);
+    if (!addr_strs)
+        return;
+    tmp_buf = addr_strs[tmp_num_addrs - 1] + strlen(addr_strs[tmp_num_addrs - 1]) + 1;
+    if ((buf_size - (tmp_buf - buf)) == sizeof(int64_t))
+        cred = *(int64_t *)tmp_buf;
+    else
+        cred = -1;
+
+    for (i = 0; i < tmp_num_addrs; i++)
+    {
+        /* we dup addresses from the given buf, since we don't know its lifetime */
+        addr_strs[i] = strdup(addr_strs[i]);
+    }
+
+    g_desc = ssg_group_descriptor_create(g_id, tmp_num_addrs, addr_strs, cred,
         SSG_OWNER_IS_UNASSOCIATED);
     if (!g_desc)
-        return;
-
-    if ((buf_size - (tmp_buf - buf)) == sizeof(int64_t))
     {
-        g_desc->cred = *(int64_t *)tmp_buf;
+        for (i = 0; i < tmp_num_addrs; i++)
+            free(addr_strs[i]);
+        free(addr_strs);
+        return;
     }
 
     /* add this group descriptor to our global table */
@@ -1351,13 +1505,15 @@ void ssg_group_id_deserialize(
     ABT_rwlock_unlock(ssg_rt->lock);
 
     *group_id_p = g_id;
+    *num_addrs = tmp_num_addrs;
 
     return;
 }
 
 int ssg_group_id_store(
     const char * file_name,
-    ssg_group_id_t group_id)
+    ssg_group_id_t group_id,
+    int num_addrs)
 {
     int fd;
     char *buf;
@@ -1372,7 +1528,7 @@ int ssg_group_id_store(
         return SSG_FAILURE;
     }
 
-    ssg_group_id_serialize(group_id, &buf, &buf_size);
+    ssg_group_id_serialize(group_id, num_addrs, &buf, &buf_size);
     if (buf == NULL)
     {
         fprintf(stderr, "Error: Unable to serialize SSG group ID.\n");
@@ -1396,6 +1552,7 @@ int ssg_group_id_store(
 
 int ssg_group_id_load(
     const char * file_name,
+    int * num_addrs,
     ssg_group_id_t * group_id_p)
 {
     int fd;
@@ -1444,7 +1601,7 @@ int ssg_group_id_load(
         return SSG_FAILURE;
     }
 
-    ssg_group_id_deserialize(buf, (size_t)bytes_read, group_id_p);
+    ssg_group_id_deserialize(buf, (size_t)bytes_read, num_addrs, group_id_p);
     if (*group_id_p == SSG_GROUP_ID_INVALID)
     {
         fprintf(stderr, "Error: Unable to deserialize SSG group ID\n");
@@ -1696,18 +1853,10 @@ static ssg_group_id_t ssg_group_create_internal(
 
     /* generate unique descriptor for this group */
     g_id = ssg_hash64_str(group_name);
-    g_desc = ssg_group_descriptor_create(g_id, mid_state->self_addr_str,
+    g_desc = ssg_group_descriptor_create(g_id, 0, NULL, group_conf->ssg_credential,
         SSG_OWNER_IS_MEMBER);
     if (g_desc == NULL) goto fini;
     g_desc->g_data.g = g;
-
-    /* add credential to descriptor if given */
-    if (group_conf)
-    {
-        g_desc->cred = group_conf->ssg_credential;
-    }
-    else
-        g_desc->cred = -1;
 
     /* first make sure we aren't re-creating an existing group, then go ahead and
      * stash this group descriptor -- we will use the group lock while we finish
@@ -1947,7 +2096,8 @@ static ssg_member_state_t * ssg_group_view_add_member(
 }
 
 static ssg_group_descriptor_t * ssg_group_descriptor_create(
-    ssg_group_id_t g_id, const char * leader_addr_str, int owner_status)
+    ssg_group_id_t g_id, int num_addrs, char ** addr_strs,
+    int64_t cred, int owner_status)
 {
     ssg_group_descriptor_t *descriptor;
 
@@ -1955,15 +2105,10 @@ static ssg_group_descriptor_t * ssg_group_descriptor_create(
     if (!descriptor) return NULL;
     memset(descriptor, 0, sizeof(*descriptor));
 
-    /* hash the group name to obtain an 64-bit unique ID */
-    descriptor->magic_nr = SSG_MAGIC_NR;
     descriptor->g_id = g_id;
-    descriptor->addr_str = strdup(leader_addr_str);
-    if (!descriptor->addr_str)
-    {
-        free(descriptor);
-        return NULL;
-    }
+    descriptor->num_addr_strs = num_addrs;
+    descriptor->addr_strs = addr_strs;
+    descriptor->cred = cred;
     descriptor->owner_status = owner_status;
     return descriptor;
 }
@@ -2041,9 +2186,16 @@ static void ssg_group_view_destroy(
 static void ssg_group_descriptor_free(
     ssg_group_descriptor_t * descriptor)
 {
+    unsigned int i;
+
     if (descriptor)
     {
-        free(descriptor->addr_str);
+        if (descriptor->addr_strs)
+        {
+            for (i = 0; i < descriptor->num_addr_strs; i++)
+                free(descriptor->addr_strs[i]);
+            free(descriptor->addr_strs);
+        }
         free(descriptor);
     }
     return;
@@ -2063,17 +2215,17 @@ static ssg_member_id_t ssg_gen_member_id(
     return id;
 }
 
-static const char ** ssg_addr_str_buf_to_list(
+static char ** ssg_addr_str_buf_to_list(
     const char * buf, int num_addrs)
 {
     int i;
-    const char **ret = malloc(num_addrs * sizeof(*ret));
+    char **ret = malloc(num_addrs * sizeof(*ret));
     if (ret == NULL) return NULL;
 
-    ret[0] = buf;
+    ret[0] = (char *)buf;
     for (i = 1; i < num_addrs; i++)
     {
-        const char * a = ret[i-1];
+        char * a = ret[i-1];
         ret[i] = a + strlen(a) + 1;
     }
     return ret;

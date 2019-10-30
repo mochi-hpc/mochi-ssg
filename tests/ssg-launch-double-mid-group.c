@@ -216,9 +216,9 @@ int main(int argc, char *argv[])
     if (opts.gid_file)
     {
         snprintf(scratch, 1024, "%s-%d", opts.gid_file, 1);
-        ssg_group_id_store(scratch, g1_id);
+        ssg_group_id_store(scratch, g1_id, 1);
         snprintf(scratch, 1024, "%s-%d", opts.gid_file, 2);
-        ssg_group_id_store(scratch, g2_id);
+        ssg_group_id_store(scratch, g2_id, 1);
     }
 
     /* sleep for given duration to allow group time to run */
