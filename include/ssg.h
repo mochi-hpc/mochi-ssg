@@ -165,9 +165,6 @@ int ssg_group_destroy(
  * @param[in] update_cb         Callback function executed on group membership changes
  * @param[in] update_cb_dat     User data pointer passed to membership update callback
  * @returns SSG_SUCCESS on success, SSG error code otherwise
- *
- * NOTE: Use the returned group ID to refer to the group, as the input group ID
- *       becomes stale after the join is completed.
  */
 #define ssg_group_join(mid, group_id, update_cb, update_cb_dat) \
     ssg_group_join_target(mid, group_id, NULL, update_cb, update_cb_dat)
@@ -182,9 +179,6 @@ int ssg_group_destroy(
  * @param[in] update_cb         Callback function executed on group membership changes
  * @param[in] update_cb_dat     User data pointer passed to membership update callback
  * @returns SSG_SUCCESS on success, SSG error code otherwise
- *
- * NOTE: Use the returned group ID to refer to the group, as the input group ID
- *       becomes stale after the join is completed.
  */
 int ssg_group_join_target(
     margo_instance_id mid,
