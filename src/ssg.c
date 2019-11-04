@@ -684,7 +684,7 @@ int ssg_group_leave_target(
     const char *target_addr_str)
 {
     ssg_group_descriptor_t *g_desc;
-    hg_addr_t target_addr;
+    hg_addr_t target_addr = HG_ADDR_NULL;
     hg_return_t hret;
     int sret = SSG_FAILURE;
 
@@ -708,7 +708,7 @@ int ssg_group_leave_target(
         return sret;
     }
 
-    /* remove the descriptor  */
+    /* remove the descriptor */
     HASH_DEL(ssg_rt->g_desc_table, g_desc);
 
     ABT_rwlock_unlock(ssg_rt->lock);
@@ -716,7 +716,10 @@ int ssg_group_leave_target(
     if (!target_addr_str)
     {
         /* if no target specified, just send to first member in our view */
-        target_addr = g_desc->g_data.g->view.member_map->addr;
+        ABT_rwlock_rdlock(g_desc->g_data.g->lock);
+        if (g_desc->g_data.g->view.size > 1)
+            target_addr = g_desc->g_data.g->view.member_map->addr;
+        ABT_rwlock_unlock(g_desc->g_data.g->lock);
     }
     else
     {
@@ -725,17 +728,20 @@ int ssg_group_leave_target(
         if (hret != HG_SUCCESS) return sret;
     }
 
-    /* send leave request to target member */
-    sret = ssg_group_leave_send(group_id, target_addr,
-        g_desc->g_data.g->mid_state);
+    if (target_addr != HG_ADDR_NULL)
+    {
+        /* send leave request to target member if one is available */
+        sret = ssg_group_leave_send(group_id, target_addr,
+            g_desc->g_data.g->mid_state);
 
-    if (target_addr_str)
-        margo_addr_free(g_desc->g_data.g->mid_state->mid, target_addr);
+        if (target_addr_str)
+            margo_addr_free(g_desc->g_data.g->mid_state->mid, target_addr);
 
-    if (sret != SSG_SUCCESS) return sret;
+        if (sret != SSG_SUCCESS) return sret;
+    }
 
-    /* at least one group member knows of the leave request -- safe to
-     * shutdown the group locally
+    /* at this point we've tried forwarding the leave request to a group member --
+     * safe to shutdown the group locally
      */
 
     /* destroy group and free old descriptor */
