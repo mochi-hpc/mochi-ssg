@@ -18,6 +18,10 @@
 
 #define SSG_VIEW_BUF_DEF_SIZE (128 * 1024)
 
+/* XXX what should we use for a reasonable timeout value? */
+/* default timeout value of 1-second for SSG RPCs */
+#define SSG_DEFAULT_OP_TIMEOUT 1000.0
+
 /* SSG RPC types and (de)serialization routines */
 
 /* TODO join and observe are nearly identical -- refactor */
@@ -153,7 +157,7 @@ int ssg_group_join_send(
     join_req.g_id = g_id;
     join_req.addr_str = mid_state->self_addr_str;
     join_req.bulk_handle = bulk_handle;
-    hret = margo_forward(handle, &join_req);
+    hret = margo_forward_timed(handle, &join_req, SSG_DEFAULT_OP_TIMEOUT);
     if (hret != HG_SUCCESS) goto fini;
 
     hret = margo_get_output(handle, &join_resp);
@@ -179,7 +183,7 @@ int ssg_group_join_send(
         if (hret != HG_SUCCESS) goto fini;
 
         join_req.bulk_handle = bulk_handle;
-        hret = margo_forward(handle, &join_req);
+        hret = margo_forward_timed(handle, &join_req, SSG_DEFAULT_OP_TIMEOUT);
         if (hret != HG_SUCCESS) goto fini;
 
         hret = margo_get_output(handle, &join_resp);
@@ -344,7 +348,7 @@ int ssg_group_leave_send(
 
     leave_req.g_id = g_id;
     leave_req.member_id = mid_state->self_id;
-    hret = margo_forward(handle, &leave_req);
+    hret = margo_forward_timed(handle, &leave_req, SSG_DEFAULT_OP_TIMEOUT);
     if (hret != HG_SUCCESS) goto fini;
 
     hret = margo_get_output(handle, &leave_resp);
@@ -462,7 +466,7 @@ int ssg_group_observe_send(
     /* send an observe request to the given group member address */
     observe_req.g_id = g_id;
     observe_req.bulk_handle = bulk_handle;
-    hret = margo_forward(handle, &observe_req);
+    hret = margo_forward_timed(handle, &observe_req, SSG_DEFAULT_OP_TIMEOUT);
     if (hret != HG_SUCCESS) goto fini;
 
     hret = margo_get_output(handle, &observe_resp);
@@ -488,7 +492,7 @@ int ssg_group_observe_send(
         if (hret != HG_SUCCESS) goto fini;
 
         observe_req.bulk_handle = bulk_handle;
-        hret = margo_forward(handle, &observe_req);
+        hret = margo_forward_timed(handle, &observe_req, SSG_DEFAULT_OP_TIMEOUT);
         if (hret != HG_SUCCESS) goto fini;
 
         hret = margo_get_output(handle, &observe_resp);
