@@ -733,11 +733,13 @@ int ssg_group_leave_target(
         /* send leave request to target member if one is available */
         sret = ssg_group_leave_send(group_id, target_addr,
             g_desc->g_data.g->mid_state);
+        /* XXX note that the leave request forward is best effort currently --
+         * it is possible that no other group member receives the leave request,
+         * in which case the member will have to be evicted by fault detection
+         */
 
         if (target_addr_str)
             margo_addr_free(g_desc->g_data.g->mid_state->mid, target_addr);
-
-        if (sret != SSG_SUCCESS) return sret;
     }
 
     /* at this point we've tried forwarding the leave request to a group member --
