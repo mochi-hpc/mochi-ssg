@@ -1533,8 +1533,8 @@ int ssg_group_id_store(
     fd = open(file_name, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd < 0)
     {
-        fprintf(stderr, "Error: Unable to open file %s for storing SSG group ID\n",
-            file_name);
+        fprintf(stderr, "Error: Unable to open file %s for storing SSG group ID: %s\n",
+            file_name, strerror(errno));
         return SSG_FAILURE;
     }
 
