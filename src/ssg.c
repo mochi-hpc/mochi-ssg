@@ -1356,7 +1356,8 @@ void ssg_group_id_serialize(
             i = 1;
             /* serialize self string first ... */
             addr_str_size += strlen(g_desc->g_data.g->mid_state->self_addr_str) + 1;
-            /* fall through to view serialization */
+            /* deliberately falls through to view serialization.  Extra comment for gcc Wimplicit-fallthrough */
+            // falls through
         case SSG_OWNER_IS_OBSERVER:
             if (!view)
             {
@@ -1411,7 +1412,8 @@ void ssg_group_id_serialize(
             i = 1;
             strcpy(p, g_desc->g_data.g->mid_state->self_addr_str);
             p += strlen(g_desc->g_data.g->mid_state->self_addr_str) + 1;
-            /* fall through to view serialization */
+            /* fall-through to view serialization.  Next line for gcc Wimplicit-fallthrough */
+            // falls through
         case SSG_OWNER_IS_OBSERVER:
             HASH_ITER(hh, view->member_map, state, tmp)
             {

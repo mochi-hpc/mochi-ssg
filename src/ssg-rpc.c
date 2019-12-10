@@ -628,7 +628,7 @@ static int ssg_group_serialize(
     ssg_member_state_t *member_state, *tmp;
     hg_size_t group_buf_size = 0;
     void *group_buf;
-    void *buf_p;
+    char *buf_p;
 
     *buf = NULL;
     *buf_size = 0;
