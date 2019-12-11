@@ -225,8 +225,8 @@ ssg_group_id_t ssg_group_create_config(
     ssg_membership_update_cb update_cb,
     void * update_cb_dat)
 {
-    ssg_mid_state_t *mid_state;
-    int fd;
+    ssg_mid_state_t *mid_state = NULL;
+    int fd=-1;
     struct stat st;
     char *rd_buf = NULL;
     ssize_t rd_buf_size;
@@ -326,7 +326,7 @@ ssg_group_id_t ssg_group_create_mpi(
     ssg_membership_update_cb update_cb,
     void * update_cb_dat)
 {
-    ssg_mid_state_t *mid_state;
+    ssg_mid_state_t *mid_state=NULL;
     int i;
     int self_addr_str_size = 0;
     char *addr_str_buf = NULL;
@@ -584,7 +584,7 @@ int ssg_group_join_target(
     ssg_membership_update_cb update_cb,
     void * update_cb_dat)
 {
-    ssg_mid_state_t *mid_state;
+    ssg_mid_state_t *mid_state=NULL;
     ssg_group_descriptor_t *g_desc;
     hg_addr_t target_addr = HG_ADDR_NULL;
     char *group_name = NULL;
@@ -1313,7 +1313,7 @@ void ssg_group_id_serialize(
     ssg_group_descriptor_t *g_desc;
     uint64_t magic_nr = SSG_MAGIC_NR;
     uint64_t gid_size, addr_str_size = 0;
-    uint32_t num_addrs_buf;
+    uint32_t num_addrs_buf=0;
     char *gid_buf, *p;
     unsigned int i;
     ssg_group_view_t *view = NULL;
