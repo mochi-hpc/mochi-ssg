@@ -4,7 +4,6 @@
 
 int main(int argc, char **argv)
 {
-    char ssg_group_buf[256];
     int ret;
     ssg_group_id_t gid;
     margo_instance_id mid;
@@ -15,8 +14,7 @@ int main(int argc, char **argv)
     ssg_init();
 
     int count=1;
-    int actual=0;
-    ret = ssg_group_id_load(argv[2], &count, &actual, &gid);
+    ret = ssg_group_id_load(argv[2], &count, &gid);
     assert (ret == SSG_SUCCESS);
 
     fprintf(stderr, "        attaching...\n");

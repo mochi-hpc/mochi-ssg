@@ -31,7 +31,10 @@ int main(int argc, char **argv)
     ret = ssg_init();
     ASSERT(ret == 0, "ssg_init failed (ret = %d)\n", ret);
     gid = ssg_group_create_mpi(mid, GROUP_NAME, MPI_COMM_WORLD, NULL, NULL, NULL);
-    ASSERT(gid != SSG_GROUP_ID_NULL, "ssg_group_create_mpi() failed\n", gid);
+    if (gid == SSG_GROUP_ID_INVALID) {
+        fprintf(stderr, "ssg_group_create_mpi failed\n");
+        exit(-1);
+    }
     margo_push_finalize_callback(mid, &finalized_ssg_group_cb, (void*)&gid);
 
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
