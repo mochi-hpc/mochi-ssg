@@ -106,7 +106,7 @@ int ssg_finalize(
  * @param[in] group_conf        Configuration parameters for the group
  * @param[in] update_cb         Callback function executed on group membership changes
  * @param[in] update_cb_dat     User data pointer passed to membership update callback
- * @returns SSG group identifier for created group on success, SSG_GROUP_ID_NULL otherwise
+ * @returns SSG group identifier for created group on success, SSG_GROUP_ID_INVALID otherwise
  *
  * NOTE: The HG address string of the caller of this function must be present in
  * the list of address strings given in 'group_addr_strs'. That is, the caller
@@ -133,7 +133,7 @@ ssg_group_id_t ssg_group_create(
  * @param[in] group_conf        Configuration parameters for the group
  * @param[in] update_cb         Callback function executed on group membership changes
  * @param[in] update_cb_dat     User data pointer passed to membership update callback
- * @returns SSG group identifier for created group on success, SSG_GROUP_ID_NULL otherwise
+ * @returns SSG group identifier for created group on success, SSG_GROUP_ID_INVALID otherwise
  *
  * 
  * NOTE: The HG address string of the caller of this function must be present in
