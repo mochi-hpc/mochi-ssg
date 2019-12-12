@@ -771,7 +771,10 @@ int ssg_group_observe_target(
     hg_return_t hret;
     int sret = SSG_FAILURE;
 
-    if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID) goto fini;
+    if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID) {
+	fprintf(stderr, "SSG init not called or Invalid group id\n");
+	goto fini;
+    }
 
     ABT_rwlock_rdlock(ssg_rt->lock);
 
@@ -803,7 +806,10 @@ int ssg_group_observe_target(
     ABT_rwlock_unlock(ssg_rt->lock);
 
     mid_state = ssg_acquire_mid_state(mid);
-    if(!mid_state) goto fini;
+    if(!mid_state) {
+	fprintf(stderr, "Error: ssg_acquire_mid_state failed\n");
+	goto fini;
+    }
 
     /* if no target specified, use random address string from descriptor */
     if (!target_addr_str)
@@ -814,18 +820,26 @@ int ssg_group_observe_target(
 
     hret = margo_addr_lookup(mid_state->mid, target_addr_str,
         &target_addr);
-    if (hret != HG_SUCCESS) goto fini;
-
+    if (hret != HG_SUCCESS) {
+	fprintf(stderr, "unable to resolve address\n");
+	goto fini;
+    }
     /* send the observe request to the target to initiate a bulk transfer
      * of the group's membership view
      */
     sret = ssg_group_observe_send(group_id, target_addr, mid_state,
         &group_name, &group_size, &view_buf);
-    if (sret != SSG_SUCCESS || !group_name || !view_buf) goto fini;
+    if (sret != SSG_SUCCESS || !group_name || !view_buf) {
+	fprintf(stderr, "unable to send observe request (ret: %d; %lu %p %p)\n", sret, group_id, group_name, view_buf);
+	goto fini;
+    }
 
     /* set up address string array for all group members */
     addr_strs = (const char **)ssg_addr_str_buf_to_list(view_buf, group_size);
-    if (!addr_strs) goto fini;
+    if (!addr_strs) {
+	fprintf(stderr, "unable to set up address string array\n");
+	goto fini;
+    }
 
     /* allocate an SSG observed group data structure and initialize some of it */
     og = malloc(sizeof(*og));
@@ -838,7 +852,10 @@ int ssg_group_observe_target(
     /* create the view for the group */
     sret = ssg_group_view_create(addr_strs, group_size, NULL, mid_state,
         og->lock, &og->view);
-    if (sret != SSG_SUCCESS) goto fini;
+    if (sret != SSG_SUCCESS) {
+	fprintf(stderr, "unable to create view\n");
+	goto fini;
+    }
 
     /* add this group reference to our group table */
     ABT_rwlock_wrlock(ssg_rt->lock);

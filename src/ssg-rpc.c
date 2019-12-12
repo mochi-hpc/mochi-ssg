@@ -22,6 +22,8 @@
 /* default timeout value of 1-second for SSG RPCs */
 #define SSG_DEFAULT_OP_TIMEOUT 1000.0
 
+#define HG_CHECK(fn) { hg_return_t ret; ret = (fn); if (ret != HG_SUCCESS) { fprintf(stderr, "%s: %s\n", #fn, HG_Error_to_string(ret)); goto fini;} }
+
 /* SSG RPC types and (de)serialization routines */
 
 /* TODO join and observe are nearly identical -- refactor */
@@ -447,9 +449,8 @@ int ssg_group_observe_send(
     *view_buf = NULL;
 
     /* lookup the address of the group member associated with the descriptor */
-    hret = margo_create(mid_state->mid, group_target_addr,
-        mid_state->observe_rpc_id, &handle);
-    if (hret != HG_SUCCESS) goto fini;
+    HG_CHECK(margo_create(mid_state->mid, group_target_addr,
+        mid_state->observe_rpc_id, &handle) );
 
     /* allocate a buffer of the given size to try to store the group view in */
     /* NOTE: We don't know if this buffer is big enough to store the complete
@@ -459,18 +460,16 @@ int ssg_group_observe_send(
     tmp_view_buf = malloc(tmp_view_buf_size);
     if (!tmp_view_buf) goto fini;
 
-    hret = margo_bulk_create(mid_state->mid, 1, &tmp_view_buf, &tmp_view_buf_size,
-        HG_BULK_WRITE_ONLY, &bulk_handle);
-    if (hret != HG_SUCCESS) goto fini;
+    HG_CHECK(margo_bulk_create(mid_state->mid, 1, &tmp_view_buf, &tmp_view_buf_size,
+        HG_BULK_WRITE_ONLY, &bulk_handle));
 
     /* send an observe request to the given group member address */
     observe_req.g_id = g_id;
     observe_req.bulk_handle = bulk_handle;
-    hret = margo_forward_timed(handle, &observe_req, SSG_DEFAULT_OP_TIMEOUT);
-    if (hret != HG_SUCCESS) goto fini;
+    HG_CHECK(margo_forward_timed(handle, &observe_req, SSG_DEFAULT_OP_TIMEOUT));
 
-    hret = margo_get_output(handle, &observe_resp);
-    if (hret != HG_SUCCESS) goto fini;
+
+    HG_CHECK(margo_get_output(handle, &observe_resp));
 
     /* if our initial buffer is too small, reallocate to the exact size & resend */
     if (observe_resp.view_buf_size > tmp_view_buf_size)
@@ -487,16 +486,13 @@ int ssg_group_observe_send(
 
         /* free old bulk handle and recreate it */
         margo_bulk_free(bulk_handle);
-        hret = margo_bulk_create(mid_state->mid, 1, &tmp_view_buf,
-            &tmp_view_buf_size, HG_BULK_WRITE_ONLY, &bulk_handle);
-        if (hret != HG_SUCCESS) goto fini;
+        HG_CHECK(margo_bulk_create(mid_state->mid, 1, &tmp_view_buf,
+            &tmp_view_buf_size, HG_BULK_WRITE_ONLY, &bulk_handle));
 
         observe_req.bulk_handle = bulk_handle;
-        hret = margo_forward_timed(handle, &observe_req, SSG_DEFAULT_OP_TIMEOUT);
-        if (hret != HG_SUCCESS) goto fini;
+        HG_CHECK(margo_forward_timed(handle, &observe_req, SSG_DEFAULT_OP_TIMEOUT));
 
-        hret = margo_get_output(handle, &observe_resp);
-        if (hret != HG_SUCCESS) goto fini;
+        HG_CHECK(margo_get_output(handle, &observe_resp) );
     }
 
     /* readjust view buf size if initial guess was too large */
@@ -546,15 +542,24 @@ static void ssg_group_observe_recv_ult(
 
     observe_resp.ret = SSG_FAILURE;
 
-    if(!ssg_rt) goto fini;
+    if(!ssg_rt) {
+        fprintf(stderr, "ult: ssg not initialized\n");
+        goto fini;
+    }
 
     hgi = margo_get_info(handle);
-    if (!hgi) goto fini;
+    if (!hgi) {
+        fprintf(stderr, "ult: ssg unable to get info from handle\n");
+        goto fini;
+    }
     mid = margo_hg_info_get_instance(hgi);
-    if (mid == MARGO_INSTANCE_NULL) goto fini;
+    if (mid == MARGO_INSTANCE_NULL) {
+        fprintf(stderr, "ult: ssg unable to get instance from info\n");
+        goto fini;
+    }
 
-    hret = margo_get_input(handle, &observe_req);
-    if (hret != HG_SUCCESS) goto fini;
+    HG_CHECK(margo_get_input(handle, &observe_req) );
+
     view_size_requested = margo_bulk_get_size(observe_req.bulk_handle);
 
     ABT_rwlock_rdlock(ssg_rt->lock);
@@ -566,6 +571,7 @@ static void ssg_group_observe_recv_ult(
     {
         ABT_rwlock_unlock(ssg_rt->lock);
         margo_free_input(handle, &observe_req);
+        fprintf(stderr, "ult: ssg unable to find group in group table\n");
         goto fini;
     }
     /* sanity checks */
@@ -577,6 +583,7 @@ static void ssg_group_observe_recv_ult(
     {
         ABT_rwlock_unlock(ssg_rt->lock);
         margo_free_input(handle, &observe_req);
+        fprintf(stderr, "ult: unable to serialize group\n");
         goto fini;
     }
     group_size = g_desc->g_data.g->view.size;
@@ -585,11 +592,14 @@ static void ssg_group_observe_recv_ult(
 
     if (view_size_requested >= view_buf_size)
     {
+        /* can't use HG_CHECK here because we need to free_input before jumping
+         * to general cleanup */
         /* if observer's buf is large enough, transfer the view */
         hret = margo_bulk_create(mid, 1, &view_buf, &view_buf_size,
             HG_BULK_READ_ONLY, &bulk_handle);
         if (hret != HG_SUCCESS)
         {
+            fprintf(stderr, "ult: unable to create bulk handle: %lu\n", hret);
             margo_free_input(handle, &observe_req);
             goto fini;
         }
@@ -598,6 +608,7 @@ static void ssg_group_observe_recv_ult(
             observe_req.bulk_handle, 0, bulk_handle, 0, view_buf_size);
         if (hret != HG_SUCCESS)
         {
+            fprintf(stderr, "ult: unable to bulk transfer: %lu\n", hret);
             margo_free_input(handle, &observe_req);
             goto fini;
         }
