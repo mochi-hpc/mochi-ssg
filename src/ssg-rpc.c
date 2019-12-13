@@ -19,8 +19,9 @@
 #define SSG_VIEW_BUF_DEF_SIZE (128 * 1024)
 
 /* XXX what should we use for a reasonable timeout value? */
-/* default timeout value of 1-second for SSG RPCs */
-#define SSG_DEFAULT_OP_TIMEOUT 1000.0
+/* 1 second was ok on most platforms... except theta */
+/* default timeout value of 5-second for SSG RPCs */
+#define SSG_DEFAULT_OP_TIMEOUT 5000.0
 
 #define HG_CHECK(fn) { hg_return_t ret; ret = (fn); if (ret != HG_SUCCESS) { fprintf(stderr, "%s: %s\n", #fn, HG_Error_to_string(ret)); goto fini;} }
 
