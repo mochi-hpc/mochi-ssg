@@ -442,7 +442,6 @@ int ssg_group_observe_send(
     hg_size_t tmp_view_buf_size = SSG_VIEW_BUF_DEF_SIZE;
     ssg_group_observe_request_t observe_req;
     ssg_group_observe_response_t observe_resp;
-    hg_return_t hret;
     int sret = SSG_FAILURE;
 
     *group_name = NULL;
@@ -600,7 +599,7 @@ static void ssg_group_observe_recv_ult(
             HG_BULK_READ_ONLY, &bulk_handle);
         if (hret != HG_SUCCESS)
         {
-            fprintf(stderr, "ult: unable to create bulk handle: %lu\n", hret);
+            fprintf(stderr, "ult: unable to create bulk handle: %u\n", hret);
             margo_free_input(handle, &observe_req);
             goto fini;
         }
@@ -609,7 +608,7 @@ static void ssg_group_observe_recv_ult(
             observe_req.bulk_handle, 0, bulk_handle, 0, view_buf_size);
         if (hret != HG_SUCCESS)
         {
-            fprintf(stderr, "ult: unable to bulk transfer: %lu\n", hret);
+            fprintf(stderr, "ult: unable to bulk transfer: %u\n", hret);
             margo_free_input(handle, &observe_req);
             goto fini;
         }
