@@ -26,6 +26,7 @@ int main(int argc, char **argv)
     fprintf(stderr, "        dumped...\n");
 
     ssg_group_unobserve(gid);
+    ssg_finalize();
     margo_finalize(mid);
     MPI_Finalize();
 }

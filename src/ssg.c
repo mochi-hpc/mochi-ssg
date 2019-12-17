@@ -867,7 +867,9 @@ int ssg_group_observe_target(
     sret = SSG_SUCCESS;
 
     /* don't free on success */
+    free(group_name);
     group_name = NULL;
+
     og = NULL;
 fini:
     if (target_addr != HG_ADDR_NULL)
