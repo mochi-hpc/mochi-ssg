@@ -129,6 +129,15 @@ static void parse_args(int argc, char *argv[], struct group_launch_opts *opts)
     return;
 }
 
+void ssg_finalize_callback(void* arg) {
+    fprintf(stderr, "Entering ssg_finalize_callback\n");
+    ssg_group_id_t* g_id = (ssg_group_id_t*)arg;
+    ssg_group_destroy(*g_id);
+    fprintf(stderr, "Successfully destroyed ssg group\n");
+    ssg_finalize();
+    fprintf(stderr, "Successfully finalized ssg\n");
+}
+
 int main(int argc, char *argv[])
 {
     struct group_launch_opts opts;
@@ -171,6 +180,7 @@ int main(int argc, char *argv[])
     mid = margo_init(opts.addr_str, MARGO_SERVER_MODE, 0, -1);
     DIE_IF(mid == MARGO_INSTANCE_NULL, "margo_init");
 
+    margo_enable_remote_shutdown(mid);
     /* initialize SSG */
     sret = ssg_init();
     DIE_IF(sret != SSG_SUCCESS, "ssg_init");
@@ -193,6 +203,12 @@ int main(int argc, char *argv[])
 #endif
     DIE_IF(g_id == SSG_GROUP_ID_INVALID, "ssg_group_create");
 
+    /* push a finalize callback to finalize SSG through it */
+    margo_push_finalize_callback(mid, ssg_finalize_callback, (void*)&g_id);
+
+    /* print group at each member */
+    ssg_group_dump(g_id);
+
     /* store the gid if requested */
     if (opts.gid_file)
         ssg_group_id_store(opts.gid_file, g_id, SSG_ALL_MEMBERS);
@@ -209,10 +225,10 @@ int main(int argc, char *argv[])
 
     /* print group at each member */
     ssg_group_dump(g_id);
-    ssg_group_destroy(g_id);
+    /* ssg_group_destroy(g_id); */ // Now destroyed in callback
 
     /** cleanup **/
-    ssg_finalize();
+    /* ssg_finalize(); */ // Now finalized in callback
     margo_finalize(mid);
 #ifdef SSG_HAVE_MPI
     if (strcmp(opts.group_mode, "mpi") == 0)
