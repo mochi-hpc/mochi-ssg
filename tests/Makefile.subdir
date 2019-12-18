@@ -5,6 +5,7 @@ check_PROGRAMS += \
  tests/ssg-launch-group \
  tests/ssg-launch-double-group \
  tests/ssg-launch-double-mid-group \
+ tests/ssg-launch-group-finalize-cb \
  tests/ssg-observe-group \
  tests/ssg-join-leave-group \
  tests/ssg-test-fail \

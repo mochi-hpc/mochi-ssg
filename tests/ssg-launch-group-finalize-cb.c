@@ -38,7 +38,6 @@ struct group_launch_opts
 {
     char *addr_str;
     char *group_mode;
-    int shutdown_time;
     char *gid_file;
     char *group_name;
 };
@@ -51,7 +50,6 @@ static void usage()
         "Create and launch group using given Mercury ADDR string and group create MODE (\"mpi\" or \"pmix\").\n"
         "\n"
         "OPTIONS:\n"
-        "\t-s <TIME>\t\tTime duration (in seconds) to run the group before shutting down\n"
         "\t-f <FILE>\t\tFile path to store group ID in\n"
         "\t-n <NAME>\t\tName of the group to launch\n");
 }
@@ -59,21 +57,12 @@ static void usage()
 static void parse_args(int argc, char *argv[], struct group_launch_opts *opts)
 {
     int c;
-    const char *options = "s:f:n:";
-    char *check = NULL;
+    const char *options = "f:n:";
 
     while ((c = getopt(argc, argv, options)) != -1)
     {
         switch (c)
         {
-            case 's':
-                opts->shutdown_time = (int)strtol(optarg, &check, 0);
-                if (opts->shutdown_time < 0 || (check && *check != '\0'))
-                {
-                    usage();
-                    exit(EXIT_FAILURE);
-                }
-                break;
             case 'f':
                 opts->gid_file = optarg;
                 break;
@@ -129,6 +118,20 @@ static void parse_args(int argc, char *argv[], struct group_launch_opts *opts)
     return;
 }
 
+typedef struct {
+    ssg_group_id_t g_id;
+    margo_instance_id mid;
+} finalize_args_t;
+
+void ssg_finalize_callback(void* arg) {
+    fprintf(stderr, "Entering ssg_finalize_callback\n");
+    finalize_args_t* a = (finalize_args_t*)arg;
+    ssg_group_destroy(a->g_id);
+    fprintf(stderr, "Successfully destroyed ssg group\n");
+    ssg_finalize();
+    fprintf(stderr, "Successfully finalized ssg\n");
+}
+
 int main(int argc, char *argv[])
 {
     struct group_launch_opts opts;
@@ -140,7 +143,6 @@ int main(int argc, char *argv[])
     int sret;
 
     /* set any default options (that may be overwritten by cmd args) */
-    opts.shutdown_time = 10; /* default to running group for 10 seconds */
     opts.group_name = "simple_group";
     opts.gid_file = NULL;
 
@@ -171,6 +173,7 @@ int main(int argc, char *argv[])
     mid = margo_init(opts.addr_str, MARGO_SERVER_MODE, 0, -1);
     DIE_IF(mid == MARGO_INSTANCE_NULL, "margo_init");
 
+    margo_enable_remote_shutdown(mid);
     /* initialize SSG */
     sret = ssg_init();
     DIE_IF(sret != SSG_SUCCESS, "ssg_init");
@@ -193,13 +196,16 @@ int main(int argc, char *argv[])
 #endif
     DIE_IF(g_id == SSG_GROUP_ID_INVALID, "ssg_group_create");
 
+    /* push a finalize callback to finalize SSG through it */
+    finalize_args_t a = {
+        .g_id = g_id,
+        .mid = mid
+    };
+    margo_push_prefinalize_callback(mid, ssg_finalize_callback, (void*)&a);
+
     /* store the gid if requested */
     if (opts.gid_file)
         ssg_group_id_store(opts.gid_file, g_id, SSG_ALL_MEMBERS);
-
-    /* sleep for given duration to allow group time to run */
-    if (opts.shutdown_time > 0)
-        margo_thread_sleep(mid, opts.shutdown_time * 1000.0);
 
     /* get my group id and the size of the group */
     my_id = ssg_get_self_id(mid);
@@ -209,11 +215,9 @@ int main(int argc, char *argv[])
 
     /* print group at each member */
     ssg_group_dump(g_id);
-    ssg_group_destroy(g_id);
 
-    /** cleanup **/
-    ssg_finalize();
-    margo_finalize(mid);
+    /* wait for finalize to come from an external shutdown */
+    margo_wait_for_finalize(mid);
 #ifdef SSG_HAVE_MPI
     if (strcmp(opts.group_mode, "mpi") == 0)
         MPI_Finalize();
