@@ -4,12 +4,19 @@
 #define GROUP_NAME "test-group"
 #define ASSERT(__cond, __msg, ...) { if(!(__cond)) { fprintf(stderr, "[%s:%d] " __msg, __FILE__, __LINE__, __VA_ARGS__); exit(-1); } }
 
-static void finalized_ssg_group_cb(void* data)
-{
-    ssg_group_id_t gid = *((ssg_group_id_t*)data);
-    ssg_group_destroy(gid);
-}
+typedef struct {
+    ssg_group_id_t g_id;
+    margo_instance_id mid;
+} finalize_args_t;
 
+void ssg_finalize_callback(void* arg) {
+    fprintf(stderr, "Entering ssg_finalize_callback\n");
+    finalize_args_t* a = (finalize_args_t*)arg;
+    ssg_group_destroy(a->g_id);
+    fprintf(stderr, "Successfully destroyed ssg group\n");
+    ssg_finalize();
+    fprintf(stderr, "Successfully finalized ssg\n");
+}
 
 int main(int argc, char **argv)
 {
@@ -35,17 +42,24 @@ int main(int argc, char **argv)
         fprintf(stderr, "ssg_group_create_mpi failed\n");
         exit(-1);
     }
-    margo_push_finalize_callback(mid, &finalized_ssg_group_cb, (void*)&gid);
 
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     if (rank == 0)
 	ssg_group_id_store(argv[2], gid, 1);
 
-    fprintf(stderr, "   just hanging out...\n");
+    finalize_args_t args = {
+        .g_id = gid,
+        .mid = mid
+    };
+    margo_push_prefinalize_callback(mid, ssg_finalize_callback, (void*)&args);
+
+    fprintf(stderr, "   just hanging out waiting for shutdown\n");
+
     margo_wait_for_finalize(mid);
+    fprintf(stderr, "   .. done waiting: now cleaning up\n");
     ssg_group_destroy(gid);
-    margo_finalize(mid);
+    fprintf(stderr, "bye\n");
 
     MPI_Finalize();
 }
