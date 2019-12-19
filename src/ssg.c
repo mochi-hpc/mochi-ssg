@@ -14,7 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <linux/limits.h>
+#include <limits.h>
 #include <assert.h>
 #ifdef SSG_HAVE_MPI
 #include <mpi.h>
