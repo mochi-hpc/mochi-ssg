@@ -2388,7 +2388,10 @@ void ssg_apply_member_updates(
 {
     hg_size_t i;
     ssg_member_state_t *update_ms;
+    ssg_member_id_t update_member_id;
+    ssg_member_update_type_t update_type;
     int update_rank;
+    int self_died = 0;
     hg_return_t hret;
     int ret;
 
@@ -2475,9 +2478,8 @@ void ssg_apply_member_updates(
 
             SSG_DEBUG(g, "successfully added member %lu\n", join_id);
 
-            /* invoke user callback to apply the SSG update */
-            if (g->update_cb)
-                g->update_cb(g->update_cb_dat, join_id, updates[i].type);
+            update_member_id = join_id;
+            update_type = updates[i].type;
         }
         else if (updates[i].type == SSG_MEMBER_LEFT)
         {
@@ -2512,48 +2514,14 @@ void ssg_apply_member_updates(
 
             SSG_DEBUG(g, "successfully removed leaving member %lu\n", updates[i].u.member_id);
 
-            /* invoke user callback to apply the SSG update */
-            if (g->update_cb)
-                g->update_cb(g->update_cb_dat, updates[i].u.member_id, updates[i].type);
+            update_member_id = updates[i].u.member_id;
+            update_type = updates[i].type;
         }
         else if (updates[i].type == SSG_MEMBER_DIED)
         {
             if (updates[i].u.member_id == g->mid_state->self_id)
             {
-                ssg_group_descriptor_t *g_desc, *g_desc_tmp;
-
-                /* if dead member is self, just destroy group locally ... */
-    
-                /* first, notify user they have been marked dead in this group */
-                if (g->update_cb)
-                    g->update_cb(g->update_cb_dat, updates[i].u.member_id,
-                        updates[i].type);
-
-                /* XXX we need to find the corresponding group descriptor and
-                 * remove it. there isn't a convenient way to map a group pointer
-                 * to a descriptor so we just iterate the descriptor table until
-                 * we find one that matches our group pointer...
-                 */
-                /* XXX we know that the global ssg_rt lock is held in rd mode in
-                 * this code path, so we release and reacquire in wr mode to remove
-                 * the descriptor
-                 */
-                ABT_rwlock_unlock(ssg_rt->lock);
-                ABT_rwlock_wrlock(ssg_rt->lock);
-                HASH_ITER(hh, ssg_rt->g_desc_table, g_desc, g_desc_tmp)
-                {
-                    if (g_desc->g_data.g == g)
-                    {
-                        HASH_DEL(ssg_rt->g_desc_table, g_desc);
-                        ABT_rwlock_unlock(ssg_rt->lock);
-                        ssg_group_destroy_internal(g);
-
-                        return; /* no need to keep processing updates */
-                    }
-                }
-                ABT_rwlock_unlock(ssg_rt->lock);
-
-                return; /* no need to keep processing updates */
+                self_died = 1;
             }
             else
             {
@@ -2589,13 +2557,49 @@ void ssg_apply_member_updates(
                 SSG_DEBUG(g, "successfully removed dead member %lu\n", updates[i].u.member_id);
             }
 
-            /* invoke user callback to apply the SSG update */
-            if (g->update_cb)
-                g->update_cb(g->update_cb_dat, updates[i].u.member_id, updates[i].type);
+            update_member_id = updates[i].u.member_id;
+            update_type = updates[i].type;
         }
         else
         {
             SSG_DEBUG(g, "Warning: invalid SSG update received, ignoring.\n");
+            continue;
+        }
+
+        /* invoke user callback to apply the SSG update */
+        if (g->update_cb)
+            g->update_cb(g->update_cb_dat, update_member_id, update_type);
+
+        /* check if self died, in which case the group should be destroyed locally */
+        if (self_died)
+        {
+            ssg_group_descriptor_t *g_desc, *g_desc_tmp;
+
+            /* XXX we need to find the corresponding group descriptor and
+             * remove it. there isn't a convenient way to map a group pointer
+             * to a descriptor so we just iterate the descriptor table until
+             * we find one that matches our group pointer...
+             */
+            /* XXX we know that the global ssg_rt lock is held in rd mode in
+             * this code path, so we release and reacquire in wr mode to remove
+             * the descriptor
+             */
+            ABT_rwlock_unlock(ssg_rt->lock);
+            ABT_rwlock_wrlock(ssg_rt->lock);
+            HASH_ITER(hh, ssg_rt->g_desc_table, g_desc, g_desc_tmp)
+            {
+                if (g_desc->g_data.g == g)
+                {
+                    HASH_DEL(ssg_rt->g_desc_table, g_desc);
+                    ABT_rwlock_unlock(ssg_rt->lock);
+                    ssg_group_destroy_internal(g);
+                    break;
+                }
+            }
+            ABT_rwlock_unlock(ssg_rt->lock);
+            ABT_rwlock_rdlock(ssg_rt->lock);
+            
+            return; /* no need to keep processing updates, group is destroyed */
         }
     }
 
