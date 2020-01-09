@@ -2568,7 +2568,11 @@ void ssg_apply_member_updates(
 
         /* invoke user callback to apply the SSG update */
         if (g->update_cb)
+        {
+            ABT_rwlock_unlock(ssg_rt->lock);
             g->update_cb(g->update_cb_dat, update_member_id, update_type);
+            ABT_rwlock_rdlock(ssg_rt->lock);
+        }
 
         /* check if self died, in which case the group should be destroyed locally */
         if (self_died)
