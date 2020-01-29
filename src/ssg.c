@@ -1232,7 +1232,7 @@ int ssg_get_group_member_ids_from_range(
 
         member_start = (ssg_member_id_t *)utarray_eltptr(
             g->view.rank_array, (unsigned int)rank_start);
-        memcpy(range_ids, member_start, (rank_end-rank_start)*sizeof(ssg_member_id_t));
+        memcpy(range_ids, member_start, (rank_end-rank_start+1)*sizeof(ssg_member_id_t));
         ABT_rwlock_unlock(g->lock);
     }
     else if (g_desc->owner_status == SSG_OWNER_IS_OBSERVER)
@@ -1249,7 +1249,7 @@ int ssg_get_group_member_ids_from_range(
 
         member_start = (ssg_member_id_t *)utarray_eltptr(
             og->view.rank_array, (unsigned int)rank_start);
-        memcpy(range_ids, member_start, (rank_end-rank_start)*sizeof(ssg_member_id_t));
+        memcpy(range_ids, member_start, (rank_end-rank_start+1)*sizeof(ssg_member_id_t));
         ABT_rwlock_unlock(og->lock);
     }
     else
@@ -1261,7 +1261,7 @@ int ssg_get_group_member_ids_from_range(
     }
     ABT_rwlock_unlock(ssg_rt->lock);
 
-    return (rank_end-rank_start);
+    return (rank_end-rank_start+1);
 }
 
 char *ssg_group_id_get_addr_str(

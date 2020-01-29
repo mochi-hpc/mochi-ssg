@@ -317,8 +317,8 @@ ssg_member_id_t ssg_get_group_member_id_from_rank(
  * Obtains an array of SSG member IDs for a given rank range.
  *
  * @param[in] group_id      SSG group ID
- * @param[in] rank_start    Rank of range start
- * @param[in] rank_end      Rank of range end
+ * @param[in] rank_start    Rank of range start (inclusive)
+ * @param[in] rank_end      Rank of range end (inclusive)
  * @param[in,out] range_ids Buffer to store member IDs of requested range
  * @returns number of member IDs returned in range_ids on success, 0 otherwise
  *
