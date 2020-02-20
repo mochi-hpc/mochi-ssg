@@ -1910,12 +1910,15 @@ static ssg_group_id_t ssg_group_create_internal(
         goto fini;
     }
 
-    /* initialize swim failure detector if everything succeeds */
-    sret = swim_init(g, g_desc->g_id, group_conf, 1);
-    if (sret != SSG_SUCCESS)
+    if(!(group_conf->swim_disabled))
     {
-        HASH_DEL(ssg_rt->g_desc_table, g_desc);
-        goto fini;
+        /* initialize swim failure detector if everything succeeds */
+        sret = swim_init(g, g_desc->g_id, group_conf, 1);
+        if (sret != SSG_SUCCESS)
+        {
+            HASH_DEL(ssg_rt->g_desc_table, g_desc);
+            goto fini;
+        }
     }
 
     SSG_DEBUG(g, "group create successful (size=%d, self=%s)\n",
@@ -2147,8 +2150,11 @@ static void ssg_group_destroy_internal(
 {
     ssg_member_state_t *state, *tmp;
 
-    /* free up SWIM state */
-    swim_finalize(g);
+    if (!(g->config.swim_disabled))
+    {
+        /* free up SWIM state */
+        swim_finalize(g);
+    }
 
     /* destroy group state */
     ABT_rwlock_wrlock(g->lock);
