@@ -701,10 +701,19 @@ int ssg_group_leave_target(
         return sret;
     }
 
+    /* only members can leave a group ... */
     if (g_desc->owner_status != SSG_OWNER_IS_MEMBER)
     {
         ABT_rwlock_unlock(ssg_rt->lock);
         fprintf(stderr, "Error: SSG unable to leave group it is not a member of\n");
+        return sret;
+    }
+
+    /* dynamic groups can't be supported if SWIM is disabled */
+    if(g_desc->g_data.g->config.swim_disabled)
+    {
+        ABT_rwlock_unlock(ssg_rt->lock);
+        fprintf(stderr, "Error: SSG unable to leave group if SWIM is disabled\n");
         return sret;
     }
 

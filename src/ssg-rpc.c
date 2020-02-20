@@ -268,6 +268,15 @@ static void ssg_group_join_recv_ult(
     assert(g_desc->owner_status == SSG_OWNER_IS_MEMBER);
     assert(mid == g_desc->g_data.g->mid_state->mid);
 
+    /* dynamic groups can't be supported if SWIM is disabled */
+    if (g_desc->g_data.g->config.swim_disabled)
+    {
+        fprintf(stderr, "Error: SSG unable to join group if SWIM is disabled\n");
+        ABT_rwlock_unlock(ssg_rt->lock);
+        margo_free_input(handle, &join_req);
+        goto fini;
+    }
+
     sret = ssg_group_serialize(g_desc->g_data.g, &view_buf, &view_buf_size);
     if (sret != SSG_SUCCESS)
     {
