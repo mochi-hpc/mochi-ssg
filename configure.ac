@@ -98,12 +98,15 @@ if test "x${check_mpi}" = xauto -o "x${check_mpi}" = xyes ; then
 fi
 
 check_pmix_status=fail
+AC_SUBST([BOOTSTRAP_PMIX], [])
+AC_CHECK_LIB([pmix], [PMIx_Init])
 if test "x${check_pmix}" = xauto -o "x${check_pmix}" = xyes ; then
     AC_MSG_CHECKING([If PMIx programs can be compiled])
     AC_LINK_IFELSE(
         [AC_LANG_PROGRAM([[#include<pmix.h>]], [[PMIx_Init(NULL, NULL,0);]])],
         [AC_DEFINE([SSG_HAVE_PMIX], [1], [Define to 1 if compiled with PMIx support])
          AC_MSG_RESULT([yes])
+	 AC_SUBST([BOOTSTRAP_PMIX], [pmix])
          check_pmix_status=success],
         [AC_MSG_RESULT([no])])
 fi
