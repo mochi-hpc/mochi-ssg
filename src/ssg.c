@@ -1484,7 +1484,22 @@ void ssg_group_id_deserialize(
     *group_id_p = SSG_GROUP_ID_INVALID;
     *num_addrs = 0;
 
-    if (!ssg_rt || !buf || buf_size == 0 || tmp_num_addrs == 0) return;
+    if (!ssg_rt) {
+        fprintf(stderr, "SSG: Must initialize SSG first\n");
+        return;
+    }
+    if (!buf) {
+        fprintf(stderr, "SSG: Cannot deserialize a NULL buffer\n");
+        return;
+    }
+    if (buf_size == 0) {
+        fprintf(stderr, "SSG: Attempt to deserialize 0 bytes\n");
+        return;
+    }
+    if (tmp_num_addrs == 0) {
+        fprintf(stderr, "SSG: Requested deserializing 0 addresses\n");
+        return;
+    }
 
     /* check to ensure the buffer contains enough data to make a group ID */
     min_buf_size = (sizeof(magic_nr) + sizeof(g_desc->g_id) + sizeof(num_addrs_buf) + 1);
