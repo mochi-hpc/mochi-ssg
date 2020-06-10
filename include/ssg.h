@@ -49,10 +49,10 @@ typedef struct ssg_group_config
 /* initializer macro to ensure SSG ignores unset config params */
 #define SSG_GROUP_CONFIG_INITIALIZER \
 {\
-    .swim_disabled = 0, \
     .swim_period_length_ms = 0, \
     .swim_suspect_timeout_periods = -1, \
     .swim_subgroup_member_count = -1, \
+    .swim_disabled = 0, \
     .ssg_credential = -1, \
 }\
 
