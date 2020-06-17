@@ -428,7 +428,8 @@ ssg_group_id_t ssg_group_create_pmix(
     snprintf(key, 512, "ssg-%s-%d-id", proc.nspace, proc.rank);
     PMIX_INFO_CREATE(info, 1);
     flag = true;
-    PMIX_INFO_LOAD(info, PMIX_IMMEDIATE, &flag, PMIX_BOOL);
+    int wait_secs=1;
+    PMIX_INFO_LOAD(info, PMIX_TIMEOUT, &wait_secs, PMIX_INT);
     ret = PMIx_Get(&proc, key, info, 1, &val_p);
     PMIX_INFO_FREE(info, 1);
     if (ret != PMIX_SUCCESS)
@@ -2344,7 +2345,8 @@ void ssg_pmix_proc_failure_notify_fn(
     snprintf(key, 512, "ssg-%s-%d-id", source->nspace, source->rank);
     PMIX_INFO_CREATE(get_info, 1);
     flag = true;
-    PMIX_INFO_LOAD(get_info, PMIX_IMMEDIATE, &flag, PMIX_BOOL);
+    int wait_secs=1;
+    PMIX_INFO_LOAD(get_info, PMIX_TIMEOUT, &wait_secs, PMIX_INT);
     ret = PMIx_Get(source, key, get_info, 1, &val_p);
     PMIX_INFO_FREE(get_info, 1);
     if (ret != PMIX_SUCCESS)
