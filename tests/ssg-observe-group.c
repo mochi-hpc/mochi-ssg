@@ -36,32 +36,18 @@ static void usage()
 {
     fprintf(stderr,
         "Usage: "
-        "ssg-observe-group [-s <time>] <addr> <GID>\n"
-        "Observe group given by GID using Mercury address ADDR.\n"
-        "\t-s <time> - time to sleep between SSG group operations\n");
+        "ssg-observe-group <addr> <GID>\n"
+        "Observe group given by GID using Mercury address ADDR.\n");
 }
 
-static void parse_args(int argc, char *argv[], int *sleep_time, const char **addr_str, const char **gid_file)
+static void parse_args(int argc, char *argv[], const char **addr_str, const char **gid_file)
 {
     int ndx = 1;
 
-    if (argc < 3)
+    if (argc < 2)
     {
         usage();
         exit(1);
-    }
-
-    if (strcmp(argv[ndx], "-s") == 0)
-    {
-        char *check = NULL;
-        ndx++;
-
-        *sleep_time = (int)strtol(argv[ndx++], &check, 0);
-        if(*sleep_time < 0 || (check && *check != '\0') || argc < 4)
-        {
-            usage();
-            exit(1);
-        }
     }
 
     *addr_str = argv[ndx++];
@@ -73,14 +59,13 @@ static void parse_args(int argc, char *argv[], int *sleep_time, const char **add
 int main(int argc, char *argv[])
 {
     margo_instance_id mid = MARGO_INSTANCE_NULL;
-    int sleep_time = 0;
     const char *addr_str;
     const char *gid_file;
     ssg_group_id_t g_id;
     int num_addrs;
     int sret;
 
-    parse_args(argc, argv, &sleep_time, &addr_str, &gid_file);
+    parse_args(argc, argv, &addr_str, &gid_file);
 
 #ifdef SSG_HAVE_MPI
     MPI_Init(&argc, &argv);
@@ -103,10 +88,6 @@ int main(int argc, char *argv[])
     /* start observging the SSG server group */
     sret = ssg_group_observe(mid, g_id);
     DIE_IF(sret != SSG_SUCCESS, "ssg_group_observe");
-
-    /* for now, just sleep to give observer a chance to establish connection */
-    /* XXX: we could replace this with a barrier eventually */
-    if (sleep_time > 0) margo_thread_sleep(mid, sleep_time * 1000.0);
 
     /* have everyone dump their group state */
     ssg_group_dump(g_id);
