@@ -14,7 +14,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <limits.h>
 #include <assert.h>
 #ifdef SSG_HAVE_MPI
 #include <mpi.h>
@@ -36,6 +35,10 @@
 #endif
 #include "ssg-internal.h"
 #include "swim-fd/swim-fd.h"
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
 
 /* SSG helper routine prototypes */
 ssg_mid_state_t *ssg_acquire_mid_state(
