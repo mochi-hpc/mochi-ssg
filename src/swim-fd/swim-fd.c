@@ -88,7 +88,7 @@ int swim_init(
 
     /* allocate structure for storing swim context */
     swim_ctx = malloc(sizeof(*swim_ctx));
-    if (!swim_ctx) return(SSG_FAILURE);
+    if (!swim_ctx) return SSG_ERR_ALLOCATION;
     memset(swim_ctx, 0, sizeof(*swim_ctx));
     swim_ctx->g_id = group_id;
     swim_ctx->self_inc_nr = 0;
@@ -103,7 +103,7 @@ int swim_init(
     if (swim_ctx->target_list.targets == NULL)
     {
         free(swim_ctx);
-        return(SSG_FAILURE);
+        return SSG_ERR_ALLOCATION;
     }
     swim_ctx->target_list.nslots = swim_ctx->target_list.len = group->view.size-1;
     swim_ctx->target_list.dping_ndx = 0;
@@ -141,7 +141,7 @@ int swim_init(
             fprintf(stderr, "Error: unable to create SWIM protocol ULT.\n");
             free(swim_ctx->target_list.targets);
             free(swim_ctx);
-            return(SSG_FAILURE);
+            return SSG_MAKE_ABT_ERROR(ret);
         }
     }
 
@@ -214,7 +214,11 @@ static void swim_prot_ult(
     swim_ctx = group->swim_ctx;
     assert(swim_ctx != NULL);
 
-    SSG_DEBUG(group, "SWIM protocol start " \
+    /* block to make sure group create has succeeded ... */
+    ABT_rwlock_wrlock(group->lock);
+    ABT_rwlock_unlock(group->lock);
+
+    SSG_DEBUG(group, "started SWIM protocol" \
         "(period_len=%.4f, susp_timeout=%d, subgroup_size=%d, g_id=%lu)\n",
         swim_ctx->prot_period_len, swim_ctx->prot_susp_timeout,
         swim_ctx->prot_subgroup_sz, swim_ctx->g_id);
@@ -243,7 +247,7 @@ static void swim_prot_ult(
     }
     ABT_rwlock_unlock(swim_ctx->swim_lock);
 
-    SSG_DEBUG(group, "SWIM protocol shutdown\n");
+    SSG_DEBUG(group, "shutdown SWIM protocol\n");
 
     return;
 }

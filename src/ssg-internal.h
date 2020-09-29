@@ -30,11 +30,11 @@ extern "C" {
 
 /* debug printing macro for SSG */
 #ifdef DEBUG
-#define SSG_DEBUG(__g, __fmt, ...) do { \
+#define SSG_DEBUG(__g,  __fmt, ...) do { \
     double __now = ABT_get_wtime(); \
-    fprintf(__g->dbg_log, "%.6lf %20"PRIu64" (%s): " __fmt, __now, \
+    fprintf(__g->mid_state->dbg_log, "%.6lf %20"PRIu64" (%s): " __fmt, __now, \
         __g->mid_state->self_id, __g->name, ## __VA_ARGS__); \
-    fflush(__g->dbg_log); \
+    fflush(__g->mid_state->dbg_log); \
 } while(0)
 #else
 #define SSG_DEBUG(__g, __fmt, ...) do { \
@@ -69,6 +69,9 @@ typedef struct ssg_mid_state
     hg_id_t swim_iping_ack_rpc_id;
     int ref_count;
     struct ssg_mid_state *next;
+#ifdef DEBUG
+    FILE *dbg_log;
+#endif
 } ssg_mid_state_t;
 
 typedef struct ssg_group_descriptor
@@ -125,9 +128,6 @@ typedef struct ssg_group
     swim_context_t *swim_ctx;
     ssg_update_cb* update_cb_list;
     ABT_rwlock lock;
-#ifdef DEBUG
-    FILE *dbg_log;
-#endif
 } ssg_group_t;
 
 inline static int add_membership_update_cb(

@@ -24,7 +24,7 @@ extern "C" {
 #endif
 
 /* SSG return codes */
-#define SSG_SUCCESS 0
+//#define SSG_SUCCESS 0
 #define SSG_FAILURE (-1)
 
 /* opaque SSG group ID type */
@@ -73,6 +73,59 @@ typedef void (*ssg_membership_update_cb)(
 #define hg_proc_ssg_group_id_t hg_proc_uint64_t
 #define hg_proc_ssg_member_id_t hg_proc_uint64_t
 
+/* Errors in SSG are int32_t. The most-significant byte stores the Mercury error, if any.
+ * The second most-significant byte stores the Argobots error, if any. The next 2 bytes store
+ * the SSG error code defined bellow. Argobots and Mercury errors should be built using
+ * SSG_MAKE_HG_ERROR and SSG_MAKE_ABT_ERROR. */
+
+#define SSG_RETURN_VALUES \
+    X(SSG_SUCCESS,                  "Success") \
+    X(SSG_ERR_ALREADY_INITIALIZED,  "Already initialized") \
+    X(SSG_ERR_NOT_INITIALIZED,      "Not initialized") \
+    X(SSG_ERR_ALLOCATION,           "Allocation error") \
+    X(SSG_ERR_INVALID_ARG,          "Invalid argument") \
+    X(SSG_ERR_INVALID_ADDRESS,      "Invalid address") \
+    X(SSG_ERR_INVALID_OPERATION,    "Invalid operation") \
+    X(SSG_ERR_GROUP_NOT_FOUND,      "Group not found") \
+    X(SSG_ERR_MEMBER_NOT_FOUND,     "Member not found") \
+    X(SSG_ERR_SELF_NOT_FOUND,       "Self not found") \
+    X(SSG_ERR_MID_NOT_FOUND,        "Margo instance not found") \
+    X(SSG_ERR_GROUP_EXISTS,         "Group exists") \
+    X(SSG_ERR_FILE_IO,              "File I/O") \
+    X(SSG_ERR_FILE_FORMAT,          "File format") \
+    X(SSG_ERR_NOT_SUPPORTED,        "Not supported") \
+    X(SSG_ERR_MARGO_FAILURE,        "margo failure") \
+    X(SSG_ERR_PMIX_FAILURE,         "PMIx failure") \
+    X(SSG_ERR_MAX,                  "End of range for valid error codes")
+
+#define X(__err__, __msg__) __err__,
+typedef enum { SSG_RETURN_VALUES } ssg_return_t;
+#undef X
+
+static const char* const ssg_error_messages[] = {
+#define X(__err__, __msg__) __msg__,
+    SSG_RETURN_VALUES
+#undef X
+};
+
+#define SSG_MAKE_HG_ERROR(__hg_err__) \
+    (((int32_t)(__hg_err__)) << 24)
+
+#define SSG_MAKE_ABT_ERROR(__abt_err__) \
+    (((int32_t)(__abt_err__)) << 16)
+
+#define SSG_GET_HG_ERROR(__err__) \
+    (((__err__) & (0b11111111 << 24)) >> 24)
+
+#define SSG_GET_ABT_ERROR(__err__) \
+    (((__err__) & (0b11111111 << 16)) >> 16)
+
+#define SSG_ERROR_IS_HG(__err__) \
+    ((__err__) & (0b11111111 << 24))
+
+#define SSG_ERROR_IS_ABT(__err__) \
+    ((__err__) & (0b11111111 << 16))
+
 /***************************************************
  *** SSG runtime intialization/shutdown routines ***
  ***************************************************/
@@ -101,54 +154,58 @@ int ssg_finalize(
  * Creates an SSG group from a given list of HG address strings. A 'NULL' value for
  * 'group_conf' will use SSG defaults for all configuration parameters.
  *
- * @param[in] mid               Corresponding Margo instance identifier
- * @param[in] group_name        Name of the SSG group
- * @param[in] group_addr_strs   Array of HG address strings for each group member
- * @param[in] group_size        Number of group members
- * @param[in] group_conf        Configuration parameters for the group
- * @param[in] update_cb         Callback function executed on group membership changes
- * @param[in] update_cb_dat     User data pointer passed to membership update callback
- * @returns SSG group identifier for created group on success, SSG_GROUP_ID_INVALID otherwise
+ * @param[in]  mid              Corresponding Margo instance identifier
+ * @param[in]  group_name       Name of the SSG group
+ * @param[in]  group_addr_strs  Array of HG address strings for each group member
+ * @param[in]  group_size       Number of group members
+ * @param[in]  group_conf       Configuration parameters for the group
+ * @param[in]  update_cb        Callback function executed on group membership changes
+ * @param[in]  update_cb_dat    User data pointer passed to membership update callback
+ * @param[out] group_id         Group identifier for created group (SSG_GROUP_ID_INVALID on failure)
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
  *
  * NOTE: The HG address string of the caller of this function must be present in
  * the list of address strings given in 'group_addr_strs'. That is, the caller
  * of this function is required to be a member of the SSG group that is created.
  */
-ssg_group_id_t ssg_group_create(
+int ssg_group_create(
     margo_instance_id mid,
     const char * group_name,
     const char * const group_addr_strs[],
     int group_size,
     ssg_group_config_t *group_conf,
     ssg_membership_update_cb update_cb,
-    void * update_cb_dat);
+    void * update_cb_dat,
+    ssg_group_id_t *group_id);
 
 /**
  * Creates an SSG group from a given config file containing the HG address strings
  * of all group members. A 'NULL' value for 'group_conf' will use SSG defaults for
  * all configuration parameters.
  *
- * @param[in] mid               Corresponding Margo instance identifier
- * @param[in] group_name        Name of the SSG group
- * @param[in] file_name         Name of the config file containing the corresponding
+ * @param[in]  mid              Corresponding Margo instance identifier
+ * @param[in]  group_name       Name of the SSG group
+ * @param[in]  file_name        Name of the config file containing the corresponding
  *                              HG address strings for this group
- * @param[in] group_conf        Configuration parameters for the group
- * @param[in] update_cb         Callback function executed on group membership changes
- * @param[in] update_cb_dat     User data pointer passed to membership update callback
- * @returns SSG group identifier for created group on success, SSG_GROUP_ID_INVALID otherwise
+ * @param[in]  group_conf       Configuration parameters for the group
+ * @param[in]  update_cb        Callback function executed on group membership changes
+ * @param[in]  update_cb_dat    User data pointer passed to membership update callback
+ * @param[out] group_id         Group identifier for created group (SSG_GROUP_ID_INVALID on failure)
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
  *
  * 
  * NOTE: The HG address string of the caller of this function must be present in
  * the list of address strings given in the config file. That is, the caller of
  * this function is required to be a member of the SSG group that is created.
  */
-ssg_group_id_t ssg_group_create_config(
+int ssg_group_create_config(
     margo_instance_id mid,
     const char * group_name,
     const char * file_name,
     ssg_group_config_t *group_conf,
     ssg_membership_update_cb update_cb,
-    void * update_cb_dat);
+    void * update_cb_dat,
+    ssg_group_id_t *group_id);
 
 /**
  * Destroys data structures associated with a given SSG group ID.
@@ -297,71 +354,83 @@ int ssg_group_remove_membership_update_callback(
 /**
  * Obtains the caller's member ID in the given SSG group.
  *
- * @param[in] mid Corresponding Margo instance identifier
- * @returns caller's member ID on success, SSG_MEMBER_ID_INVALID otherwise
+ * @param[in]  mid      Corresponding Margo instance identifier
+ * @param[out] self_id  Caller's member ID (SSG_MEMBER_ID_INVALID on failure)
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
  */
-ssg_member_id_t ssg_get_self_id(
-    margo_instance_id mid);
+int ssg_get_self_id(
+    margo_instance_id mid,
+    ssg_member_id_t *self_id);
 
 /**
  * Obtains the size of a given SSG group.
  *
- * @param[in] group_id SSG group ID
- * @returns size of the group on success, 0 otherwise
+ * @param[in]  group_id     SSG group ID
+ * @param[out] group_size   Size of the given group (0 on failure)
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
  */
 int ssg_get_group_size(
-    ssg_group_id_t group_id);
+    ssg_group_id_t group_id,
+    int *group_size);
 
 /**
  * Obtains the HG address of a member in a given SSG group.
  *
- * @param[in] group_id  SSG group ID
- * @param[in] member_id SSG group member ID
- * @returns HG address of given group member on success, HG_ADDR_NULL otherwise
+ * @param[in]  group_id     SSG group ID
+ * @param[in]  member_id    SSG group member ID
+ * @param[out] member_addr  HG address of given group member (HG_ADDR_NULL on failure)
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
  */
-hg_addr_t ssg_get_group_member_addr(
+int ssg_get_group_member_addr(
     ssg_group_id_t group_id,
-    ssg_member_id_t member_id);
+    ssg_member_id_t member_id,
+    hg_addr_t *member_addr);
 
 /**
  * Obtains the rank of the caller in a given SSG group.
  *
- * @param[in] group_id SSG group ID
- * @returns rank on success, -1 on failure
+ * @param[in]  group_id     SSG group ID
+ * @param[out] self_rank    Self rank (-1 on failure)
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
  */
 int ssg_get_group_self_rank(
-    ssg_group_id_t group_id);
+    ssg_group_id_t group_id,
+    int *self_rank);
 
 /**
  * Obtains the rank of a member in a given SSG group.
  *
- * @param[in] group_id  SSG group ID
- * @param[in] member_id SSG group member ID
- * @returns rank on success, -1 otherwise
+ * @param[in]  group_id     SSG group ID
+ * @param[in]  member_id    SSG group member ID
+ * @param[out] member_rank  Member rank (-1 on failure)
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
  */
 int ssg_get_group_member_rank(
     ssg_group_id_t group_id,
-    ssg_member_id_t member_id);
+    ssg_member_id_t member_id,
+    int *member_rank);
 
 /**
  * Obtains the SSG member ID of the given group and rank.
  *
- * @param[in] group_id SSG group ID
- * @param[in] rank     SSG group rank
- * @returns caller's member ID on success, SSG_MEMBER_ID_INVALID otherwise
+ * @param[in]  group_id     SSG group ID
+ * @param[in]  rank         SSG group rank
+ * @param[out] member_id    Member ID corresponding to the given rank (SSG_MEMBER_ID_INVALID on failure)
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
  */
-ssg_member_id_t ssg_get_group_member_id_from_rank(
+int ssg_get_group_member_id_from_rank(
     ssg_group_id_t group_id,
-    int rank);
+    int rank,
+    ssg_member_id_t *member_id);
 
 /**
  * Obtains an array of SSG member IDs for a given rank range.
  *
- * @param[in] group_id      SSG group ID
- * @param[in] rank_start    Rank of range start (inclusive)
- * @param[in] rank_end      Rank of range end (inclusive)
- * @param[in,out] range_ids Buffer to store member IDs of requested range
- * @returns number of member IDs returned in range_ids on success, 0 otherwise
+ * @param[in]     group_id      SSG group ID
+ * @param[in]     rank_start    Rank of range start (inclusive)
+ * @param[in]     rank_end      Rank of range end (inclusive)
+ * @param[in,out] range_ids     Buffer to store member IDs of requested range
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
  *
  * NOTE: range_ids must be allocated by caller and must be large enough to hold
  *       requested range.
@@ -375,24 +444,28 @@ int ssg_get_group_member_ids_from_range(
 /**
  * Retrieves the HG address string associated with an SSG group identifier.
  *
- * @param[in] group_id      SSG group ID
- * @param[in] addr_index    Index (0-based) in GID's address list array
- * @returns address string on success, NULL otherwise
+ * @param[in]  group_id     SSG group ID
+ * @param[in]  addr_index   Index (0-based) in GID's address list array
+ * @param[out] addr_str     Group member address string on success (NULL on failure)
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
  * 
  * NOTE: returned string must be freed by caller.
  */
-char *ssg_group_id_get_addr_str(
+int ssg_group_id_get_addr_str(
     ssg_group_id_t group_id,
-    unsigned int addr_index);
+    unsigned int addr_index,
+    char **addr_str);
 
 /**
  * Retrieves the credential associated with an SSG group identifier.
  *
- * @param[in] group_id SSG group ID
- * @returns credential on success, -1 on error or mising credential
+ * @param[in]  group_id SSG group ID
+ * @param[out] cred     Returned credential (-1 on failure or missing credential)
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
  */
-int64_t ssg_group_id_get_cred(
-    ssg_group_id_t group_id);
+int ssg_group_id_get_cred(
+    ssg_group_id_t group_id,
+    int64_t *cred);
 
 /**
  * Serializes an SSG group identifier into a buffer.
@@ -401,8 +474,9 @@ int64_t ssg_group_id_get_cred(
  * @param[in]   num_addrs   Number of group addressses to serialize (SSG_ALL_MEMBERS for all)
  * @param[out]  buf_p       Pointer to store allocated buffer in
  * @param[out]  buf_size_p  Pointer to store buffer size in
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
  */
-void ssg_group_id_serialize(
+int ssg_group_id_serialize(
     ssg_group_id_t group_id,
     int num_addrs,
     char ** buf_p,
@@ -415,8 +489,9 @@ void ssg_group_id_serialize(
  * @param[in]       buf_size    Size of given buffer
  * @param[in/out]   num_addrs   Number of group addresses deserialized (input serves as max)
  * @param[out]      group_id_p  Pointer to store group identifier in
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
  */
-void ssg_group_id_deserialize(
+int ssg_group_id_deserialize(
     const char * buf,
     size_t buf_size,
     int * num_addrs,
@@ -451,8 +526,9 @@ int ssg_group_id_load(
 /** Dumps details of caller's membership in a given group to stdout.
  *
  * @param[in] group_id SSG group ID
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
  */
-void ssg_group_dump(
+int ssg_group_dump(
     ssg_group_id_t group_id);
 
 #ifdef __cplusplus
