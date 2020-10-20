@@ -1612,10 +1612,10 @@ int ssg_group_id_load(
     ssg_group_id_t * group_id_p)
 {
     int fd;
-    struct stat fstats;
     char *buf;
-    ssize_t bytes_read;
-    int ret;
+    ssize_t bufsize=1024;
+    ssize_t total, bytes_read;
+    int eof;
 
     *group_id_p = SSG_GROUP_ID_INVALID;
 
@@ -1627,37 +1627,35 @@ int ssg_group_id_load(
         return SSG_FAILURE;
     }
 
-    ret = fstat(fd, &fstats);
-    if (ret != 0)
-    {
-        fprintf(stderr, "Error: Unable to stat file %s\n", file_name);
-        close(fd);
-        return SSG_FAILURE;
-    }
-    if (fstats.st_size == 0)
-    {
-        fprintf(stderr, "Error: SSG group ID file %s is empty\n", file_name);
-        close(fd);
-        return SSG_FAILURE;
-    }
-
-    buf = malloc(fstats.st_size);
+    /* we used to stat the file to see how big it is.  stat is expensive, so let's skip that */
+    buf = malloc(bufsize);
     if (buf == NULL)
     {
         close(fd);
         return SSG_FAILURE;
     }
 
-    bytes_read = read(fd, buf, fstats.st_size);
-    if (bytes_read != (ssize_t)fstats.st_size)
-    {
-        fprintf(stderr, "Error: Unable to read SSG group ID from file %s\n", file_name);
-        close(fd);
-        free(buf);
-        return SSG_FAILURE;
-    }
+    do {
+        bytes_read = read(fd, buf+total, bufsize-total)
+        if (bytes_read == -1 || bytes_read == 0)
+        {
+            fprintf(stderr, "Error: Unable to read SSG group ID from file %s: %ld (%s)\n",
+                    file_name, bytes_read, strerror(errno));
+            close(fd);
+            free(buf);
+            return SSG_FAILURE;
+        }
+        if (bytes_read == bufsize - total) {
+            bufsize *= 2;
+            buf = realloc(buf, bufsize);
+        } else {
+            eof = 1;
+        }
+        total += bytes_read;
+    } while (!eof);
 
-    ssg_group_id_deserialize(buf, (size_t)bytes_read, num_addrs, group_id_p);
+
+    ssg_group_id_deserialize(buf, (size_t)total, num_addrs, group_id_p);
     if (*group_id_p == SSG_GROUP_ID_INVALID)
     {
         fprintf(stderr, "Error: Unable to deserialize SSG group ID\n");
