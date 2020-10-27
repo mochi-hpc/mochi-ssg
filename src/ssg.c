@@ -473,7 +473,6 @@ int ssg_group_create_pmix(
     int match;
     ssg_member_id_t *ids;
     int ret;
-    ssg_group_id_t g_id = SSG_GROUP_ID_INVALID;
 
     if (!ssg_rt)
         return SSG_ERR_NOT_INITIALIZED;
