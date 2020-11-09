@@ -1636,7 +1636,7 @@ int ssg_group_id_load(
     }
 
     do {
-        bytes_read = read(fd, buf+total, bufsize-total)
+        bytes_read = read(fd, buf+total, bufsize-total);
         if (bytes_read == -1 || bytes_read == 0)
         {
             fprintf(stderr, "Error: Unable to read SSG group ID from file %s: %ld (%s)\n",
