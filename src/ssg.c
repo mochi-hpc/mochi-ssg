@@ -2616,7 +2616,8 @@ static void ssg_group_view_destroy(
         margo_addr_free(mid, state->addr);
         free(state);
     }
-    utarray_free(view->rank_array);
+    if(view->rank_array)
+        utarray_free(view->rank_array);
 
     return;
 }
