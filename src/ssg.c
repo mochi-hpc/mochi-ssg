@@ -934,12 +934,19 @@ int ssg_group_leave_target(
         /* if no target specified, just send to first member in our view */
         ABT_rwlock_rdlock(g_desc->g_data.g->lock);
         if (g_desc->g_data.g->view.size > 1)
-            target_addr = g_desc->g_data.g->view.member_map->addr;
-        ABT_rwlock_unlock(g_desc->g_data.g->lock);
-        if (target_addr == HG_ADDR_NULL)
         {
-            ret = SSG_ERR_INVALID_ADDRESS;
-            goto err_exit;
+            target_addr = g_desc->g_data.g->view.member_map->addr;
+            ABT_rwlock_unlock(g_desc->g_data.g->lock);
+            if (target_addr == HG_ADDR_NULL)
+            {
+                ret = SSG_ERR_INVALID_ADDRESS;
+                goto err_exit;
+            }
+        }
+        else
+        {
+            ABT_rwlock_unlock(g_desc->g_data.g->lock);
+            goto local_leave;
         }
     }
     else
@@ -970,6 +977,8 @@ int ssg_group_leave_target(
     /* at this point we've forwarded the leave request to a group member --
      * safe to shutdown the group locally
      */
+
+local_leave:
 
     SSG_DEBUG(g_desc->g_data.g, "left group\n");
 
