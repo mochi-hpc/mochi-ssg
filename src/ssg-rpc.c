@@ -476,7 +476,7 @@ int ssg_group_observe_send(
     /* send an observe request to the given group member address */
     observe_req.g_id = g_id;
     observe_req.bulk_handle = bulk_handle;
-    HG_CHECK(margo_forward_timed(handle, &observe_req, SSG_DEFAULT_OP_TIMEOUT));
+    HG_CHECK(margo_forward(handle, &observe_req));
 
 
     HG_CHECK(margo_get_output(handle, &observe_resp));
@@ -500,7 +500,7 @@ int ssg_group_observe_send(
             &tmp_view_buf_size, HG_BULK_WRITE_ONLY, &bulk_handle));
 
         observe_req.bulk_handle = bulk_handle;
-        HG_CHECK(margo_forward_timed(handle, &observe_req, SSG_DEFAULT_OP_TIMEOUT));
+        HG_CHECK(margo_forward_timed(handle, &observe_req));
 
         HG_CHECK(margo_get_output(handle, &observe_resp) );
     }
