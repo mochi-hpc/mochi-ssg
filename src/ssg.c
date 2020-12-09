@@ -1614,7 +1614,7 @@ int ssg_group_id_load(
     int fd;
     char *buf;
     ssize_t bufsize=1024;
-    ssize_t total, bytes_read;
+    ssize_t total=0, bytes_read;
     int eof;
 
     *group_id_p = SSG_GROUP_ID_INVALID;
