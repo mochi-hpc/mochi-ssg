@@ -109,6 +109,12 @@ typedef struct ssg_group_view
     UT_array *rank_array;
 } ssg_group_view_t;
 
+typedef struct ssg_update_cb {
+    ssg_membership_update_cb  update_cb;
+    void*                     update_cb_dat;
+    struct ssg_update_cb*     next;
+} ssg_update_cb;
+
 typedef struct ssg_group
 {
     ssg_mid_state_t *mid_state;
@@ -117,13 +123,92 @@ typedef struct ssg_group
     ssg_group_config_t config;
     ssg_member_state_t *dead_members;
     swim_context_t *swim_ctx;
-    ssg_membership_update_cb update_cb;
-    void *update_cb_dat;
+    ssg_update_cb* update_cb_list;
     ABT_rwlock lock;
 #ifdef DEBUG
     FILE *dbg_log;
 #endif
 } ssg_group_t;
+
+inline static int add_membership_update_cb(
+        ssg_group_t* group,
+        ssg_membership_update_cb cb,
+        void* uargs)
+{
+    ssg_update_cb* tmp = (ssg_update_cb*)calloc(1, sizeof(*tmp));
+    tmp->update_cb     = cb;
+    tmp->update_cb_dat = uargs;
+    tmp->next          = NULL;
+    if (group->update_cb_list) {
+        ssg_update_cb* prev = NULL;
+        ssg_update_cb* cur = group->update_cb_list;
+        while(cur) {
+            if (cur->update_cb == cb
+            &&  cur->update_cb_dat == uargs) {
+                free(tmp);
+                return -1;
+            }
+            prev = cur;
+            cur = cur->next;
+        }
+        prev->next = tmp;
+    } else {
+        group->update_cb_list = tmp;
+    }
+    return 0;
+}
+
+inline static int remove_membership_update_cb(
+        ssg_group_t* group,
+        ssg_membership_update_cb cb,
+        void* uargs)
+{
+    ssg_update_cb* previous = NULL;
+    ssg_update_cb* current = group->update_cb_list;
+    while (current) {
+        if (current->update_cb == cb
+        &&  current->update_cb_dat == uargs) {
+            if (previous) {
+                previous->next = current->next;
+            } else { // deleting the first callback
+                group->update_cb_list = current->next;
+            }
+            free(current);
+            return 0;
+        }
+        previous = current;
+        current = current->next;
+    }
+    return -1;
+}
+
+inline static void free_all_membership_update_cb(
+        ssg_group_t* group)
+{
+    ssg_update_cb* tmp = group->update_cb_list;
+    ssg_update_cb* next = NULL;
+    while(tmp) {
+        next = tmp->next;
+        free(tmp);
+        tmp = next;
+    }
+}
+
+inline static void execute_all_membership_update_cb(
+        ssg_update_cb* list,
+        ssg_member_id_t member_id,
+        ssg_member_update_type_t update_type)
+{
+    while(list) {
+       if(list->update_cb) {
+            (list->update_cb)(
+                list->update_cb_dat,
+                member_id,
+                update_type);
+       }
+       list = list->next;
+    }
+}
 
 typedef struct ssg_observed_group
 {

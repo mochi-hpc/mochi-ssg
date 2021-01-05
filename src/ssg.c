@@ -580,6 +580,64 @@ int ssg_group_destroy(
     return SSG_SUCCESS;
 }
 
+int ssg_group_add_membership_update_callback(
+        ssg_group_id_t group_id,
+        ssg_membership_update_cb update_cb,
+        void* update_cb_dat)
+{
+    ssg_group_descriptor_t *g_desc;
+
+    if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID) return SSG_FAILURE;
+
+    ABT_rwlock_wrlock(ssg_rt->lock);
+
+    /* find the group structure */
+    HASH_FIND(hh, ssg_rt->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
+    if (!g_desc)
+    {
+        ABT_rwlock_unlock(ssg_rt->lock);
+        return SSG_GROUP_ID_INVALID;
+    }
+    /* add the membership callback */
+    int ret = add_membership_update_cb(
+            g_desc->g_data.g,
+            update_cb,
+            update_cb_dat);
+
+    ABT_rwlock_unlock(ssg_rt->lock);
+
+    return ret == 0 ? SSG_SUCCESS : SSG_FAILURE;
+}
+
+int ssg_group_remove_membership_update_callback(
+        ssg_group_id_t group_id,
+        ssg_membership_update_cb update_cb,
+        void* update_cb_dat)
+{
+    ssg_group_descriptor_t *g_desc;
+
+    if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID) return SSG_FAILURE;
+
+    ABT_rwlock_wrlock(ssg_rt->lock);
+
+    /* find the group structure */
+    HASH_FIND(hh, ssg_rt->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
+    if (!g_desc)
+    {
+        ABT_rwlock_unlock(ssg_rt->lock);
+        return SSG_GROUP_ID_INVALID;
+    }
+    /* remove the membership callback */
+    int ret = remove_membership_update_cb(
+            g_desc->g_data.g,
+            update_cb,
+            update_cb_dat);
+
+    ABT_rwlock_unlock(ssg_rt->lock);
+
+    return ret == 0 ? SSG_SUCCESS : SSG_FAILURE;
+}
+
 int ssg_group_join_target(
     margo_instance_id mid,
     ssg_group_id_t group_id,
@@ -1614,7 +1672,7 @@ int ssg_group_id_load(
     int fd;
     char *buf;
     ssize_t bufsize=1024;
-    ssize_t total, bytes_read;
+    ssize_t total=0, bytes_read;
     int eof;
 
     *group_id_p = SSG_GROUP_ID_INVALID;
@@ -1877,15 +1935,16 @@ static ssg_group_id_t ssg_group_create_internal(
     if (!group_conf) group_conf = &tmp_group_conf;
 
     /* allocate an SSG group data structure and initialize some of it */
-    g = malloc(sizeof(*g));
+    g = calloc(1, sizeof(*g));
     if (!g) goto fini;
     memset(g, 0, sizeof(*g));
     g->mid_state = mid_state;
     g->name = strdup(group_name);
     if (!g->name) goto fini;
     memcpy(&g->config, group_conf, sizeof(*group_conf));
-    g->update_cb = update_cb;
-    g->update_cb_dat = update_cb_dat;
+    if(update_cb) {
+        add_membership_update_cb(g, update_cb, update_cb_dat);
+    }
     ABT_rwlock_create(&g->lock);
 
 #ifdef DEBUG
@@ -2192,6 +2251,8 @@ static void ssg_group_destroy_internal(
         /* address freed earlier */
         free(state);
     }
+
+    free_all_membership_update_cb(g);
 
     ssg_release_mid_state(g->mid_state);
 
@@ -2597,13 +2658,13 @@ void ssg_apply_member_updates(
             continue;
         }
 
-        /* invoke user callback to apply the SSG update */
-        if (g->update_cb)
-        {
-            ABT_rwlock_unlock(ssg_rt->lock);
-            g->update_cb(g->update_cb_dat, update_member_id, update_type);
-            ABT_rwlock_rdlock(ssg_rt->lock);
-        }
+        /* invoke user callbacks to apply the SSG update */
+        ABT_rwlock_unlock(ssg_rt->lock);
+        execute_all_membership_update_cb(
+            g->update_cb_list,
+            update_member_id,
+            update_type);
+        ABT_rwlock_rdlock(ssg_rt->lock);
 
         /* check if self died, in which case the group should be destroyed locally */
         if (self_died)
@@ -2633,7 +2694,7 @@ void ssg_apply_member_updates(
             }
             ABT_rwlock_unlock(ssg_rt->lock);
             ABT_rwlock_rdlock(ssg_rt->lock);
-            
+
             return; /* no need to keep processing updates, group is destroyed */
         }
     }
