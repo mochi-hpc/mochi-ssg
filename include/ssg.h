@@ -251,6 +251,45 @@ int ssg_group_observe_target(
 int ssg_group_unobserve(
     ssg_group_id_t group_id);
 
+/**************************************
+ *** SSG membership update routines ***
+ **************************************/
+
+/**
+ * @brief Add a membership update callback to the group.
+ * The callback is uniquely identified by the pair
+ * <update_cb, update_cb_dat>, hence this function will
+ * not add the callback if it was already added to the group.
+ * The pair <update_cb, update_cb_dat> should also be used
+ * to remove callbacks.
+ *
+ * @param group_id Group id
+ * @param update_cb Update callback
+ * @param update_cb_dat Data for the callback
+ *
+ * @return SSG_SUCCESS on success, SSG error code otherwise
+ */
+int ssg_group_add_membership_update_callback(
+        ssg_group_id_t group_id,
+        ssg_membership_update_cb update_cb,
+        void* update_cb_dat);
+
+/**
+ * @brief Removes a membership update callback from the group.
+ * The callback is uniquely identified by the pair
+ * <update_cb, update_cb_dat>.
+ *
+ * @param group_id Group id
+ * @param update_cb Update callback
+ * @param update_cb_dat Data for the callback
+ *
+ * @return SSG_SUCCESS on success, SSG error code otherwise
+ */
+int ssg_group_remove_membership_update_callback(
+        ssg_group_id_t group_id,
+        ssg_membership_update_cb update_cb,
+        void* update_cb_dat);
+
 /*********************************
  *** SSG group access routines ***
  *********************************/
