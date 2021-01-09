@@ -67,7 +67,7 @@ static void parse_args(int argc, char *argv[], int *sleep_time, const char **add
     *addr_str = argv[ndx++];
     *gid_file = argv[ndx++];
 
-    return;   
+    return;
 }
 
 int main(int argc, char *argv[])
@@ -103,6 +103,10 @@ int main(int argc, char *argv[])
     /* start observging the SSG server group */
     sret = ssg_group_observe(mid, g_id);
     DIE_IF(sret != SSG_SUCCESS, "ssg_group_observe");
+
+    uint64_t group_hash = 0;
+    ssg_get_group_hash(g_id, &group_hash);
+    printf("SSG group hash is %lu\n", group_hash);
 
     /* for now, just sleep to give observer a chance to establish connection */
     /* XXX: we could replace this with a barrier eventually */

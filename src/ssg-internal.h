@@ -105,6 +105,7 @@ typedef struct ssg_member_state
 typedef struct ssg_group_view
 {
     unsigned int size;
+    uint64_t hash;
     ssg_member_state_t *member_map;
     UT_array *rank_array;
 } ssg_group_view_t;
@@ -129,6 +130,43 @@ typedef struct ssg_group
     FILE *dbg_log;
 #endif
 } ssg_group_t;
+
+typedef struct ssg_observed_group
+{
+    ssg_mid_state_t *mid_state;
+    char *name;
+    ssg_group_view_t view;
+    ABT_rwlock lock;
+} ssg_observed_group_t;
+
+inline static void update_group_hash(ssg_group_t* g, ssg_member_id_t member_id)
+{
+    g->view.hash ^= member_id;
+    printf("Modified member id %lu in hash, hash becomes %lu\n", member_id, g->view.hash);
+}
+
+inline static void compute_member_group_hash(ssg_group_t* g)
+{
+    ssg_member_state_t* state = NULL;
+    ssg_member_state_t* tmp = NULL;
+    g->view.hash = 0;
+    HASH_ITER(hh, g->view.member_map, state, tmp)
+    {
+        g->view.hash ^= state->id;
+    }
+    g->view.hash ^= g->mid_state->self_id;
+}
+
+inline static void compute_observed_group_hash(ssg_observed_group_t* g)
+{
+    ssg_member_state_t* state = NULL;
+    ssg_member_state_t* tmp = NULL;
+    g->view.hash = 0;
+    HASH_ITER(hh, g->view.member_map, state, tmp)
+    {
+        g->view.hash ^= state->id;
+    }
+}
 
 inline static int add_membership_update_cb(
         ssg_group_t* group,
@@ -210,14 +248,6 @@ inline static void execute_all_membership_update_cb(
     }
 }
 
-typedef struct ssg_observed_group
-{
-    ssg_mid_state_t *mid_state;
-    char *name;
-    ssg_group_view_t view;
-    ABT_rwlock lock;
-} ssg_observed_group_t;
-
 typedef struct ssg_member_update
 {
     ssg_member_update_type_t type;
@@ -262,7 +292,7 @@ int ssg_group_observe_send(
     hg_addr_t group_target_addr,
     ssg_mid_state_t * mid_state,
     char ** group_name,
-    int * group_size, 
+    int * group_size,
     void ** view_buf);
 void ssg_apply_member_updates(
     ssg_group_t  * g,

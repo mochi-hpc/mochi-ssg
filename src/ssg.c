@@ -927,6 +927,9 @@ int ssg_group_observe_target(
 	goto fini;
     }
 
+    /* compute the group hash */
+    compute_observed_group_hash(og);
+
     /* add this group reference to our group table */
     ABT_rwlock_wrlock(ssg_rt->lock);
     g_desc->owner_status = SSG_OWNER_IS_OBSERVER;
@@ -1054,6 +1057,49 @@ int ssg_get_group_size(
     ABT_rwlock_unlock(ssg_rt->lock);
 
     return group_size;
+}
+
+int ssg_get_group_hash(
+    ssg_group_id_t group_id, uint64_t* hash)
+{
+    ssg_group_descriptor_t *g_desc;
+    uint64_t group_hash = 0;
+
+    if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID) return 0;
+
+    ABT_rwlock_rdlock(ssg_rt->lock);
+
+    /* find the group descriptor */
+    HASH_FIND(hh, ssg_rt->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
+    if (!g_desc)
+    {
+        ABT_rwlock_unlock(ssg_rt->lock);
+        fprintf(stderr, "Error: SSG unable to find expected group ID\n");
+        return -1;
+    }
+
+    if (g_desc->owner_status == SSG_OWNER_IS_MEMBER)
+    {
+        ABT_rwlock_rdlock(g_desc->g_data.g->lock);
+        group_hash = g_desc->g_data.g->view.hash;
+        ABT_rwlock_unlock(g_desc->g_data.g->lock);
+    }
+    else if (g_desc->owner_status == SSG_OWNER_IS_OBSERVER)
+    {
+        ABT_rwlock_rdlock(g_desc->g_data.og->lock);
+        group_hash = g_desc->g_data.og->view.hash;
+        ABT_rwlock_unlock(g_desc->g_data.og->lock);
+    }
+    else
+    {
+        fprintf(stderr, "Error: SSG can only obtain hash of groups that the caller" \
+            " is a member of or an observer of\n");
+    }
+
+    ABT_rwlock_unlock(ssg_rt->lock);
+
+    *hash = group_hash;
+    return 0;
 }
 
 hg_addr_t ssg_get_group_member_addr(
@@ -1994,6 +2040,9 @@ static ssg_group_id_t ssg_group_create_internal(
         goto fini;
     }
 
+    /* compute group hash */
+    compute_member_group_hash(g);
+
     if(!(group_conf->swim_disabled))
     {
         /* initialize swim failure detector if everything succeeds */
@@ -2657,6 +2706,9 @@ void ssg_apply_member_updates(
             SSG_DEBUG(g, "Warning: invalid SSG update received, ignoring.\n");
             continue;
         }
+
+        /* update group hash */
+        update_group_hash(g, update_member_id);
 
         /* invoke user callbacks to apply the SSG update */
         ABT_rwlock_unlock(ssg_rt->lock);
