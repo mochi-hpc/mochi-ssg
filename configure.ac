@@ -86,6 +86,17 @@ AC_ARG_ENABLE([drc],
      esac],
     [])
 
+check_valgrind=no
+AC_ARG_ENABLE([valgrind],
+    [  --enable-valgrind           enable Valgrind  (default: disabled)],
+    [ case "${enableval}" in
+     yes) check_valgrind=yes ;;
+     no)  check_valgrind=no ;;
+     *) AC_MSG_ERROR([bad value ${enableval} for --enable-valgrind]) ;;
+     esac],
+    [])
+
+
 check_mpi_status=fail
 if test "x${check_mpi}" = xauto -o "x${check_mpi}" = xyes ; then
     AC_MSG_CHECKING([If MPI programs can be compiled])
@@ -120,6 +131,11 @@ if test "x${check_drc}" = xauto -o "x${check_drc}" = xyes ; then
          AC_MSG_RESULT([yes])
          check_drc_status=success],
         [AC_MSG_RESULT([no])])
+fi
+
+if test "x${check_valgrind}" = xauto -o "x${check_valgrind}" = xyes ; then
+    CFLAGS="$MARGO_CFLAGS -DVALGRIND"
+    CPPLAGS="$MARGO_CPPFLAGS -DVALGRIND"
 fi
 
 if test "x${check_mpi_status}" = xfail -a "x${check_mpi}" = xyes; then
