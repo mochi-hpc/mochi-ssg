@@ -1582,19 +1582,26 @@ void ssg_group_id_deserialize(
     tmp_buf += sizeof(ssg_group_id_t);
     num_addrs_buf = *(uint32_t *)tmp_buf;
     tmp_buf += sizeof(uint32_t);
-    if ((tmp_num_addrs == SSG_ALL_MEMBERS) ||
-            (num_addrs_buf < (unsigned int)tmp_num_addrs))
-        tmp_num_addrs = num_addrs_buf;
 
     /* convert buffer of address strings to an arrray */
-    addr_strs = ssg_addr_str_buf_to_list(tmp_buf, tmp_num_addrs);
+    addr_strs = ssg_addr_str_buf_to_list(tmp_buf, num_addrs_buf);
     if (!addr_strs)
         return;
-    tmp_buf = addr_strs[tmp_num_addrs - 1] + strlen(addr_strs[tmp_num_addrs - 1]) + 1;
+    tmp_buf = addr_strs[num_addrs_buf - 1] + strlen(addr_strs[num_addrs_buf - 1]) + 1;
+
+    /* finally check to see if there's a credential left at the end */
     if ((buf_size - (tmp_buf - buf)) == sizeof(int64_t))
         cred = *(int64_t *)tmp_buf;
     else
         cred = -1;
+
+    if ((tmp_num_addrs == SSG_ALL_MEMBERS) ||
+            (num_addrs_buf < (unsigned int)tmp_num_addrs))
+        tmp_num_addrs = num_addrs_buf;
+
+    addr_strs = realloc(addr_strs, tmp_num_addrs * sizeof(*addr_strs));
+    if (!addr_strs)
+        return;
 
     for (i = 0; i < tmp_num_addrs; i++)
     {
