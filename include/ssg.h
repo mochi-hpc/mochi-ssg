@@ -23,10 +23,6 @@
 extern "C" {
 #endif
 
-/* SSG return codes */
-//#define SSG_SUCCESS 0
-#define SSG_FAILURE (-1)
-
 /* opaque SSG group ID type */
 typedef uint64_t ssg_group_id_t;
 #define SSG_GROUP_ID_INVALID 0
@@ -96,6 +92,7 @@ typedef void (*ssg_membership_update_cb)(
     X(SSG_ERR_NOT_SUPPORTED,        "Not supported") \
     X(SSG_ERR_MARGO_FAILURE,        "margo failure") \
     X(SSG_ERR_PMIX_FAILURE,         "PMIx failure") \
+    X(SSG_ERR_NOBUFS,               "No buffer space") \
     X(SSG_ERR_MAX,                  "End of range for valid error codes")
 
 #define X(__err__, __msg__) __err__,

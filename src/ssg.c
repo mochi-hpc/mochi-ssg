@@ -119,6 +119,7 @@ int ssg_init()
 
     if (ABT_initialized() == ABT_ERR_UNINITIALIZED)
     {
+        /* TODO: call argobots init routine in margo to set appropriate env */
         ret = ABT_init(0, NULL);
         if (ret != 0)
             return SSG_MAKE_ABT_ERROR(ret);
@@ -135,7 +136,6 @@ int ssg_init()
 #endif
 
     /* seed RNG */
-
     clock_gettime(CLOCK_MONOTONIC, &ts);
     srand(ts.tv_nsec + getpid());
 
@@ -480,7 +480,7 @@ int ssg_group_create_pmix(
     if (!PMIx_Initialized())
     {
         fprintf(stderr, "Error: SSG unable to use PMIx (uninitialized)\n");
-        return SSG_ERR_NOT_INITIALIZED;
+        return SSG_ERR_PMIX_FAILURE;
     }
 
     ret = ssg_acquire_mid_state(mid, &mid_state);
@@ -858,9 +858,6 @@ int ssg_group_join_target(
 
         /* free old descriptor */
         ssg_group_descriptor_free(g_desc);
-
-        /* don't free on success */
-        group_name = NULL;
     }
 
 fini:
@@ -935,7 +932,8 @@ int ssg_group_leave_target(
         ABT_rwlock_rdlock(g_desc->g_data.g->lock);
         if (g_desc->g_data.g->view.size > 1)
         {
-            target_addr = g_desc->g_data.g->view.member_map->addr;
+            margo_addr_dup(g_desc->g_data.g->mid_state->mid,
+                g_desc->g_data.g->view.member_map->addr, &target_addr);
             ABT_rwlock_unlock(g_desc->g_data.g->lock);
             if (target_addr == HG_ADDR_NULL)
             {
@@ -965,8 +963,7 @@ int ssg_group_leave_target(
     /* send leave request to target member if one is available */
     ret = ssg_group_leave_send(group_id, target_addr, g_desc->g_data.g->mid_state);
 
-    if (target_addr_str)
-        margo_addr_free(g_desc->g_data.g->mid_state->mid, target_addr);
+    margo_addr_free(g_desc->g_data.g->mid_state->mid, target_addr);
 
     if (ret != SSG_SUCCESS)
     {
@@ -1016,7 +1013,7 @@ int ssg_group_observe_target(
     if (!ssg_rt)
         return SSG_ERR_NOT_INITIALIZED;
 
-    if (group_id == SSG_GROUP_ID_INVALID)
+    if (mid == MARGO_INSTANCE_NULL || group_id == SSG_GROUP_ID_INVALID)
         return SSG_ERR_INVALID_ARG;
 
     ret = ssg_acquire_mid_state(mid, &mid_state);
@@ -1026,7 +1023,7 @@ int ssg_group_observe_target(
         return ret;
     }
 
-    ABT_rwlock_rdlock(ssg_rt->lock);
+    ABT_rwlock_wrlock(ssg_rt->lock);
 
     /* find the group structure to observe */
     HASH_FIND(hh, ssg_rt->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
@@ -1104,7 +1101,7 @@ int ssg_group_observe_target(
     }
     memset(og, 0, sizeof(*og));
     og->mid_state = mid_state;
-    og->name = strdup(group_name);
+    og->name = group_name;
     ABT_rwlock_create(&og->lock);
 
     /* create the view for the group */
@@ -1128,20 +1125,18 @@ int ssg_group_observe_target(
     ret = SSG_SUCCESS;
 
     /* don't free on success */
-    free(group_name);
     group_name = NULL;
     og = NULL;
 fini:
+    if (target_addr != HG_ADDR_NULL)
+        margo_addr_free(mid_state->mid, target_addr);
     free(addr_strs);
     free(view_buf);
     free(group_name);
-    if (target_addr != HG_ADDR_NULL)
-        margo_addr_free(mid_state->mid, target_addr);
     if (og)
     {
         ssg_group_view_destroy(&og->view, og->mid_state->mid);
         ABT_rwlock_free(&og->lock);
-        free(og->name);
         free(og);
     }
     if (ret != SSG_SUCCESS)
@@ -1310,7 +1305,10 @@ int ssg_get_group_member_addr(
         ssg_group_t *g = g_desc->g_data.g;
 
         if (member_id == g->mid_state->self_id)
+        {
             *member_addr = g->mid_state->self_addr;
+            ret = SSG_SUCCESS;
+        }
         else
         {
             ABT_rwlock_rdlock(g->lock);
@@ -1441,10 +1439,9 @@ int ssg_get_group_member_rank(
     }
     else
     {
-        ABT_rwlock_unlock(ssg_rt->lock);
         fprintf(stderr, "Error: SSG unable to obtain rank for group caller is"
             "not a member or an observer of\n");
-        return SSG_ERR_INVALID_OPERATION;
+        ret = SSG_ERR_INVALID_OPERATION;
     }
 
     ABT_rwlock_unlock(ssg_rt->lock);
@@ -1587,6 +1584,7 @@ int ssg_get_group_member_ids_from_range(
             "not a member or an observer of\n");
         return SSG_ERR_INVALID_OPERATION;
     }
+
     ABT_rwlock_unlock(ssg_rt->lock);
 
     return SSG_SUCCESS;
@@ -2057,6 +2055,7 @@ int ssg_group_dump(
     }
     else
     {
+        ABT_rwlock_unlock(ssg_rt->lock);
         fprintf(stderr, "Error: SSG can only dump membership information for" \
             " groups that the caller is a member of or an observer of\n");
         return SSG_ERR_INVALID_OPERATION;
@@ -2116,6 +2115,7 @@ static int ssg_acquire_mid_state(
     *msp = NULL;
 
     ABT_rwlock_wrlock(ssg_rt->lock);
+
     LL_SEARCH_SCALAR(ssg_rt->mid_list, mid_state, mid, mid);
     if(!mid_state)
     {
@@ -2233,6 +2233,7 @@ static void ssg_release_mid_state(
         free(mid_state->self_addr_str);
         free(mid_state);
     }
+
     ABT_rwlock_unlock(ssg_rt->lock);
 
     return;
@@ -2273,6 +2274,8 @@ static int ssg_group_create_internal(
         add_membership_update_cb(g, update_cb, update_cb_dat);
     }
     ABT_rwlock_create(&g->lock);
+    ABT_mutex_create(&g->ref_mutex);
+    ABT_cond_create(&g->ref_cond);
 
     /* generate unique descriptor for this group */
     tmp_g_id = ssg_hash64_str(group_name);
@@ -2316,7 +2319,7 @@ static int ssg_group_create_internal(
     if(!(group_conf->swim_disabled))
     {
         /* initialize swim failure detector if everything succeeds */
-        ret = swim_init(g, g_desc->g_id, group_conf, 1);
+        ret = swim_init(g, g_desc->g_id, group_conf);
         if (ret != SSG_SUCCESS)
         {
             ABT_rwlock_unlock(g->lock);
@@ -2340,8 +2343,11 @@ fini:
         if (g)
         {
             ssg_group_view_destroy(&g->view, mid_state->mid);
-            ABT_rwlock_free(&g->lock);
-            free(g->name);
+            if(g->name)
+            {
+                free(g->name);
+                ABT_rwlock_free(&g->lock);
+            }
             free(g);
         }
     }
@@ -2566,12 +2572,16 @@ static void ssg_group_destroy_internal(
     ssg_group_t * g)
 {
     ssg_member_state_t *state, *tmp;
+    ssg_mid_state_t *mid_state;
 
     if (!(g->config.swim_disabled))
     {
         /* free up SWIM state */
         swim_finalize(g);
     }
+
+    /* wait on any outstanding group references in ULT handlers */
+    SSG_GROUP_REFS_WAIT(g);
 
     /* destroy group state */
     ABT_rwlock_wrlock(g->lock);
@@ -2587,11 +2597,14 @@ static void ssg_group_destroy_internal(
 
     free_all_membership_update_cb(g);
 
-    ssg_release_mid_state(g->mid_state);
-
+    mid_state = g->mid_state;
     ABT_rwlock_unlock(g->lock);
-
+    
+    ABT_cond_free(&g->ref_cond);
+    ABT_mutex_free(&g->ref_mutex);
     ABT_rwlock_free(&g->lock);
+
+    ssg_release_mid_state(mid_state);
     free(g->name);
     free(g);
 
@@ -2755,20 +2768,24 @@ void ssg_pmix_proc_failure_notify_fn(
             fail_update.type = SSG_MEMBER_DIED;
 
             /* iterate all SSG member IDs associated with the failed PMIx rank */
-            ABT_rwlock_rdlock(ssg_rt->lock);
             for (i = 0; i < id_array_ptr->size; i++)
             {
                 /* remove this member from any group its a member of */
                 fail_update.u.member_id = ids[i];
 
+                ABT_rwlock_rdlock(ssg_rt->lock);
                 HASH_ITER(hh, ssg_rt->g_desc_table, g_desc, g_desc_tmp)
                 {
+                    SSG_GROUP_REF_INCR(g_desc->g_data.g);
+                    ABT_rwlock_unlock(ssg_rt->lock);
                     SSG_DEBUG(g_desc->g_data.g, "received FAIL update for member %lu\n",
                         fail_update.u.member_id);
-                    ssg_apply_member_updates(g_desc->g_data.g, &fail_update, 1);
+                    ssg_apply_member_updates(g_desc->g_data.g, &fail_update, 1, 1);
+                    SSG_GROUP_REF_DECR(g_desc->g_data.g);
+                    ABT_rwlock_rdlock(ssg_rt->lock);
                 }
+                ABT_rwlock_unlock(ssg_rt->lock);
             }
-            ABT_rwlock_unlock(ssg_rt->lock);
         }
         else
         {
@@ -2809,7 +2826,8 @@ void ssg_pmix_proc_failure_reg_cb(
 void ssg_apply_member_updates(
     ssg_group_t  * g,
     ssg_member_update_t * updates,
-    hg_size_t update_count)
+    hg_size_t update_count,
+    int swim_apply_flag)
 {
     hg_size_t i;
     ssg_member_state_t *update_ms;
@@ -2818,7 +2836,6 @@ void ssg_apply_member_updates(
     int update_rank;
     int self_died = 0;
     hg_return_t hret;
-    int ret;
 
     assert(g != NULL);
 
@@ -2827,6 +2844,7 @@ void ssg_apply_member_updates(
         if (updates[i].type == SSG_MEMBER_JOINED)
         {
             ssg_member_id_t join_id = ssg_gen_member_id(updates[i].u.member_addr_str);
+            hg_addr_t join_addr;
 
             if (join_id == g->mid_state->self_id)
             {
@@ -2834,7 +2852,7 @@ void ssg_apply_member_updates(
                 continue;
             }
 
-            ABT_rwlock_wrlock(g->lock);
+            ABT_rwlock_rdlock(g->lock);
             HASH_FIND(hh, g->view.member_map, &join_id, sizeof(join_id), update_ms);
             if (update_ms)
             {
@@ -2851,55 +2869,49 @@ void ssg_apply_member_updates(
                 continue;
             }
 
-            /* add member to the view */
-            /* NOTE: we temporarily add the member to the view with a NULL addr
-             * to hold its place in the view and prevent competing joins
-             */
-            update_ms = ssg_group_view_add_member(updates[i].u.member_addr_str,
-                HG_ADDR_NULL, join_id, &g->view);
-            if (update_ms == NULL)
-            {
-                SSG_DEBUG(g, "Warning: SSG unable to add joining group member %s\n",
-                    updates[i].u.member_addr_str);
-                ABT_rwlock_unlock(g->lock);
-                continue;
-            }
-
-            /* setup rank-based array */
-            utarray_sort(g->view.rank_array, ssg_member_id_sort_cmp);
-
             ABT_rwlock_unlock(g->lock);
 
             /* lookup address of joining member */
             hret = margo_addr_lookup(g->mid_state->mid, updates[i].u.member_addr_str,
-                &update_ms->addr);
+                &join_addr);
             if (hret != HG_SUCCESS)
             {
                 SSG_DEBUG(g, "Warning: SSG unable to lookup joining group member %s addr\n",
                     updates[i].u.member_addr_str);
-                ABT_rwlock_wrlock(g->lock);
-                HASH_DEL(g->view.member_map, update_ms);
-                g->view.size--;
-                free(update_ms->addr_str);
-                free(update_ms);
+                continue;
+            }
+
+            /* add member to the view */
+            /* NOTE: double-check to make sure a competing join hasn't added state for
+             *       the joining member while we were looking up their address
+             */
+            ABT_rwlock_wrlock(g->lock);
+            HASH_FIND(hh, g->view.member_map, &join_id, sizeof(join_id), update_ms);
+            if (!update_ms)
+            {
+                update_ms = ssg_group_view_add_member(updates[i].u.member_addr_str,
+                    join_addr, join_id, &g->view);
+                if (update_ms == NULL)
+                {
+                    SSG_DEBUG(g, "Warning: SSG unable to add joining group member %s\n",
+                        updates[i].u.member_addr_str);
+                    ABT_rwlock_unlock(g->lock);
+                    continue;
+                }
+
+                /* setup rank-based array */
+                utarray_sort(g->view.rank_array, ssg_member_id_sort_cmp);
+                ABT_rwlock_unlock(g->lock);
+            }
+            else
+            {
                 ABT_rwlock_unlock(g->lock);
                 continue;
             }
 
             /* have SWIM apply the join update */
-            ret = swim_apply_ssg_member_update(g, update_ms, updates[i]);
-            if (ret != SSG_SUCCESS)
-            {
-                SSG_DEBUG(g, "Warning: SWIM unable to apply SSG update for joining"\
-                    "group member %s\n", updates[i].u.member_addr_str);
-                ABT_rwlock_wrlock(g->lock);
-                HASH_DEL(g->view.member_map, update_ms);
-                g->view.size--;
-                free(update_ms->addr_str);
-                free(update_ms);
-                ABT_rwlock_unlock(g->lock);
-                continue;
-            }
+            if(swim_apply_flag)
+                swim_apply_ssg_member_update(g, update_ms, updates[i]);
 
             SSG_DEBUG(g, "added member %lu\n", join_id);
 
@@ -2929,13 +2941,8 @@ void ssg_apply_member_updates(
             ABT_rwlock_unlock(g->lock);
 
             /* have SWIM apply the leave update */
-            ret = swim_apply_ssg_member_update(g, update_ms, updates[i]);
-            if (ret != SSG_SUCCESS)
-            {
-                SSG_DEBUG(g, "Warning: SWIM unable to apply SSG update for leaving"\
-                    "group member %lu\n", updates[i].u.member_id);
-                continue;
-            }
+            if(swim_apply_flag)
+                swim_apply_ssg_member_update(g, update_ms, updates[i]);
 
             SSG_DEBUG(g, "removed leaving member %lu\n", updates[i].u.member_id);
 
@@ -2971,13 +2978,8 @@ void ssg_apply_member_updates(
                 ABT_rwlock_unlock(g->lock);
 
                 /* have SWIM apply the dead update */
-                ret = swim_apply_ssg_member_update(g, update_ms, updates[i]);
-                if (ret != SSG_SUCCESS)
-                {
-                    SSG_DEBUG(g, "Warning: SWIM unable to apply SSG update for dead"\
-                        "group member %lu\n", updates[i].u.member_id);
-                    continue;
-                }
+                if(swim_apply_flag)
+                    swim_apply_ssg_member_update(g, update_ms, updates[i]);
 
                 SSG_DEBUG(g, "removed dead member %lu\n", updates[i].u.member_id);
             }
@@ -2992,16 +2994,15 @@ void ssg_apply_member_updates(
         }
 
         /* invoke user callbacks to apply the SSG update */
-        ABT_rwlock_unlock(ssg_rt->lock);
         execute_all_membership_update_cb(
             g->update_cb_list,
             update_member_id,
             update_type);
-        ABT_rwlock_rdlock(ssg_rt->lock);
 
         /* check if self died, in which case the group should be destroyed locally */
         if (self_died)
         {
+#if 0
             ssg_group_descriptor_t *g_desc, *g_desc_tmp;
 
             /* XXX we need to find the corresponding group descriptor and
@@ -3009,26 +3010,26 @@ void ssg_apply_member_updates(
              * to a descriptor so we just iterate the descriptor table until
              * we find one that matches our group pointer...
              */
-            /* XXX we know that the global ssg_rt lock is held in rd mode in
-             * this code path, so we release and reacquire in wr mode to remove
-             * the descriptor
-             */
-            ABT_rwlock_unlock(ssg_rt->lock);
             ABT_rwlock_wrlock(ssg_rt->lock);
             HASH_ITER(hh, ssg_rt->g_desc_table, g_desc, g_desc_tmp)
             {
                 if (g_desc->g_data.g == g)
                 {
                     HASH_DEL(ssg_rt->g_desc_table, g_desc);
+                    /* XXX in the case we are notified we have died, we know
+                     * that the caller of this function has a held */
+                    SSG_GROUP_REF_DECR(g_desc->g_data.g);
                     ABT_rwlock_unlock(ssg_rt->lock);
                     ssg_group_destroy_internal(g);
                     break;
                 }
             }
             ABT_rwlock_unlock(ssg_rt->lock);
-            ABT_rwlock_rdlock(ssg_rt->lock);
 
             return; /* no need to keep processing updates, group is destroyed */
+#endif
+            /* XXX i think we need to schedule a thread to remove the group, waiting on callers of this function to clean up */
+            assert(0);
         }
     }
 

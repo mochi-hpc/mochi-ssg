@@ -51,9 +51,11 @@ struct swim_context
     ssg_group_id_t g_id;
     swim_member_inc_nr_t self_inc_nr;
     ssg_member_id_t dping_target_id;
+    hg_addr_t dping_target_addr;
     swim_member_inc_nr_t dping_target_inc_nr;
     double dping_timeout;
     ssg_member_id_t iping_target_ids[SWIM_MAX_SUBGROUP_SIZE];
+    hg_addr_t iping_target_addrs[SWIM_MAX_SUBGROUP_SIZE];
     int iping_target_ndx;
     int ping_target_acked;
     int shutdown_flag;

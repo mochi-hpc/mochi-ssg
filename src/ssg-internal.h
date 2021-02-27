@@ -41,6 +41,25 @@ extern "C" {
 } while(0)
 #endif
 
+#define SSG_GROUP_REF_INCR(__g) do { \
+    ABT_mutex_lock(__g->ref_mutex); \
+    __g->ref_count++; \
+    ABT_mutex_unlock(__g->ref_mutex); \
+} while(0)
+
+#define SSG_GROUP_REF_DECR(__g) do { \
+    ABT_mutex_lock(__g->ref_mutex); \
+    __g->ref_count--; \
+    ABT_cond_signal(__g->ref_cond); \
+    ABT_mutex_unlock(__g->ref_mutex); \
+} while(0)
+
+#define SSG_GROUP_REFS_WAIT(__g) do { \
+    ABT_mutex_lock(__g->ref_mutex); \
+    while(g->ref_count) ABT_cond_wait(__g->ref_cond, __g->ref_mutex); \
+    ABT_mutex_unlock(__g->ref_mutex); \
+} while(0)
+
 /* SSG internal dataypes */
 
 typedef struct ssg_runtime_state
@@ -128,6 +147,9 @@ typedef struct ssg_group
     swim_context_t *swim_ctx;
     ssg_update_cb* update_cb_list;
     ABT_rwlock lock;
+    ABT_mutex ref_mutex;
+    ABT_cond ref_cond;
+    int ref_count;
 } ssg_group_t;
 
 inline static int add_membership_update_cb(
@@ -267,7 +289,8 @@ int ssg_group_observe_send(
 void ssg_apply_member_updates(
     ssg_group_t  * g,
     ssg_member_update_t * updates,
-    hg_size_t update_count);
+    hg_size_t update_count,
+    int swim_apply_flag);
 hg_return_t hg_proc_ssg_member_update_t(
     hg_proc_t proc, void *data);
 

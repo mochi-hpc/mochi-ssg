@@ -68,7 +68,7 @@ DECLARE_MARGO_RPC_HANDLER(ssg_group_observe_recv_ult)
 
 /* internal helper routine prototypes */
 static int ssg_group_serialize(
-    ssg_group_t *g, void **buf, hg_size_t *buf_size);
+    ssg_group_t *g, void **buf, hg_size_t *buf_size, int *group_size);
 
 /* ssg_register_rpcs
  *
@@ -187,7 +187,7 @@ int ssg_group_join_send(
     }
 
     /* if our initial buffer is too small, reallocate to the exact size & rejoin */
-    if (join_resp.view_buf_size > tmp_view_buf_size)
+    while (join_resp.view_buf_size > tmp_view_buf_size)
     {
         b = realloc(tmp_view_buf, join_resp.view_buf_size);
         if(!b)
@@ -220,7 +220,7 @@ int ssg_group_join_send(
         }
 
         hret = margo_get_output(handle, &join_resp);
-        if (hret != HG_SUCCESS) goto fini;
+        if (hret != HG_SUCCESS)
         {
             ret = SSG_MAKE_HG_ERROR(hret);
             goto fini;
@@ -244,6 +244,7 @@ int ssg_group_join_send(
     *group_name = strdup(join_resp.group_name);
     if(!(*group_name))
     {
+        margo_free_output(handle, &join_resp);
         ret = SSG_ERR_ALLOCATION;
         goto fini;
     }
@@ -277,6 +278,7 @@ static void ssg_group_join_recv_ult(
     hg_bulk_t bulk_handle = HG_BULK_NULL;
     ssg_member_update_t join_update;
     int group_size;
+    char *group_name = NULL;
     int ret;
     hg_return_t hret;
 
@@ -334,55 +336,72 @@ static void ssg_group_join_recv_ult(
         goto fini;
     }
 
-    ret = ssg_group_serialize(g_desc->g_data.g, &view_buf, &view_buf_size);
+    SSG_GROUP_REF_INCR(g_desc->g_data.g);
+    ABT_rwlock_unlock(ssg_rt->lock);
+
+    /* serialize group view and stash some other group metadata for response */
+    ret = ssg_group_serialize(g_desc->g_data.g, &view_buf, &view_buf_size, &group_size);
     if (ret != SSG_SUCCESS)
     {
-        ABT_rwlock_unlock(ssg_rt->lock);
+        SSG_GROUP_REF_DECR(g_desc->g_data.g);
         margo_free_input(handle, &join_req);
         goto fini;
     }
-    group_size = g_desc->g_data.g->view.size;
+    join_resp.view_buf_size = view_buf_size;
 
-    if (view_size_requested >= view_buf_size)
+    if (view_size_requested < view_buf_size)
     {
-        /* apply group join locally */
-        join_update.type = SSG_MEMBER_JOINED;
-        join_update.u.member_addr_str = join_req.addr_str;
-        ssg_apply_member_updates(g_desc->g_data.g, &join_update, 1);
-
-        ABT_rwlock_unlock(ssg_rt->lock);
-
-        /* if joiner's buf is large enough, transfer the view */
-        hret = margo_bulk_create(mid, 1, &view_buf, &view_buf_size,
-            HG_BULK_READ_ONLY, &bulk_handle);
-        if (hret != HG_SUCCESS)
-        {
-            margo_free_input(handle, &join_req);
-            ret = SSG_MAKE_HG_ERROR(hret);
-            goto fini;
-        }
-
-        hret = margo_bulk_transfer(mid, HG_BULK_PUSH, hgi->addr,
-            join_req.bulk_handle, 0, bulk_handle, 0, view_buf_size);
-        if (hret != HG_SUCCESS)
-        {
-            margo_free_input(handle, &join_req);
-            ret = SSG_MAKE_HG_ERROR(hret);
-            goto fini;
-        }
+        SSG_GROUP_REF_DECR(g_desc->g_data.g);
+        margo_free_input(handle, &join_req);
+        ret = SSG_ERR_NOBUFS;
+        goto fini;
     }
-    else
-        ABT_rwlock_unlock(ssg_rt->lock);
 
-    margo_free_input(handle, &join_req);
+    /* if joiner's buf is large enough, transfer the view */
+    hret = margo_bulk_create(mid, 1, &view_buf, &view_buf_size,
+        HG_BULK_READ_ONLY, &bulk_handle);
+    if (hret != HG_SUCCESS)
+    {
+        SSG_GROUP_REF_DECR(g_desc->g_data.g);
+        margo_free_input(handle, &join_req);
+        ret = SSG_MAKE_HG_ERROR(hret);
+        goto fini;
+    }
 
-    /* set the response and send back */
-    join_resp.group_name = g_desc->g_data.g->name;
+    hret = margo_bulk_transfer(mid, HG_BULK_PUSH, hgi->addr,
+        join_req.bulk_handle, 0, bulk_handle, 0, view_buf_size);
+    if (hret != HG_SUCCESS)
+    {
+        SSG_GROUP_REF_DECR(g_desc->g_data.g);
+        margo_free_input(handle, &join_req);
+        ret = SSG_MAKE_HG_ERROR(hret);
+        goto fini;
+    }
+
+    group_name = strdup(g_desc->g_data.g->name);
+    if(!group_name)
+    {
+        SSG_GROUP_REF_DECR(g_desc->g_data.g);
+        margo_free_input(handle, &join_req);
+        ret = SSG_ERR_ALLOCATION;
+        goto fini;
+    }
+
+    /* set the response for successful join */
+    join_resp.group_name = group_name;
     join_resp.group_size = group_size;
     memcpy(&join_resp.group_config, &g_desc->g_data.g->config,
         sizeof(join_resp.group_config));
-    join_resp.view_buf_size = view_buf_size;
     ret = SSG_SUCCESS;
+
+    /* apply group join locally */
+    join_update.type = SSG_MEMBER_JOINED;
+    join_update.u.member_addr_str = join_req.addr_str;
+    ssg_apply_member_updates(g_desc->g_data.g, &join_update, 1, 1);
+
+    SSG_GROUP_REF_DECR(g_desc->g_data.g);
+
+    margo_free_input(handle, &join_req);
 fini:
     /* respond */
     join_resp.ret = ret;
@@ -392,6 +411,7 @@ fini:
     if (bulk_handle != HG_BULK_NULL) margo_bulk_free(bulk_handle);
     margo_destroy(handle);
     free(view_buf);
+    free(group_name);
 
     return;
 }
@@ -502,12 +522,15 @@ static void ssg_group_leave_recv_ult(
     assert(g_desc->owner_status == SSG_OWNER_IS_MEMBER);
     assert(mid == g_desc->g_data.g->mid_state->mid);
 
+    SSG_GROUP_REF_INCR(g_desc->g_data.g);
+    ABT_rwlock_unlock(ssg_rt->lock);
+
     /* apply group leave locally */
     leave_update.type = SSG_MEMBER_LEFT;
     leave_update.u.member_id = leave_req.member_id;
-    ssg_apply_member_updates(g_desc->g_data.g, &leave_update, 1);
+    ssg_apply_member_updates(g_desc->g_data.g, &leave_update, 1, 1);
 
-    ABT_rwlock_unlock(ssg_rt->lock);
+    SSG_GROUP_REF_DECR(g_desc->g_data.g);
 
     margo_free_input(handle, &leave_req);
     ret = SSG_SUCCESS;
@@ -597,7 +620,7 @@ int ssg_group_observe_send(
     }
 
     /* if our initial buffer is too small, reallocate to the exact size & resend */
-    if (observe_resp.view_buf_size > tmp_view_buf_size)
+    while (observe_resp.view_buf_size > tmp_view_buf_size)
     {
         b = realloc(tmp_view_buf, observe_resp.view_buf_size);
         if(!b)
@@ -654,6 +677,7 @@ int ssg_group_observe_send(
     *group_name = strdup(observe_resp.group_name);
     if(!(*group_name))
     {
+        margo_free_output(handle, &observe_resp);
         ret = SSG_ERR_ALLOCATION;
         goto fini;
     }
@@ -685,6 +709,7 @@ static void ssg_group_observe_recv_ult(
     hg_size_t view_buf_size;
     hg_bulk_t bulk_handle = HG_BULK_NULL;
     int group_size;
+    char *group_name = NULL;
     int ret;
     hg_return_t hret;
 
@@ -732,49 +757,65 @@ static void ssg_group_observe_recv_ult(
     assert(g_desc->owner_status == SSG_OWNER_IS_MEMBER);
     assert(mid == g_desc->g_data.g->mid_state->mid);
 
-    SSG_DEBUG(g_desc->g_data.g, "received group observe request\n");
+    SSG_GROUP_REF_INCR(g_desc->g_data.g);
+    ABT_rwlock_unlock(ssg_rt->lock);
 
-    ret = ssg_group_serialize(g_desc->g_data.g, &view_buf, &view_buf_size);
+    /* serialize group view and stash some other group metadata for response */
+    ret = ssg_group_serialize(g_desc->g_data.g, &view_buf, &view_buf_size, &group_size);
     if (ret != SSG_SUCCESS)
     {
-        ABT_rwlock_unlock(ssg_rt->lock);
+        SSG_GROUP_REF_DECR(g_desc->g_data.g);
         margo_free_input(handle, &observe_req);
         goto fini;
     }
-    group_size = g_desc->g_data.g->view.size;
-
-    ABT_rwlock_unlock(ssg_rt->lock);
-
-    if (view_size_requested >= view_buf_size)
-    {
-        /* if observer's buf is large enough, transfer the view */
-        hret = margo_bulk_create(mid, 1, &view_buf, &view_buf_size,
-            HG_BULK_READ_ONLY, &bulk_handle);
-        if (hret != HG_SUCCESS)
-        {
-            margo_free_input(handle, &observe_req);
-            ret = SSG_MAKE_HG_ERROR(hret);
-            goto fini;
-        }
-
-        hret = margo_bulk_transfer(mid, HG_BULK_PUSH, hgi->addr,
-            observe_req.bulk_handle, 0, bulk_handle, 0, view_buf_size);
-        if (hret != HG_SUCCESS)
-        {
-            margo_free_input(handle, &observe_req);
-            ret = SSG_MAKE_HG_ERROR(hret);
-            goto fini;
-        }
-
-        SSG_DEBUG(g_desc->g_data.g, "transferred group view to observer\n");
-    }
-    margo_free_input(handle, &observe_req);
-
-    /* set the response and send back */
-    observe_resp.group_name = g_desc->g_data.g->name;
-    observe_resp.group_size = group_size;
     observe_resp.view_buf_size = view_buf_size;
+
+    if (view_size_requested < view_buf_size)
+    {
+        SSG_GROUP_REF_DECR(g_desc->g_data.g);
+        margo_free_input(handle, &observe_req);
+        ret = SSG_ERR_NOBUFS;
+        goto fini;
+    }
+
+    /* if observer's buf is large enough, transfer the view */
+    hret = margo_bulk_create(mid, 1, &view_buf, &view_buf_size,
+        HG_BULK_READ_ONLY, &bulk_handle);
+    if (hret != HG_SUCCESS)
+    {
+        SSG_GROUP_REF_DECR(g_desc->g_data.g);
+        margo_free_input(handle, &observe_req);
+        ret = SSG_MAKE_HG_ERROR(hret);
+        goto fini;
+    }
+
+    hret = margo_bulk_transfer(mid, HG_BULK_PUSH, hgi->addr,
+        observe_req.bulk_handle, 0, bulk_handle, 0, view_buf_size);
+    if (hret != HG_SUCCESS)
+    {
+        SSG_GROUP_REF_DECR(g_desc->g_data.g);
+        margo_free_input(handle, &observe_req);
+        ret = SSG_MAKE_HG_ERROR(hret);
+        goto fini;
+    }
+
+    group_name = strdup(g_desc->g_data.g->name);
+    if(!group_name)
+    {
+        SSG_GROUP_REF_DECR(g_desc->g_data.g);
+        margo_free_input(handle, &observe_req);
+        ret = SSG_ERR_ALLOCATION;
+        goto fini;
+    }
+
+    /* set the response for successful observe */
+    observe_resp.group_name = group_name;
+    observe_resp.group_size = group_size;
     ret = SSG_SUCCESS;
+
+    SSG_GROUP_REF_DECR(g_desc->g_data.g);
+
+    margo_free_input(handle, &observe_req);
 fini:
     /* respond */
     observe_resp.ret = ret;
@@ -784,21 +825,24 @@ fini:
     if (bulk_handle != HG_BULK_NULL) margo_bulk_free(bulk_handle);
     margo_destroy(handle);
     free(view_buf);
+    free(group_name);
 
     return;
 }
 DEFINE_MARGO_RPC_HANDLER(ssg_group_observe_recv_ult)
 
 static int ssg_group_serialize(
-    ssg_group_t *g, void **buf, hg_size_t *buf_size)
+    ssg_group_t *g, void **buf, hg_size_t *buf_size, int *group_size)
 {
     ssg_member_state_t *member_state, *tmp;
     hg_size_t group_buf_size = 0;
     void *group_buf;
     char *buf_p;
+    int sz;
 
     *buf = NULL;
     *buf_size = 0;
+    *group_size = 0;
 
     ABT_rwlock_rdlock(g->lock);
 
@@ -825,10 +869,13 @@ static int ssg_group_serialize(
         buf_p += strlen(member_state->addr_str) + 1;
     }
 
-    *buf = group_buf;
-    *buf_size = group_buf_size;
+    sz = g->view.size;
 
     ABT_rwlock_unlock(g->lock);
+
+    *buf = group_buf;
+    *buf_size = group_buf_size;
+    *group_size = sz;
 
     return SSG_SUCCESS;
 }
