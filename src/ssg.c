@@ -692,26 +692,39 @@ int ssg_group_add_membership_update_callback(
 {
     ssg_group_descriptor_t *g_desc;
 
-    if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID) return SSG_FAILURE;
+    if (!ssg_rt)
+        return SSG_ERR_NOT_INITIALIZED;
 
-    ABT_rwlock_wrlock(ssg_rt->lock);
+    if (group_id == SSG_GROUP_ID_INVALID)
+        return SSG_ERR_INVALID_ARG;
+
+    ABT_rwlock_rdlock(ssg_rt->lock);
 
     /* find the group structure */
     HASH_FIND(hh, ssg_rt->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
     if (!g_desc)
     {
         ABT_rwlock_unlock(ssg_rt->lock);
-        return SSG_GROUP_ID_INVALID;
+        return SSG_ERR_GROUP_NOT_FOUND;
     }
+
+    if (g_desc->owner_status != SSG_OWNER_IS_MEMBER)
+    {
+        ABT_rwlock_unlock(ssg_rt->lock);
+        return SSG_ERR_INVALID_OPERATION;
+    }
+
+    ABT_rwlock_wrlock(g_desc->g_data.g->lock);
     /* add the membership callback */
     int ret = add_membership_update_cb(
             g_desc->g_data.g,
             update_cb,
             update_cb_dat);
+    ABT_rwlock_unlock(g_desc->g_data.g->lock);
 
     ABT_rwlock_unlock(ssg_rt->lock);
 
-    return ret == 0 ? SSG_SUCCESS : SSG_FAILURE;
+    return ret;
 }
 
 int ssg_group_remove_membership_update_callback(
@@ -721,26 +734,39 @@ int ssg_group_remove_membership_update_callback(
 {
     ssg_group_descriptor_t *g_desc;
 
-    if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID) return SSG_FAILURE;
+    if (!ssg_rt)
+        return SSG_ERR_NOT_INITIALIZED;
 
-    ABT_rwlock_wrlock(ssg_rt->lock);
+    if (group_id == SSG_GROUP_ID_INVALID)
+        return SSG_ERR_INVALID_ARG;
+
+    ABT_rwlock_rdlock(ssg_rt->lock);
 
     /* find the group structure */
     HASH_FIND(hh, ssg_rt->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
     if (!g_desc)
     {
         ABT_rwlock_unlock(ssg_rt->lock);
-        return SSG_GROUP_ID_INVALID;
+        return SSG_ERR_GROUP_NOT_FOUND;
     }
+
+    if (g_desc->owner_status != SSG_OWNER_IS_MEMBER)
+    {
+        ABT_rwlock_unlock(ssg_rt->lock);
+        return SSG_ERR_INVALID_OPERATION;
+    }
+
     /* remove the membership callback */
+    ABT_rwlock_wrlock(g_desc->g_data.g->lock);
     int ret = remove_membership_update_cb(
             g_desc->g_data.g,
             update_cb,
             update_cb_dat);
+    ABT_rwlock_unlock(g_desc->g_data.g->lock);
 
     ABT_rwlock_unlock(ssg_rt->lock);
 
-    return ret == 0 ? SSG_SUCCESS : SSG_FAILURE;
+    return ret;
 }
 
 int ssg_group_join_target(
@@ -1867,7 +1893,7 @@ int ssg_group_id_deserialize(
 
     addr_strs = realloc(addr_strs, tmp_num_addrs * sizeof(*addr_strs));
     if (!addr_strs)
-        return;
+        return SSG_ERR_ALLOCATION;
 
     for (i = 0; i < tmp_num_addrs; i++)
     {
@@ -1948,6 +1974,7 @@ int ssg_group_id_load(
     ssize_t bufsize=1024;
     ssize_t total=0, bytes_read;
     int eof = 0;
+    int ret;
 
     *group_id = SSG_GROUP_ID_INVALID;
 
@@ -1988,16 +2015,11 @@ int ssg_group_id_load(
 
     ret = ssg_group_id_deserialize(buf, (size_t)total, num_addrs, group_id);
     if (ret != SSG_SUCCESS)
-    {
         fprintf(stderr, "Error: Unable to deserialize SSG group ID\n");
-        close(fd);
-        free(buf);
-        return ret;
-    }
 
     close(fd);
     free(buf);
-    return SSG_SUCCESS;
+    return ret;
 }
 
 int ssg_group_dump(
@@ -2995,7 +3017,7 @@ void ssg_apply_member_updates(
 
         /* invoke user callbacks to apply the SSG update */
         execute_all_membership_update_cb(
-            g->update_cb_list,
+            g,
             update_member_id,
             update_type);
 

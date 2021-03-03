@@ -168,7 +168,7 @@ inline static int add_membership_update_cb(
             if (cur->update_cb == cb
             &&  cur->update_cb_dat == uargs) {
                 free(tmp);
-                return -1;
+                return SSG_ERR_INVALID_ARG;
             }
             prev = cur;
             cur = cur->next;
@@ -177,7 +177,7 @@ inline static int add_membership_update_cb(
     } else {
         group->update_cb_list = tmp;
     }
-    return 0;
+    return SSG_SUCCESS;
 }
 
 inline static int remove_membership_update_cb(
@@ -196,12 +196,12 @@ inline static int remove_membership_update_cb(
                 group->update_cb_list = current->next;
             }
             free(current);
-            return 0;
+            return SSG_SUCCESS;
         }
         previous = current;
         current = current->next;
     }
-    return -1;
+    return SSG_ERR_INVALID_ARG;
 }
 
 inline static void free_all_membership_update_cb(
@@ -217,19 +217,26 @@ inline static void free_all_membership_update_cb(
 }
 
 inline static void execute_all_membership_update_cb(
-        ssg_update_cb* list,
+        ssg_group_t* group,
         ssg_member_id_t member_id,
         ssg_member_update_type_t update_type)
 {
+    ssg_update_cb* list;
+
+    ABT_rwlock_rdlock(group->lock);
+    list = group->update_cb_list;
     while(list) {
        if(list->update_cb) {
+            ABT_rwlock_unlock(group->lock);
             (list->update_cb)(
                 list->update_cb_dat,
                 member_id,
                 update_type);
+            ABT_rwlock_rdlock(group->lock);
        }
        list = list->next;
     }
+    ABT_rwlock_unlock(group->lock);
 }
 
 typedef struct ssg_observed_group
