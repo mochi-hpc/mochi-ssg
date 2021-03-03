@@ -43,13 +43,13 @@ MERCURY_GEN_PROC(ssg_group_join_response_t, \
     ((uint32_t)             (group_size))
     ((ssg_group_config_t)   (group_config))
     ((hg_size_t)            (view_buf_size))
-    ((uint8_t)              (ret)));
+    ((uint32_t)              (ret)));
 
 MERCURY_GEN_PROC(ssg_group_leave_request_t, \
     ((ssg_group_id_t)   (g_id)) \
     ((ssg_member_id_t)  (member_id)));
 MERCURY_GEN_PROC(ssg_group_leave_response_t, \
-    ((uint8_t)  (ret)));
+    ((uint32_t)  (ret)));
 
 MERCURY_GEN_PROC(ssg_group_observe_request_t, \
     ((ssg_group_id_t)   (g_id)) \
@@ -59,7 +59,7 @@ MERCURY_GEN_PROC(ssg_group_observe_response_t, \
     ((hg_string_t)  (group_name)) \
     ((uint32_t)     (group_size)) \
     ((hg_size_t)    (view_buf_size))
-    ((uint8_t)      (ret)));
+    ((uint32_t)      (ret)));
 
 /* SSG RPC handler prototypes */
 DECLARE_MARGO_RPC_HANDLER(ssg_group_join_recv_ult)
@@ -682,12 +682,14 @@ int ssg_group_observe_send(
         goto fini;
     }
     *group_size = (int)observe_resp.group_size;
-    *view_buf = tmp_view_buf;
     ret = observe_resp.ret;
     margo_free_output(handle, &observe_resp);
 
     if (ret == SSG_SUCCESS)
+    {
+        *view_buf = tmp_view_buf;
         tmp_view_buf = NULL; /* don't free on success */
+    }
 fini:
     if (handle != HG_HANDLE_NULL) margo_destroy(handle);
     if (bulk_handle != HG_BULK_NULL) margo_bulk_free(bulk_handle);
