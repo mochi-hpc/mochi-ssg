@@ -1986,7 +1986,7 @@ int ssg_group_id_load(
         total += bytes_read;
     } while (!eof);
 
-    ret = ssg_group_id_deserialize(buf, (size_t)bytes_read, num_addrs, group_id);
+    ret = ssg_group_id_deserialize(buf, (size_t)total, num_addrs, group_id);
     if (ret != SSG_SUCCESS)
     {
         fprintf(stderr, "Error: Unable to deserialize SSG group ID\n");
