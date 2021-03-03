@@ -18,11 +18,6 @@
 
 #define SSG_VIEW_BUF_DEF_SIZE (128 * 1024)
 
-/* XXX what should we use for a reasonable timeout value? */
-/* 1 second was ok on most platforms... except theta */
-/* default timeout value of 5-second for SSG RPCs */
-#define SSG_DEFAULT_OP_TIMEOUT 5000.0
-
 /* SSG RPC types and (de)serialization routines */
 
 /* TODO join and observe are nearly identical -- refactor */
@@ -171,7 +166,7 @@ int ssg_group_join_send(
     join_req.g_id = g_id;
     join_req.addr_str = mid_state->self_addr_str;
     join_req.bulk_handle = bulk_handle;
-    hret = margo_forward_timed(handle, &join_req, SSG_DEFAULT_OP_TIMEOUT);
+    hret = margo_forward(handle, &join_req);
     if (hret != HG_SUCCESS)
     {
         fprintf(stderr, "Error: SSG unable to forward group join RPC\n");
@@ -211,7 +206,7 @@ int ssg_group_join_send(
         }
 
         join_req.bulk_handle = bulk_handle;
-        hret = margo_forward_timed(handle, &join_req, SSG_DEFAULT_OP_TIMEOUT);
+        hret = margo_forward(handle, &join_req);
         if (hret != HG_SUCCESS)
         {
             fprintf(stderr, "Error: SSG unable to forward group join RPC\n");
@@ -447,10 +442,10 @@ int ssg_group_leave_send(
 
     leave_req.g_id = g_id;
     leave_req.member_id = mid_state->self_id;
-    hret = margo_forward_timed(handle, &leave_req, SSG_DEFAULT_OP_TIMEOUT);
+    hret = margo_forward(handle, &leave_req);
     if (hret != HG_SUCCESS)
     {
-        fprintf(stderr, "Error: SSG unable to forward group join RPC\n");
+        fprintf(stderr, "Error: SSG unable to forward group leave RPC\n");
         ret = SSG_MAKE_HG_ERROR(hret);
         goto fini;
     }
