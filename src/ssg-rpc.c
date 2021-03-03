@@ -241,7 +241,8 @@ int ssg_group_join_send(
     }
 
     /* set output pointers according to the returned view parameters */
-    *group_name = strdup(join_resp.group_name);
+    if(join_resp.group_name)
+        *group_name = strdup(join_resp.group_name);
     if(!(*group_name))
     {
         margo_free_output(handle, &join_resp);
@@ -249,13 +250,15 @@ int ssg_group_join_send(
         goto fini;
     }
     *group_size = (int)join_resp.group_size;
-    *view_buf = tmp_view_buf;
     memcpy(group_config, &join_resp.group_config, sizeof(*group_config));
     ret = join_resp.ret;
     margo_free_output(handle, &join_resp);
 
     if (ret == SSG_SUCCESS)
+    {
+        *view_buf = tmp_view_buf;
         tmp_view_buf = NULL; /* don't free on success */
+    }
 fini:
     if (handle != HG_HANDLE_NULL) margo_destroy(handle);
     if (bulk_handle != HG_BULK_NULL) margo_bulk_free(bulk_handle);
@@ -277,7 +280,7 @@ static void ssg_group_join_recv_ult(
     hg_size_t view_buf_size;
     hg_bulk_t bulk_handle = HG_BULK_NULL;
     ssg_member_update_t join_update;
-    int group_size;
+    int group_size = 0;
     char *group_name = NULL;
     int ret;
     hg_return_t hret;
@@ -388,8 +391,6 @@ static void ssg_group_join_recv_ult(
     }
 
     /* set the response for successful join */
-    join_resp.group_name = group_name;
-    join_resp.group_size = group_size;
     memcpy(&join_resp.group_config, &g_desc->g_data.g->config,
         sizeof(join_resp.group_config));
     ret = SSG_SUCCESS;
@@ -405,6 +406,8 @@ static void ssg_group_join_recv_ult(
 fini:
     /* respond */
     join_resp.ret = ret;
+    join_resp.group_name = group_name;
+    join_resp.group_size = group_size;
     margo_respond(handle, &join_resp);
 
     /* cleanup */
@@ -674,7 +677,8 @@ int ssg_group_observe_send(
     }
 
     /* set output pointers according to the returned view parameters */
-    *group_name = strdup(observe_resp.group_name);
+    if(observe_resp.group_name)
+        *group_name = strdup(observe_resp.group_name);
     if(!(*group_name))
     {
         margo_free_output(handle, &observe_resp);
@@ -710,7 +714,7 @@ static void ssg_group_observe_recv_ult(
     void *view_buf = NULL;
     hg_size_t view_buf_size;
     hg_bulk_t bulk_handle = HG_BULK_NULL;
-    int group_size;
+    int group_size = 0;
     char *group_name = NULL;
     int ret;
     hg_return_t hret;
@@ -810,9 +814,6 @@ static void ssg_group_observe_recv_ult(
         goto fini;
     }
 
-    /* set the response for successful observe */
-    observe_resp.group_name = group_name;
-    observe_resp.group_size = group_size;
     ret = SSG_SUCCESS;
 
     SSG_GROUP_REF_DECR(g_desc->g_data.g);
@@ -821,6 +822,8 @@ static void ssg_group_observe_recv_ult(
 fini:
     /* respond */
     observe_resp.ret = ret;
+    observe_resp.group_name = group_name;
+    observe_resp.group_size = group_size;
     margo_respond(handle, &observe_resp);
 
     /* cleanup */
