@@ -314,7 +314,7 @@ fini:
     free(rd_buf);
     free(addr_str_buf);
     free(addr_strs);
-    if (g_id == SSG_GROUP_ID_INVALID)
+    if (g_id == SSG_GROUP_ID_INVALID && mid_state)
         ssg_release_mid_state(mid_state);
 
     return g_id;
@@ -382,7 +382,7 @@ fini:
     free(sizes_psum);
     free(addr_str_buf);
     free(addr_strs);
-    if (g_id == SSG_GROUP_ID_INVALID)
+    if (g_id == SSG_GROUP_ID_INVALID && mid_state)
         ssg_release_mid_state(mid_state);
 
     return g_id;
@@ -545,7 +545,7 @@ fini:
     /* cleanup before returning */
     free(addr_strs);
     PMIX_VALUE_FREE(addr_vals, nprocs);
-    if (g_id == SSG_GROUP_ID_INVALID)
+    if (g_id == SSG_GROUP_ID_INVALID && mid_state)
         ssg_release_mid_state(mid_state);
 
     return g_id;
@@ -653,7 +653,7 @@ int ssg_group_join_target(
     ssg_group_config_t group_config;
     void *view_buf = NULL;
     const char **addr_strs = NULL;
-    ssg_group_id_t create_g_id;
+    ssg_group_id_t create_g_id = SSG_GROUP_ID_INVALID;
     hg_return_t hret;
     int sret = SSG_FAILURE;
 
@@ -736,6 +736,8 @@ fini:
     free(addr_strs);
     free(view_buf);
     free(group_name);
+    if (create_g_id == SSG_GROUP_ID_INVALID && mid_state)
+        ssg_release_mid_state(mid_state);
 
     return sret;
 }
@@ -877,8 +879,8 @@ int ssg_group_observe_target(
 
     mid_state = ssg_acquire_mid_state(mid);
     if(!mid_state) {
-	fprintf(stderr, "Error: ssg_acquire_mid_state failed\n");
-	goto fini;
+        fprintf(stderr, "Error: ssg_acquire_mid_state failed\n");
+        goto fini;
     }
 
     /* if no target specified, use random address string from descriptor */
