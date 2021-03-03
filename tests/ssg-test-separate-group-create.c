@@ -37,8 +37,8 @@ int main(int argc, char **argv)
     MPI_Init(&argc, &argv);
     ret = ssg_init();
     ASSERT(ret == 0, "ssg_init failed (ret = %d)\n", ret);
-    gid = ssg_group_create_mpi(mid, GROUP_NAME, MPI_COMM_WORLD, NULL, NULL, NULL);
-    if (gid == SSG_GROUP_ID_INVALID) {
+    ret = ssg_group_create_mpi(mid, GROUP_NAME, MPI_COMM_WORLD, NULL, NULL, NULL, &gid);
+    if (ret != SSG_SUCCESS) {
         fprintf(stderr, "ssg_group_create_mpi failed\n");
         exit(-1);
     }

@@ -191,7 +191,7 @@ int main(int argc, char *argv[])
         ret = ssg_group_create_pmix(mid, opts.group_name, proc, &g_conf,
             NULL, NULL, &g_id);
 #endif
-    DIE_IF(ret != SSG_SUCCESS, "ssg_group_create");
+    DIE_IF(g_id == SSG_GROUP_ID_INVALID, "ssg_group_create");
 
     /* store the gid if requested */
     if (opts.gid_file)

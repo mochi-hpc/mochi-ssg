@@ -195,18 +195,18 @@ int main(int argc, char *argv[])
     if(strcmp(opts.group_mode, "mpi") == 0)
     {
         snprintf(scratch, 1024, "%s-%d", opts.group_name, 1);
-        g1_id = ssg_group_create_mpi(mid1, scratch, MPI_COMM_WORLD, NULL, NULL, NULL);
+        sret = ssg_group_create_mpi(mid1, scratch, MPI_COMM_WORLD, NULL, NULL, NULL, &g1_id);
         snprintf(scratch, 1024, "%s-%d", opts.group_name, 2);
-        g2_id = ssg_group_create_mpi(mid2, scratch, MPI_COMM_WORLD, NULL, NULL, NULL);
+        sret = ssg_group_create_mpi(mid2, scratch, MPI_COMM_WORLD, NULL, NULL, NULL, &g2_id);
     }
 #endif
 #ifdef SSG_HAVE_PMIX
     if(strcmp(opts.group_mode, "pmix") == 0)
     {
         snprintf(scratch, 1024, "%s-%d", opts.group_name, 1);
-        g1_id = ssg_group_create_pmix(mid1, scratch, proc, NULL, NULL, NULL);
+        sret = ssg_group_create_pmix(mid1, scratch, proc, NULL, NULL, NULL, &g1_id);
         snprintf(scratch, 1024, "%s-%d", opts.group_name, 2);
-        g2_id = ssg_group_create_pmix(mid2, scratch, proc, NULL, NULL, NULL);
+        sret = ssg_group_create_pmix(mid2, scratch, proc, NULL, NULL, NULL, &g2_id);
     }
 #endif
     DIE_IF(g1_id == SSG_GROUP_ID_INVALID, "ssg_group_create");
@@ -226,14 +226,14 @@ int main(int argc, char *argv[])
         margo_thread_sleep(mid1, opts.shutdown_time * 1000.0);
 
     /* get my group id and the size of the group */
-    my_id1 = ssg_get_self_id(mid1);
-    my_id2 = ssg_get_self_id(mid2);
-    DIE_IF(my_id1 == SSG_MEMBER_ID_INVALID, "ssg_get_group_self_id");
-    DIE_IF(my_id2 == SSG_MEMBER_ID_INVALID, "ssg_get_group_self_id");
-    group1_size = ssg_get_group_size(g1_id);
-    group2_size = ssg_get_group_size(g2_id);
-    DIE_IF(group1_size == 0, "ssg_get_group_size");
-    DIE_IF(group2_size == 0, "ssg_get_group_size");
+    sret = ssg_get_self_id(mid1, &my_id1);
+    DIE_IF(sret != SSG_SUCCESS, "ssg_get_self_id");
+    sret = ssg_get_self_id(mid2, &my_id2);
+    DIE_IF(sret != SSG_SUCCESS, "ssg_get_self_id");
+    sret = ssg_get_group_size(g1_id, &group1_size);
+    DIE_IF(sret != SSG_SUCCESS, "ssg_get_group_size");
+    sret = ssg_get_group_size(g2_id, &group2_size);
+    DIE_IF(sret != SSG_SUCCESS, "ssg_get_group_size");
 
     /* print group at each member */
     ssg_group_dump(g1_id);

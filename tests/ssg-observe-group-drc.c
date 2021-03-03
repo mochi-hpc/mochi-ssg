@@ -118,8 +118,8 @@ int main(int argc, char *argv[])
     DIE_IF(ret != SSG_SUCCESS, "ssg_group_id_load");
     DIE_IF(num_addrs != 1, "ssg_group_id_load");
 
-    ssg_cred = ssg_group_id_get_cred(g_id);
-    DIE_IF(ssg_cred == -1, "ssg_group_id_get_cred");
+    ret = ssg_group_id_get_cred(g_id, &ssg_cred);
+    DIE_IF(ret != SSG_SUCCESS, "ssg_group_id_get_cred");
     drc_credential_id = (uint32_t)ssg_cred;
 
     /* access credential and covert to string for use by mercury */
