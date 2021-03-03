@@ -398,7 +398,7 @@ ssg_group_id_t ssg_group_create_pmix(
     ssg_membership_update_cb update_cb,
     void * update_cb_dat)
 {
-    ssg_mid_state_t *mid_state;
+    ssg_mid_state_t *mid_state=NULL;
     pmix_proc_t tmp_proc;
     pmix_data_array_t my_ids_array, *tmp_id_array_ptr;
     pmix_value_t value;
