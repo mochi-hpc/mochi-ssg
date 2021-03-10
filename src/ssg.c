@@ -574,7 +574,10 @@ int ssg_group_destroy(
     ABT_rwlock_unlock(ssg_rt->lock);
 
     /* destroy the group, free the descriptor */
-    ssg_group_destroy_internal(g_desc->g_data.g);
+    if (g_desc->owner_status == SSG_OWNER_IS_MEMBER)
+        ssg_group_destroy_internal(g_desc->g_data.g);
+    else if (g_desc->owner_status == SSG_OWNER_IS_OBSERVER)
+        ssg_observed_group_destroy(g_desc->g_data.og);
     ssg_group_descriptor_free(g_desc);
 
     return SSG_SUCCESS;
