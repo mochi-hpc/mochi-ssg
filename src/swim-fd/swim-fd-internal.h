@@ -24,7 +24,7 @@ extern "C" {
 #define SWIM_DEF_SUBGROUP_SIZE          2
 #define SWIM_MAX_SUBGROUP_SIZE          5
 #define SWIM_MAX_PIGGYBACK_ENTRIES      8
-#define SWIM_MAX_PIGGYBACK_TX_COUNT     5
+#define SWIM_MAX_PIGGYBACK_TX_COUNT     50
 
 typedef struct swim_ping_target_list
 {
