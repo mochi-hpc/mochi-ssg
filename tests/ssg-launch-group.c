@@ -193,6 +193,10 @@ int main(int argc, char *argv[])
 #endif
     DIE_IF(g_id == SSG_GROUP_ID_INVALID, "ssg_group_create");
 
+    uint64_t group_hash = 0;
+    ssg_get_group_hash(g_id, &group_hash);
+    printf("SSG group hash is %lu\n", group_hash);
+
     /* store the gid if requested */
     if (opts.gid_file)
         ssg_group_id_store(opts.gid_file, g_id, SSG_ALL_MEMBERS);

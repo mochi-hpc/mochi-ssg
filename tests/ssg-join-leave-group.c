@@ -158,6 +158,10 @@ int main(int argc, char *argv[])
     sret = ssg_group_join(mid, g_id, NULL, NULL);
     DIE_IF(sret != SSG_SUCCESS, "ssg_group_join");
 
+    uint64_t group_hash = 0;
+    ssg_get_group_hash(g_id, &group_hash);
+    printf("SSG group hash is %lu\n", group_hash);
+
     /* sleep for given duration to allow group time to run */
     if (opts.leave_time >= 0)
     {

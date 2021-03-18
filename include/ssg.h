@@ -313,6 +313,20 @@ int ssg_get_group_size(
     ssg_group_id_t group_id);
 
 /**
+ * @brief Get a hash summarizing the group.
+ * The hash changes as members join and leave, providing the
+ * caller with a simple way of detecting that two processes
+ * don't have the same view of a group.
+ *
+ * @param [in] group_id SSG group id
+ * @param [out] hash hash
+ *
+ * @return SSG_SUCCESS or error code
+ */
+int ssg_get_group_hash(
+    ssg_group_id_t group_id, uint64_t* hash);
+
+/**
  * Obtains the HG address of a member in a given SSG group.
  *
  * @param[in] group_id  SSG group ID
