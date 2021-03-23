@@ -1280,7 +1280,7 @@ int ssg_get_group_member_ids_from_range(
     ssg_member_id_t *member_start;
 
     if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID || rank_start < 0 ||
-            rank_end < 0 || rank_end <= rank_start)
+            rank_end < 0 || rank_end < rank_start)
         return 0;
 
     ABT_rwlock_rdlock(ssg_rt->lock);
