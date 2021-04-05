@@ -1417,7 +1417,17 @@ void ssg_group_id_serialize(
     *buf_p = NULL;
     *buf_size_p = 0;
 
-    if (!ssg_rt || group_id == SSG_GROUP_ID_INVALID || num_addrs == 0) return;
+    if (!ssg_rt) {
+        fprintf(stderr, "Error: SSG not initialized\n");
+        return;
+    }
+    if (group_id == SSG_GROUP_ID_INVALID) {
+        fprintf(stderr, "Error: Invalid SSG group id\n");
+        return;
+    }
+    if (num_addrs == 0) {
+        fprintf(stderr, "Error: SSG cannot serialize 0 addresses\n");
+        return;
 
     ABT_rwlock_rdlock(ssg_rt->lock);
 
