@@ -896,7 +896,8 @@ int ssg_group_observe_target(
     hret = margo_addr_lookup(mid_state->mid, target_addr_str,
         &target_addr);
     if (hret != HG_SUCCESS) {
-	fprintf(stderr, "unable to resolve address\n");
+	fprintf(stderr, "margo id %p unable to resolve address: %s (%d)\n",
+             mid_state->mid, target_addr_str, hret);
 	goto fini;
     }
     /* send the observe request to the target to initiate a bulk transfer
@@ -1428,6 +1429,7 @@ void ssg_group_id_serialize(
     if (num_addrs == 0) {
         fprintf(stderr, "Error: SSG cannot serialize 0 addresses\n");
         return;
+    }
 
     ABT_rwlock_rdlock(ssg_rt->lock);
 
