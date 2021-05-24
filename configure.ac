@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.63])
-AC_INIT([ssg], [0.4.1], [],[],[]) 
+AC_INIT([ssg], [0.4.5], [],[],[]) 
 AC_CONFIG_MACRO_DIR([m4])
 LT_INIT
 
@@ -124,13 +124,13 @@ fi
 
 check_drc_status=fail
 if test "x${check_drc}" = xauto -o "x${check_drc}" = xyes ; then
-    AC_MSG_CHECKING([If DRC programs can be compiled])
-    AC_LINK_IFELSE(
-        [AC_LANG_PROGRAM([[#include<rdmacred.h>]], [[drc_acquire(0,0);]])],
-        [AC_DEFINE([SSG_HAVE_DRC], [1], [Define to 1 if compiled with DRC support])
-         AC_MSG_RESULT([yes])
-         check_drc_status=success],
-        [AC_MSG_RESULT([no])])
+    PKG_CHECK_MODULES([DRC],[cray-drc],
+            [AC_DEFINE([SSG_HAVE_DRC], 1, [Use Cray dynamic rdma credentials]) ]
+            check_drc_status=success,
+            [])
+    LIBS="$DRC_LIBS $LIBS"
+    CPPFLAGS="$DRC_CFLAGS $CPPFLAGS"
+    CFLAGS="$DRC_CFLAGS $CFLAGS"
 fi
 
 if test "x${check_valgrind}" = xauto -o "x${check_valgrind}" = xyes ; then

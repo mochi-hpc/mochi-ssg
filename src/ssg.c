@@ -457,7 +457,7 @@ int ssg_group_create_pmix(
     void * update_cb_dat,
     ssg_group_id_t *g_id)
 {
-    ssg_mid_state_t *mid_state;
+    ssg_mid_state_t *mid_state=NULL;
     pmix_proc_t tmp_proc;
     pmix_data_array_t my_ids_array, *tmp_id_array_ptr;
     pmix_value_t value;
@@ -679,7 +679,10 @@ int ssg_group_destroy(
     SSG_DEBUG(g_desc->g_data.g, "destroyed group\n");
 
     /* destroy the group, free the descriptor */
-    ssg_group_destroy_internal(g_desc->g_data.g);
+    if (g_desc->owner_status == SSG_OWNER_IS_MEMBER)
+        ssg_group_destroy_internal(g_desc->g_data.g);
+    else if (g_desc->owner_status == SSG_OWNER_IS_OBSERVER)
+        ssg_observed_group_destroy(g_desc->g_data.og);
     ssg_group_descriptor_free(g_desc);
 
     return SSG_SUCCESS;
@@ -784,7 +787,7 @@ int ssg_group_join_target(
     ssg_group_config_t group_config;
     void *view_buf = NULL;
     const char **addr_strs = NULL;
-    ssg_group_id_t create_g_id;
+    ssg_group_id_t create_g_id = SSG_GROUP_ID_INVALID;
     hg_return_t hret;
     int ret;
 
