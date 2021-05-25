@@ -47,10 +47,10 @@ static void swim_tick_ult(
 /* SWIM ping target selection prototypes */
 static void swim_get_dping_target(
     ssg_group_t *group, ssg_member_id_t *target_id,
-    swim_member_inc_nr_t *target_inc_nr);
+    swim_member_inc_nr_t *target_inc_nr, hg_addr_t *target_addr);
 static void swim_get_iping_targets(
     ssg_group_t *group, ssg_member_id_t dping_target_id, int *num_targets,
-    ssg_member_id_t *target_ids);
+    ssg_member_id_t *target_ids, hg_addr_t *target_addrs);
 static void swim_shuffle_ping_target_list(
     swim_ping_target_list_t *list);
 
@@ -78,8 +78,7 @@ static void swim_register_ssg_member_update(
 int swim_init(
     ssg_group_t * group,
     ssg_group_id_t group_id,
-    ssg_group_config_t *group_conf,
-    int active)
+    ssg_group_config_t *group_conf)
 {
     swim_context_t *swim_ctx;
     ssg_member_state_t *ms, *tmp_ms;
@@ -88,7 +87,7 @@ int swim_init(
 
     /* allocate structure for storing swim context */
     swim_ctx = malloc(sizeof(*swim_ctx));
-    if (!swim_ctx) return(SSG_FAILURE);
+    if (!swim_ctx) return SSG_ERR_ALLOCATION;
     memset(swim_ctx, 0, sizeof(*swim_ctx));
     swim_ctx->g_id = group_id;
     swim_ctx->self_inc_nr = 0;
@@ -103,7 +102,7 @@ int swim_init(
     if (swim_ctx->target_list.targets == NULL)
     {
         free(swim_ctx);
-        return(SSG_FAILURE);
+        return SSG_ERR_ALLOCATION;
     }
     swim_ctx->target_list.nslots = swim_ctx->target_list.len = group->view.size-1;
     swim_ctx->target_list.dping_ndx = 0;
@@ -132,17 +131,14 @@ int swim_init(
 
     group->swim_ctx = swim_ctx;
 
-    if(active)
+    ret = ABT_thread_create(swim_ctx->swim_pool, swim_prot_ult, group,
+        ABT_THREAD_ATTR_NULL, &(swim_ctx->prot_thread));
+    if(ret != ABT_SUCCESS)
     {
-        ret = ABT_thread_create(swim_ctx->swim_pool, swim_prot_ult, group,
-            ABT_THREAD_ATTR_NULL, &(swim_ctx->prot_thread));
-        if(ret != ABT_SUCCESS)
-        {
-            fprintf(stderr, "Error: unable to create SWIM protocol ULT.\n");
-            free(swim_ctx->target_list.targets);
-            free(swim_ctx);
-            return(SSG_FAILURE);
-        }
+        fprintf(stderr, "Error: unable to create SWIM protocol ULT.\n");
+        free(swim_ctx->target_list.targets);
+        free(swim_ctx);
+        return SSG_MAKE_ABT_ERROR(ret);
     }
 
     return(SSG_SUCCESS);
@@ -214,7 +210,7 @@ static void swim_prot_ult(
     swim_ctx = group->swim_ctx;
     assert(swim_ctx != NULL);
 
-    SSG_DEBUG(group, "SWIM protocol start " \
+    SSG_DEBUG(group, "started SWIM protocol" \
         "(period_len=%.4f, susp_timeout=%d, subgroup_size=%d, g_id=%lu)\n",
         swim_ctx->prot_period_len, swim_ctx->prot_susp_timeout,
         swim_ctx->prot_subgroup_sz, swim_ctx->g_id);
@@ -239,11 +235,11 @@ static void swim_prot_ult(
         ABT_thread_join(tick_thread);
         ABT_thread_free(&tick_thread);
 
-        ABT_rwlock_wrlock(swim_ctx->swim_lock);
+        ABT_rwlock_rdlock(swim_ctx->swim_lock);
     }
     ABT_rwlock_unlock(swim_ctx->swim_lock);
 
-    SSG_DEBUG(group, "SWIM protocol shutdown\n");
+    SSG_DEBUG(group, "shutdown SWIM protocol\n");
 
     return;
 }
@@ -253,10 +249,11 @@ static void swim_tick_ult(
 {
     ssg_group_t *group = (ssg_group_t *)t_arg;
     swim_context_t *swim_ctx;
-    ABT_thread dping_thread;
-    ABT_thread *iping_threads;
+    ABT_thread dping_thread = ABT_THREAD_NULL;
+    ABT_thread *iping_threads = NULL;
     int iping_target_count = 0;
     int i;
+    int acked;
     int ret;
 
     assert(group != NULL);
@@ -271,20 +268,18 @@ static void swim_tick_ult(
      * ever successfully acked a (direct/indirect) ping request
      */
     ABT_rwlock_rdlock(swim_ctx->swim_lock);
-    if((swim_ctx->dping_target_id != SSG_MEMBER_ID_INVALID) &&
-        !(swim_ctx->ping_target_acked))
+    acked = swim_ctx->ping_target_acked;
+    ABT_rwlock_unlock(swim_ctx->swim_lock);
+    if((swim_ctx->dping_target_id != SSG_MEMBER_ID_INVALID) && !acked)
     {
-        ABT_rwlock_unlock(swim_ctx->swim_lock);
         /* no response from direct/indirect pings, suspect this member */
         swim_process_suspect_member_update(group, swim_ctx->dping_target_id,
             swim_ctx->dping_target_inc_nr);
     }
-    else
-        ABT_rwlock_unlock(swim_ctx->swim_lock);
 
     /* pick a random member from view to ping */
     swim_get_dping_target(group, &swim_ctx->dping_target_id,
-        &swim_ctx->dping_target_inc_nr);
+        &swim_ctx->dping_target_inc_nr, &swim_ctx->dping_target_addr);
     if(swim_ctx->dping_target_id == SSG_MEMBER_ID_INVALID)
     {
         /* no available members, back out */
@@ -299,7 +294,7 @@ static void swim_tick_ult(
     if(ret != ABT_SUCCESS)
     {
         fprintf(stderr, "Error: unable to create ULT for SWIM dping send\n");
-        return;
+        goto cleanup;
     }
 
     /* TODO: calculate estimated RTT using sliding window of past RTTs */
@@ -311,12 +306,15 @@ static void swim_tick_ult(
     /* if we don't hear back from the target after an RTT, kick off
      * a set of indirect pings to a subgroup of group members
      */
-    if(!(swim_ctx->ping_target_acked) && (swim_ctx->prot_subgroup_sz > 0))
+    ABT_rwlock_rdlock(swim_ctx->swim_lock);
+    acked = swim_ctx->ping_target_acked;
+    ABT_rwlock_unlock(swim_ctx->swim_lock);
+    if(!acked && (swim_ctx->prot_subgroup_sz > 0))
     {
         /* get a random subgroup of members to send indirect pings to */
         iping_target_count = swim_ctx->prot_subgroup_sz;
-        swim_get_iping_targets(group, swim_ctx->dping_target_id,
-            &iping_target_count, swim_ctx->iping_target_ids);
+        swim_get_iping_targets(group, swim_ctx->dping_target_id, &iping_target_count,
+            swim_ctx->iping_target_ids, swim_ctx->iping_target_addrs);
         if(iping_target_count == 0)
         {
             /* no available subgroup members, back out */
@@ -326,26 +324,27 @@ static void swim_tick_ult(
         {
             iping_threads = malloc(iping_target_count * sizeof(*iping_threads));
             if(!iping_threads)
-            {
-                ABT_thread_join(dping_thread);
-                ABT_thread_free(&dping_thread);
-                return;
-            }
-        }
+                goto cleanup;
 
-        swim_ctx->iping_target_ndx = 0;
-        for(i = 0; i < iping_target_count; i++)
-        {
-            iping_threads[i] = ABT_THREAD_NULL;
-            ret = ABT_thread_create(swim_ctx->swim_pool, swim_iping_req_send_ult,
-                group, ABT_THREAD_ATTR_NULL, &iping_threads[i]);
-            if(ret != ABT_SUCCESS)
-                fprintf(stderr, "Error: unable to create ULT for SWIM iping send\n");
+            swim_ctx->iping_target_ndx = 0;
+            for(i = 0; i < iping_target_count; i++)
+            {
+                iping_threads[i] = ABT_THREAD_NULL;
+                ret = ABT_thread_create(swim_ctx->swim_pool, swim_iping_req_send_ult,
+                    group, ABT_THREAD_ATTR_NULL, &iping_threads[i]);
+                if(ret != ABT_SUCCESS)
+                    fprintf(stderr, "Error: unable to create ULT for SWIM iping send\n");
+            }
         }
     }
 
-    ABT_thread_join(dping_thread);
-    ABT_thread_free(&dping_thread);
+cleanup:
+    if(dping_thread != ABT_THREAD_NULL)
+    {
+        ABT_thread_join(dping_thread);
+        ABT_thread_free(&dping_thread);
+    }
+    margo_addr_free(group->mid_state->mid, swim_ctx->dping_target_addr);
     for (i = 0; i < iping_target_count; i++)
     {
         if(iping_threads[i] != ABT_THREAD_NULL)
@@ -353,9 +352,9 @@ static void swim_tick_ult(
             ABT_thread_join(iping_threads[i]);
             ABT_thread_free(&iping_threads[i]);
         }
+        margo_addr_free(group->mid_state->mid, swim_ctx->iping_target_addrs[i]);
     }
-    if (iping_target_count > 0)
-        free(iping_threads);
+    free(iping_threads);
 
     return;
 }
@@ -366,14 +365,14 @@ static void swim_tick_ult(
 
 static void swim_get_dping_target(
     ssg_group_t *group, ssg_member_id_t *target_id,
-    swim_member_inc_nr_t *target_inc_nr)
+    swim_member_inc_nr_t *target_inc_nr, hg_addr_t *target_addr)
 {
     swim_context_t *swim_ctx = group->swim_ctx;
     ssg_member_state_t *tmp_ms;
 
     *target_id = SSG_MEMBER_ID_INVALID;
 
-    ABT_rwlock_wrlock(group->lock);
+    ABT_rwlock_rdlock(group->lock);
 
     /* find dping target */
     while(swim_ctx->target_list.len > 0)
@@ -395,6 +394,7 @@ static void swim_get_dping_target(
 
         *target_id = tmp_ms->id;
         *target_inc_nr = tmp_ms->swim_state.inc_nr;
+        margo_addr_dup(group->mid_state->mid, tmp_ms->addr, target_addr);
 
         break;
     }
@@ -406,7 +406,7 @@ static void swim_get_dping_target(
 
 static void swim_get_iping_targets(
     ssg_group_t *group, ssg_member_id_t dping_target_id, int *num_targets,
-    ssg_member_id_t *target_ids)
+    ssg_member_id_t *target_ids, hg_addr_t *target_addrs)
 {
     swim_context_t *swim_ctx = group->swim_ctx;
     int max_targets = *num_targets;
@@ -447,6 +447,8 @@ static void swim_get_iping_targets(
         }
 
         target_ids[iping_target_count] = tmp_ms->id;
+        margo_addr_dup(group->mid_state->mid, tmp_ms->addr,
+            &target_addrs[iping_target_count]);
         iping_target_count++;
         i++;
     }
@@ -697,7 +699,7 @@ static void swim_process_dead_member_update(
     /* have SSG apply this member failure update */
     ssg_update.type = SSG_MEMBER_DIED;
     ssg_update.u.member_id = member_id;
-    ssg_apply_member_updates(group, &ssg_update, 1);
+    ssg_apply_member_updates(group, &ssg_update, 1, 0);
 
     return;
 }
@@ -950,7 +952,7 @@ void swim_apply_member_updates(
 
                     ssg_update.type = SSG_MEMBER_DIED;
                     ssg_update.u.member_id = updates[i].id;
-                    ssg_apply_member_updates(group, &ssg_update, 1);
+                    ssg_apply_member_updates(group, &ssg_update, 1, 0);
 
                     return;
                 }
@@ -970,7 +972,7 @@ void swim_apply_member_updates(
     return;
 }
 
-int swim_apply_ssg_member_update(
+void swim_apply_ssg_member_update(
     ssg_group_t * group,
     ssg_member_state_t * ms,
     ssg_member_update_t update)
@@ -996,7 +998,7 @@ int swim_apply_ssg_member_update(
                 /* XXX constants bad... */
                 swim_ctx->target_list.targets = realloc(swim_ctx->target_list.targets,
                     (swim_ctx->target_list.len + 10) * sizeof(*swim_ctx->target_list.targets));
-                if (!swim_ctx->target_list.targets) return SSG_FAILURE;
+                if (!swim_ctx->target_list.targets) return;
                 swim_ctx->target_list.nslots += 10;
             }
             swim_ctx->target_list.targets[swim_ctx->target_list.len++] = ms;
@@ -1015,11 +1017,11 @@ int swim_apply_ssg_member_update(
             break;
         default:
             SSG_DEBUG(group, "Warning: Invalid SSG update type given to SWIM\n");
-            return(SSG_FAILURE);
+            return;
     }
 
     /* register this SSG update with SWIM so it is gossiped */
     swim_register_ssg_member_update(swim_ctx, update);
 
-    return(SSG_SUCCESS);
+    return;
 }

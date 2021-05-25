@@ -127,14 +127,14 @@ int main(int argc, char *argv[])
     DIE_IF(sret != SSG_SUCCESS, "ssg_init");
 
     /* XXX do we want to use callback for testing anything about group??? */
-    g_id = ssg_group_create_pmix(mid, "fail_group", proc, NULL, NULL, NULL);
+    sret = ssg_group_create_pmix(mid, "fail_group", proc, NULL, NULL, NULL, &g_id);
     DIE_IF(g_id == SSG_GROUP_ID_INVALID, "ssg_group_create");
 
     /* get my group id and the size of the group */
-    my_id = ssg_get_self_id(mid);
-    DIE_IF(my_id == SSG_MEMBER_ID_INVALID, "ssg_get_group_self_id");
-    group_size = ssg_get_group_size(g_id);
-    DIE_IF(group_size == 0, "ssg_get_group_size");
+    sret = ssg_get_self_id(mid, &my_id);
+    DIE_IF(sret != SSG_SUCCESS, "ssg_get_self_id");
+    sret = ssg_get_group_size(g_id, &group_size);
+    DIE_IF(sret != SSG_SUCCESS, "ssg_get_group_size");
 
     if (proc.rank == (unsigned int)opts.kill_rank)
     {
@@ -143,7 +143,7 @@ int main(int argc, char *argv[])
         fprintf(stderr, "%.6lf: KILL member %lu (PMIx rank %d)\n", ABT_get_wtime(), my_id, proc.rank);
         PMIx_Notify_event(PMIX_PROC_TERMINATED, &proc,
             PMIX_RANGE_GLOBAL, NULL, 0, NULL, NULL);
-	ssg_finalize();
+        ssg_finalize();
         margo_thread_sleep(mid, (opts.shutdown_time - opts.kill_time) * 1000.0);
         margo_finalize(mid);
     }

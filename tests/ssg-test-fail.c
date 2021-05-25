@@ -191,26 +191,26 @@ int main(int argc, char *argv[])
     /* XXX do we want to use callback for testing anything about group??? */
 #ifdef SSG_HAVE_MPI
     if(strcmp(opts.group_mode, "mpi") == 0)
-        g_id = ssg_group_create_mpi(mid, "fail_group", MPI_COMM_WORLD, NULL, NULL, NULL);
+        sret = ssg_group_create_mpi(mid, "fail_group", MPI_COMM_WORLD, NULL, NULL, NULL, &g_id);
 #endif
 #ifdef SSG_HAVE_PMIX
     if(strcmp(opts.group_mode, "pmix") == 0)
-        g_id = ssg_group_create_pmix(mid, "fail_group", proc, NULL, NULL, NULL);
+        sret = ssg_group_create_pmix(mid, "fail_group", proc, NULL, NULL, NULL, &g_id);
 #endif
     DIE_IF(g_id == SSG_GROUP_ID_INVALID, "ssg_group_create");
 
     /* get my group id and the size of the group */
-    my_id = ssg_get_self_id(mid);
-    DIE_IF(my_id == SSG_MEMBER_ID_INVALID, "ssg_get_group_self_id");
-    group_size = ssg_get_group_size(g_id);
-    DIE_IF(group_size == 0, "ssg_get_group_size");
+    sret = ssg_get_self_id(mid, &my_id);
+    DIE_IF(sret != SSG_SUCCESS, "ssg_get_self_id");
+    sret = ssg_get_group_size(g_id, &group_size);
+    DIE_IF(sret != SSG_SUCCESS, "ssg_get_group_size");
 
     if (my_rank == opts.kill_rank)
     {
         /* sleep for given duration before killing rank */
         margo_thread_sleep(mid, opts.kill_time * 1000.0);
         fprintf(stderr, "%.6lf: KILL member %lu (PMIx rank %d)\n", ABT_get_wtime(), my_id, my_rank);
-	/* XXX we can't really terminate the rank (or MPI would abort, for instance)... */
+        /* XXX we can't really terminate the rank (or MPI would abort, for instance)... */
         ssg_group_destroy(g_id);
         ssg_finalize();
         margo_thread_sleep(mid, (opts.shutdown_time - opts.kill_time) * 1000.0);

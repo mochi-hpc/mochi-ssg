@@ -10,7 +10,7 @@ check_PROGRAMS += \
  tests/ssg-join-leave-group \
  tests/ssg-test-fail \
  tests/ssg-test-separate-group-create \
- tests/ssg-test-separate-group-attach
+ tests/ssg-test-separate-group-observe
 
 EXTRA_DIST += \
  tests/test-util.sh

@@ -112,7 +112,6 @@ void swim_dping_req_send_ult(
     void *t_arg)
 {
     ssg_group_t *group = (ssg_group_t *)t_arg;
-    ssg_member_state_t *target_ms;
     swim_dping_req_t dping_req;
     hg_handle_t handle;
     hg_return_t hret;
@@ -123,27 +122,10 @@ void swim_dping_req_send_ult(
         return;
     }
 
-    /* get the address of the ping target */
-    ABT_rwlock_rdlock(group->lock);
-    HASH_FIND(hh, group->view.member_map, &group->swim_ctx->dping_target_id,
-        sizeof(group->swim_ctx->dping_target_id), target_ms);
-    if(!target_ms)
-    {
-        SSG_DEBUG(group, "SWIM: unable to find address for dping target %lu\n",
-            group->swim_ctx->dping_target_id);
-        ABT_rwlock_unlock(group->lock);
-        return;
-    }
-
-    hret = margo_create(group->mid_state->mid, target_ms->addr,
+    hret = margo_create(group->mid_state->mid, group->swim_ctx->dping_target_addr,
         group->mid_state->swim_dping_req_rpc_id, &handle);
     if(hret != HG_SUCCESS)
-    {
-        ABT_rwlock_unlock(group->lock);
         return;
-    }
-
-    ABT_rwlock_unlock(group->lock);
 
     SSG_DEBUG(group, "SWIM: send dping req to %lu\n", group->swim_ctx->dping_target_id);
 
@@ -213,6 +195,9 @@ static void swim_dping_req_recv_ult(
         return;
     }
 
+    SSG_GROUP_REF_INCR(group);
+    ABT_rwlock_unlock(ssg_rt->lock);
+
     SSG_DEBUG(group, "SWIM: recv dping req from %lu\n", dping_req.msg.source_id);
 
     /* extract sender's membership state from dping req */
@@ -226,7 +211,7 @@ static void swim_dping_req_recv_ult(
         group->mid_state->swim_dping_ack_rpc_id, &ack_handle);
     if(hret != HG_SUCCESS)
     {
-        ABT_rwlock_unlock(ssg_rt->lock);
+        SSG_GROUP_REF_DECR(group);
         swim_free_packed_message(&(dping_ack.msg));
         margo_free_input(handle, &dping_req);
         margo_destroy(handle);
@@ -235,7 +220,7 @@ static void swim_dping_req_recv_ult(
 
     SSG_DEBUG(group, "SWIM: send dping ack to %lu\n", dping_req.msg.source_id);
 
-    ABT_rwlock_unlock(ssg_rt->lock);
+    SSG_GROUP_REF_DECR(group);
 
     hret = margo_forward(ack_handle, &dping_ack);
     if(hret != HG_SUCCESS)
@@ -301,6 +286,9 @@ static void swim_dping_ack_recv_ult(
         return;
     }
 
+    SSG_GROUP_REF_INCR(group);
+    ABT_rwlock_unlock(ssg_rt->lock);
+
     SSG_DEBUG(group, "SWIM: recv dping ack from %lu\n", dping_ack.msg.source_id);
 
     /* extract sender's membership state from dping ack */
@@ -316,6 +304,7 @@ static void swim_dping_ack_recv_ult(
             group->swim_ctx->ping_target_acked = 1;
         }
         ABT_rwlock_unlock(group->swim_ctx->swim_lock);
+        SSG_GROUP_REF_DECR(group);
     }
     else
     {
@@ -334,7 +323,7 @@ static void swim_dping_ack_recv_ult(
             SSG_DEBUG(group, "SWIM: ignoring iping ack for unknown group member %lu\n",
                 dping_ack.iping_ack_forward_id);
             ABT_rwlock_unlock(group->lock);
-            ABT_rwlock_unlock(ssg_rt->lock);
+            SSG_GROUP_REF_DECR(group);
             margo_free_input(handle, &dping_ack);
             margo_destroy(handle);
             return;
@@ -345,7 +334,7 @@ static void swim_dping_ack_recv_ult(
         if(hret != HG_SUCCESS)
         {
             ABT_rwlock_unlock(group->lock);
-            ABT_rwlock_unlock(ssg_rt->lock);
+            SSG_GROUP_REF_DECR(group);
             margo_free_input(handle, &dping_ack);
             margo_destroy(handle);
             return;
@@ -359,6 +348,8 @@ static void swim_dping_ack_recv_ult(
         iping_ack.target_id = dping_ack.msg.source_id;
         swim_pack_message(group, &(iping_ack.msg));
 
+        SSG_GROUP_REF_DECR(group);
+
         hret = margo_forward(ack_handle, &iping_ack);
         if(hret != HG_SUCCESS)
         {
@@ -368,8 +359,6 @@ static void swim_dping_ack_recv_ult(
         swim_free_packed_message(&(iping_ack.msg));
         margo_destroy(ack_handle);
     }
-
-    ABT_rwlock_unlock(ssg_rt->lock);
 
     margo_free_input(handle, &dping_ack);
     margo_destroy(handle);
@@ -387,7 +376,7 @@ void swim_iping_req_send_ult(
     ssg_group_t *group = (ssg_group_t *)t_arg;
     swim_context_t *swim_ctx;
     ssg_member_id_t iping_target_id;
-    ssg_member_state_t *target_ms;
+    hg_addr_t iping_target_addr;
     hg_handle_t handle;
     swim_iping_req_t iping_req;
     hg_return_t hret;
@@ -401,29 +390,14 @@ void swim_iping_req_send_ult(
 
     ABT_rwlock_wrlock(swim_ctx->swim_lock);
     iping_target_id = swim_ctx->iping_target_ids[swim_ctx->iping_target_ndx];
+    iping_target_addr = swim_ctx->iping_target_addrs[swim_ctx->iping_target_ndx];
     swim_ctx->iping_target_ndx++;
     ABT_rwlock_unlock(swim_ctx->swim_lock);
 
-    ABT_rwlock_rdlock(group->lock);
-    HASH_FIND(hh, group->view.member_map, &iping_target_id,
-        sizeof(iping_target_id), target_ms);
-    if(!target_ms)
-    {
-        SSG_DEBUG(group, "SWIM: unable to find address for iping target %lu\n",
-            iping_target_id);
-        ABT_rwlock_unlock(group->lock);
-        return;
-    }
-
-    hret = margo_create(group->mid_state->mid, target_ms->addr,
+    hret = margo_create(group->mid_state->mid, iping_target_addr,
         group->mid_state->swim_iping_req_rpc_id, &handle);
     if(hret != HG_SUCCESS)
-    {
-        ABT_rwlock_unlock(group->lock);
         return;
-    }
-
-    ABT_rwlock_unlock(group->lock);
 
     SSG_DEBUG(group, "SWIM: send iping req to %lu (target=%lu)\n",
         iping_target_id, swim_ctx->dping_target_id);
@@ -494,6 +468,9 @@ static void swim_iping_req_recv_ult(hg_handle_t handle)
         return;
     }
 
+    SSG_GROUP_REF_INCR(group);
+    ABT_rwlock_unlock(ssg_rt->lock);
+
     SSG_DEBUG(group, "SWIM: recv iping req from %lu (target=%lu)\n",
         iping_req.msg.source_id, iping_req.target_id);
 
@@ -509,7 +486,7 @@ static void swim_iping_req_recv_ult(hg_handle_t handle)
         SSG_DEBUG(group, "SWIM: ignoring iping req for unknown group member %lu\n",
             iping_req.target_id);
         ABT_rwlock_unlock(group->lock);
-        ABT_rwlock_unlock(ssg_rt->lock);
+        SSG_GROUP_REF_DECR(group);
         margo_free_input(handle, &iping_req);
         margo_destroy(handle);
         return;
@@ -520,20 +497,20 @@ static void swim_iping_req_recv_ult(hg_handle_t handle)
     if(hret != HG_SUCCESS)
     {
         ABT_rwlock_unlock(group->lock);
-        ABT_rwlock_unlock(ssg_rt->lock);
+        SSG_GROUP_REF_DECR(group);
         margo_free_input(handle, &iping_req);
         margo_destroy(handle);
         return;
     }
     ABT_rwlock_unlock(group->lock);
 
-    SSG_DEBUG(group, "SWIM: send dping req to %lu\n", group->swim_ctx->dping_target_id);
+    SSG_DEBUG(group, "SWIM: send dping req to %lu\n", iping_req.target_id);
     
     /* fill the direct ping request with current membership state */
     dping_req.iping_ack_forward_id = iping_req.msg.source_id;
     swim_pack_message(group, &(dping_req.msg));
 
-    ABT_rwlock_unlock(ssg_rt->lock);
+    SSG_GROUP_REF_DECR(group);
 
     /* send dping req to target on behalf of member who sent iping req */
     hret = margo_forward(dping_handle, &dping_req);
@@ -597,6 +574,9 @@ static void swim_iping_ack_recv_ult(hg_handle_t handle)
         return;
     }
 
+    SSG_GROUP_REF_INCR(group);
+    ABT_rwlock_unlock(ssg_rt->lock);
+
     SSG_DEBUG(group, "SWIM: recv iping ack from %lu (target=%lu)\n",
         iping_ack.msg.source_id, iping_ack.target_id);
 
@@ -613,7 +593,7 @@ static void swim_iping_ack_recv_ult(hg_handle_t handle)
         group->swim_ctx->ping_target_acked = 1;
     }
     ABT_rwlock_unlock(group->swim_ctx->swim_lock);
-    ABT_rwlock_unlock(ssg_rt->lock);
+    SSG_GROUP_REF_DECR(group);
 
     margo_free_input(handle, &iping_ack);
     margo_destroy(handle);
@@ -630,8 +610,8 @@ static void swim_pack_message(ssg_group_t *group, swim_message_t *msg)
     memset(msg, 0, sizeof(*msg));
 
     /* fill in self information */
-    msg->source_id = group->mid_state->self_id;
     ABT_rwlock_rdlock(group->swim_ctx->swim_lock);
+    msg->source_id = group->mid_state->self_id;
     msg->source_g_id = group->swim_ctx->g_id;
     msg->source_inc_nr = group->swim_ctx->self_inc_nr;
     ABT_rwlock_unlock(group->swim_ctx->swim_lock);
@@ -661,7 +641,7 @@ static void swim_unpack_message(ssg_group_t *group, swim_message_t *msg)
 
     /* apply SSG updates */
     if(msg->ssg_pb_buf_count > 0)
-        ssg_apply_member_updates(group, msg->ssg_pb_buf, msg->ssg_pb_buf_count);
+        ssg_apply_member_updates(group, msg->ssg_pb_buf, msg->ssg_pb_buf_count, 1);
 
     return;
 }

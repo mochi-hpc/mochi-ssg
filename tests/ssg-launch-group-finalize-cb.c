@@ -186,13 +186,13 @@ int main(int argc, char *argv[])
     /* XXX do we want to use callback for testing anything about group??? */
 #ifdef SSG_HAVE_MPI
     if(strcmp(opts.group_mode, "mpi") == 0)
-        g_id = ssg_group_create_mpi(mid, opts.group_name, MPI_COMM_WORLD, &g_conf,
-            NULL, NULL);
+        sret = ssg_group_create_mpi(mid, opts.group_name, MPI_COMM_WORLD, &g_conf,
+            NULL, NULL, &g_id);
 #endif
 #ifdef SSG_HAVE_PMIX
     if(strcmp(opts.group_mode, "pmix") == 0)
-        g_id = ssg_group_create_pmix(mid, opts.group_name, proc, &g_conf,
-            NULL, NULL);
+        sret = ssg_group_create_pmix(mid, opts.group_name, proc, &g_conf,
+            NULL, NULL, &g_id);
 #endif
     DIE_IF(g_id == SSG_GROUP_ID_INVALID, "ssg_group_create");
 
@@ -208,10 +208,10 @@ int main(int argc, char *argv[])
         ssg_group_id_store(opts.gid_file, g_id, SSG_ALL_MEMBERS);
 
     /* get my group id and the size of the group */
-    my_id = ssg_get_self_id(mid);
-    DIE_IF(my_id == SSG_MEMBER_ID_INVALID, "ssg_get_group_self_id");
-    group_size = ssg_get_group_size(g_id);
-    DIE_IF(group_size == 0, "ssg_get_group_size");
+    sret = ssg_get_self_id(mid, &my_id);
+    DIE_IF(sret != SSG_SUCCESS, "ssg_get_self_id");
+    sret = ssg_get_group_size(g_id, &group_size);
+    DIE_IF(sret != SSG_SUCCESS, "ssg_get_group_size");
 
     /* print group at each member */
     ssg_group_dump(g_id);

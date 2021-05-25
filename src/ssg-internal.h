@@ -30,16 +30,35 @@ extern "C" {
 
 /* debug printing macro for SSG */
 #ifdef DEBUG
-#define SSG_DEBUG(__g, __fmt, ...) do { \
+#define SSG_DEBUG(__g,  __fmt, ...) do { \
     double __now = ABT_get_wtime(); \
-    fprintf(__g->dbg_log, "%.6lf %20"PRIu64" (%s): " __fmt, __now, \
+    fprintf(__g->mid_state->dbg_log, "%.6lf %20"PRIu64" (%s): " __fmt, __now, \
         __g->mid_state->self_id, __g->name, ## __VA_ARGS__); \
-    fflush(__g->dbg_log); \
+    fflush(__g->mid_state->dbg_log); \
 } while(0)
 #else
 #define SSG_DEBUG(__g, __fmt, ...) do { \
 } while(0)
 #endif
+
+#define SSG_GROUP_REF_INCR(__g) do { \
+    ABT_mutex_lock(__g->ref_mutex); \
+    __g->ref_count++; \
+    ABT_mutex_unlock(__g->ref_mutex); \
+} while(0)
+
+#define SSG_GROUP_REF_DECR(__g) do { \
+    ABT_mutex_lock(__g->ref_mutex); \
+    __g->ref_count--; \
+    ABT_cond_signal(__g->ref_cond); \
+    ABT_mutex_unlock(__g->ref_mutex); \
+} while(0)
+
+#define SSG_GROUP_REFS_WAIT(__g) do { \
+    ABT_mutex_lock(__g->ref_mutex); \
+    while(g->ref_count) ABT_cond_wait(__g->ref_cond, __g->ref_mutex); \
+    ABT_mutex_unlock(__g->ref_mutex); \
+} while(0)
 
 /* SSG internal dataypes */
 
@@ -69,6 +88,9 @@ typedef struct ssg_mid_state
     hg_id_t swim_iping_ack_rpc_id;
     int ref_count;
     struct ssg_mid_state *next;
+#ifdef DEBUG
+    FILE *dbg_log;
+#endif
 } ssg_mid_state_t;
 
 typedef struct ssg_group_descriptor
@@ -125,9 +147,9 @@ typedef struct ssg_group
     swim_context_t *swim_ctx;
     ssg_update_cb* update_cb_list;
     ABT_rwlock lock;
-#ifdef DEBUG
-    FILE *dbg_log;
-#endif
+    ABT_mutex ref_mutex;
+    ABT_cond ref_cond;
+    int ref_count;
 } ssg_group_t;
 
 inline static int add_membership_update_cb(
@@ -146,7 +168,7 @@ inline static int add_membership_update_cb(
             if (cur->update_cb == cb
             &&  cur->update_cb_dat == uargs) {
                 free(tmp);
-                return -1;
+                return SSG_ERR_INVALID_ARG;
             }
             prev = cur;
             cur = cur->next;
@@ -155,7 +177,7 @@ inline static int add_membership_update_cb(
     } else {
         group->update_cb_list = tmp;
     }
-    return 0;
+    return SSG_SUCCESS;
 }
 
 inline static int remove_membership_update_cb(
@@ -174,12 +196,12 @@ inline static int remove_membership_update_cb(
                 group->update_cb_list = current->next;
             }
             free(current);
-            return 0;
+            return SSG_SUCCESS;
         }
         previous = current;
         current = current->next;
     }
-    return -1;
+    return SSG_ERR_INVALID_ARG;
 }
 
 inline static void free_all_membership_update_cb(
@@ -195,19 +217,26 @@ inline static void free_all_membership_update_cb(
 }
 
 inline static void execute_all_membership_update_cb(
-        ssg_update_cb* list,
+        ssg_group_t* group,
         ssg_member_id_t member_id,
         ssg_member_update_type_t update_type)
 {
+    ssg_update_cb* list;
+
+    ABT_rwlock_rdlock(group->lock);
+    list = group->update_cb_list;
     while(list) {
        if(list->update_cb) {
+            ABT_rwlock_unlock(group->lock);
             (list->update_cb)(
                 list->update_cb_dat,
                 member_id,
                 update_type);
+            ABT_rwlock_rdlock(group->lock);
        }
        list = list->next;
     }
+    ABT_rwlock_unlock(group->lock);
 }
 
 typedef struct ssg_observed_group
@@ -267,7 +296,8 @@ int ssg_group_observe_send(
 void ssg_apply_member_updates(
     ssg_group_t  * g,
     ssg_member_update_t * updates,
-    hg_size_t update_count);
+    hg_size_t update_count,
+    int swim_apply_flag);
 hg_return_t hg_proc_ssg_member_update_t(
     hg_proc_t proc, void *data);
 

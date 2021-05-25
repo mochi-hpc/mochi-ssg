@@ -62,14 +62,12 @@ void swim_deregister_ping_rpcs(
  *
  * @param[in] group             pointer to SSG group associated with this SWIM context
  * @param[in] group_id          SSG group identifier for group
- * @param[in] active            boolean value indicating whether member should actively ping
  * @returns SSG_SUCCESS on success, SSG_FAILURE otherwise
  */
 int swim_init(
     struct ssg_group * group,
     ssg_group_id_t group_id,
-    ssg_group_config_t *group_conf,
-    int active);
+    ssg_group_config_t *group_conf);
 
 /**
  * Finalize the given SSG group's SWIM protocol.
@@ -82,9 +80,11 @@ void swim_finalize(
 /**
  * Applies SSG member updates to SWIM internal state.
  * 
- * @returns SSG_SUCCESS on success, SSG_FAILURE otherwise
+ * @param[in] group     pointer to SSG group to finalize SWIM for
+ * @param[in] ms        pointer to SSG group member state
+ * @param[in] update    SSG update to apply given member
  */
-int swim_apply_ssg_member_update(
+void swim_apply_ssg_member_update(
     struct ssg_group * group,
     struct ssg_member_state * ms,
     struct ssg_member_update update);

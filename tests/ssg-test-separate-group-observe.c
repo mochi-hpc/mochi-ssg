@@ -5,6 +5,7 @@
 int main(int argc, char **argv)
 {
     int ret;
+    ssg_member_id_t member_id;
     hg_addr_t remote_addr = HG_ADDR_NULL;
     ssg_group_id_t gid;
     margo_instance_id mid;
@@ -18,16 +19,18 @@ int main(int argc, char **argv)
     ret = ssg_group_id_load(argv[2], &count, &gid);
     assert (ret == SSG_SUCCESS);
 
-    fprintf(stderr, "        attaching...\n");
+    fprintf(stderr, "        observing...\n");
     ret = ssg_group_observe(mid, gid);
-    fprintf(stderr, "        attached...\n");
+    fprintf(stderr, "        observed...\n");
 
     fprintf(stderr, "        dumping...\n");
     ssg_group_dump(gid);
     fprintf(stderr, "        dumped...\n");
 
-    remote_addr = ssg_get_group_member_addr(gid, ssg_get_group_member_id_from_rank(gid, 0));
-    assert(remote_addr != HG_ADDR_NULL);
+    ret = ssg_get_group_member_id_from_rank(gid, 0, &member_id);
+    assert(ret == SSG_SUCCESS);
+    ret = ssg_get_group_member_addr(gid, member_id, &remote_addr);
+    assert(ret == SSG_SUCCESS);
 
     ret = margo_shutdown_remote_instance(mid, remote_addr);
     assert (ret == HG_SUCCESS);

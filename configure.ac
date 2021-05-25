@@ -134,8 +134,8 @@ if test "x${check_drc}" = xauto -o "x${check_drc}" = xyes ; then
 fi
 
 if test "x${check_valgrind}" = xauto -o "x${check_valgrind}" = xyes ; then
-    CFLAGS="$MARGO_CFLAGS -DVALGRIND"
-    CPPLAGS="$MARGO_CPPFLAGS -DVALGRIND"
+    CFLAGS="$CFLAGS -DVALGRIND"
+    CPPLAGS="$CPPFLAGS -DVALGRIND"
 fi
 
 if test "x${check_mpi_status}" = xfail -a "x${check_mpi}" = xyes; then
