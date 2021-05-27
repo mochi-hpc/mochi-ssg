@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
 #ifdef SSG_HAVE_MPI
 #include <mpi.h>
 #endif
@@ -129,6 +130,32 @@ static void parse_args(int argc, char *argv[], struct group_launch_opts *opts)
     return;
 }
 
+void ssg_member_update(
+    void * group_data,
+    ssg_member_id_t member_id,
+    ssg_member_update_type_t update_type)
+{
+    ssg_group_id_t *g_id_p = (ssg_group_id_t *)group_data;
+    int ret, gsize;
+    char *str;
+
+    if (update_type == SSG_MEMBER_JOINED)
+        str = "JOINED";
+    else if (update_type == SSG_MEMBER_LEFT)
+        str = "LEFT";
+    else if (update_type == SSG_MEMBER_DIED)
+        str = "DIED";
+    else
+        assert(0);
+
+    ret = ssg_get_group_size(*g_id_p, &gsize);
+    assert(ret == SSG_SUCCESS);
+
+    fprintf(stderr, "*** member %lu %s, new group size = %d\n", member_id, str, gsize);
+
+    return;
+}
+
 int main(int argc, char *argv[])
 {
     struct group_launch_opts opts;
@@ -184,12 +211,12 @@ int main(int argc, char *argv[])
 #ifdef SSG_HAVE_MPI
     if(strcmp(opts.group_mode, "mpi") == 0)
         ret = ssg_group_create_mpi(mid, opts.group_name, MPI_COMM_WORLD, &g_conf,
-            NULL, NULL, &g_id);
+            ssg_member_update, &g_id, &g_id);
 #endif
 #ifdef SSG_HAVE_PMIX
     if(strcmp(opts.group_mode, "pmix") == 0)
         ret = ssg_group_create_pmix(mid, opts.group_name, proc, &g_conf,
-            NULL, NULL, &g_id);
+            ssg_member_update, &g_id, &g_id);
 #endif
     DIE_IF(g_id == SSG_GROUP_ID_INVALID, "ssg_group_create");
 
