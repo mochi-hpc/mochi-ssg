@@ -67,6 +67,9 @@ void dump_histogram(double *values, int count)
     double min=values[0];
     int bins[NR_BINS];
 
+    if (count == 1)
+        return; // histograms not needed for single value
+
     for (i=0; i< NR_BINS; i++)
         bins[i] = 0;
 
