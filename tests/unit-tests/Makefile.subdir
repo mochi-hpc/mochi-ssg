@@ -1,0 +1,10 @@
+check_PROGRAMS += \
+ tests/unit-tests/ssg-init
+
+TESTS += \
+ tests/unit-tests/ssg-init
+
+tests_unit_tests_ssg_init_SOURCES = \
+ tests/unit-tests/munit/munit.c \
+ tests/unit-tests/ssg-init.c \
+ tests/unit-tests/helper-server.c
