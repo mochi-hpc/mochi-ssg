@@ -119,7 +119,13 @@ int ssg_init()
 
     if (ABT_initialized() == ABT_ERR_UNINITIALIZED)
     {
-        /* TODO: call argobots init routine in margo to set appropriate env */
+        /* SSG is taking responsibility for initializing Argobots */
+#ifdef HAVE_MARGO_SET_ENVIRONMENT
+        /* call Margo routine to configure Argobots appropriately */
+        ret = margo_set_environment(NULL);
+        if (ret != 0)
+            return SSG_MAKE_HG_ERROR(ret);
+#endif
         ret = ABT_init(0, NULL);
         if (ret != 0)
             return SSG_MAKE_ABT_ERROR(ret);
@@ -127,7 +133,7 @@ int ssg_init()
     }
     ABT_rwlock_create(&ssg_rt->lock);
 
-#ifdef SSG_HAVE_PMIX 
+#ifdef SSG_HAVE_PMIX
     /* use PMIx event registrations to inform us of terminated/aborted procs */
     pmix_status_t err_codes[2] = {PMIX_PROC_TERMINATED, PMIX_ERR_PROC_ABORTED};
     PMIx_Register_event_handler(err_codes, 2, NULL, 0,
