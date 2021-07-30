@@ -158,5 +158,10 @@ LIBS="$MARGO_LIBS $LIBS"
 CPPFLAGS="$MARGO_CFLAGS $CPPFLAGS"
 CFLAGS="$MARGO_CFLAGS $CFLAGS"
 
+
+# margo_set_environment: function in margo that can be used to set argobots
+# environment with settings desired by margo if ssg initializes argobots
+AC_CHECK_FUNCS(margo_set_environment)
+
 AC_CONFIG_FILES([Makefile maint/ssg.pc])
 AC_OUTPUT
