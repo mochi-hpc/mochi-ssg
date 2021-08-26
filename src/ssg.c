@@ -1565,7 +1565,7 @@ int ssg_get_group_member_ids_from_range(
     if (!ssg_rt) return SSG_ERR_NOT_INITIALIZED;
 
     if (group_id == SSG_GROUP_ID_INVALID || rank_start < 0 ||
-            rank_end < 0 || rank_end <= rank_start)
+            rank_end < 0 || rank_end < rank_start)
         return SSG_ERR_INVALID_ARG;
 
     ABT_rwlock_rdlock(ssg_rt->lock);
