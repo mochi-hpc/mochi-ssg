@@ -19,6 +19,7 @@ if [ $? -ne 0 ]; then
     rm -rf $TMPOUT
     exit 1
 fi
+launch_pid=$!
 
 sleep 5
 
@@ -28,8 +29,9 @@ if [ $? -ne 0 ]; then
     rm -rf $TMPOUT
     exit 1
 fi
+join_pid=$!
 
-wait
+wait $launch_pid $join_pid
 if [ $? -ne 0 ]; then
     rm -rf $TMPOUT
     exit 1
