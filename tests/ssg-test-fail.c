@@ -53,7 +53,7 @@ static void usage()
         "OPTIONS:\n"
         "\t-s <TIME>\t\tTime duration (in seconds) to run the group before shutting down\n"
         "\t-k <TIME>\t\tTime duration (in seconds) to kill group member\n"
-        "\t-r <rank>\t\tPMIx rank to kill\n"
+        "\t-r <rank>\t\tProcess rank to kill\n"
 );
 }
 
@@ -209,27 +209,30 @@ int main(int argc, char *argv[])
     {
         /* sleep for given duration before killing rank */
         margo_thread_sleep(mid, opts.kill_time * 1000.0);
-        fprintf(stderr, "%.6lf: KILL member %lu (PMIx rank %d)\n", ABT_get_wtime(), my_id, my_rank);
+
+        fprintf(stderr, "%.6lf: KILL member %lu (rank %d)\n", ABT_get_wtime(), my_id, my_rank);
+        fflush(stderr);
+
         /* XXX we can't really terminate the rank (or MPI would abort, for instance)... */
         ssg_group_destroy(g_id);
+        fprintf(stderr, "post-ssg-group-destroy\n");
         ssg_finalize();
+        fprintf(stderr, "post-ssg-finalize\n");
         margo_thread_sleep(mid, (opts.shutdown_time - opts.kill_time) * 1000.0);
+        fprintf(stderr, "post-sleep\n");
         margo_finalize(mid);
+        fprintf(stderr, "post-margo_finalize\n");
     }
     else
     {
         /* sleep for given duration to allow group time to run */
         margo_thread_sleep(mid, opts.shutdown_time * 1000.0);
-    }
 
-    if (my_rank != opts.kill_rank)
-    {
         /* print group at each alive member */
         ssg_group_dump(g_id);
-        ssg_group_destroy(g_id);
 
         /** cleanup **/
-        /* XXX cleanup fails on dead process currently */
+        ssg_group_destroy(g_id);
         ssg_finalize();
         margo_finalize(mid);
     }

@@ -39,7 +39,7 @@ static void usage()
 {
     fprintf(stderr,
         "Usage: "
-        "ssg-observe-group <addr> <GID>\n"
+        "ssg-refresh-group <addr> <GID>\n"
         "Observe group given by GID using Mercury address ADDR.\n");
 }
 
@@ -98,14 +98,18 @@ int main(int argc, char *argv[])
     const char *gid_file;
     ssg_group_id_t g_id;
     int num_addrs;
-    int sret;
-    double load_time, observe_time;
+    double load_time, refresh_time;
     int nprocs=0, rank=0;
+    ssg_group_id_t member_id;
+    int member_rank;
+    int group_size;
+    hg_addr_t member_addr;
+    int sret;
 
     parse_args(argc, argv, &addr_str, &gid_file);
 
 #ifdef SSG_HAVE_MPI
-    double min_load, max_load, min_observe, max_observe, sum_load, sum_observe;
+    double min_load, max_load, min_refresh, max_refresh, sum_load, sum_refresh;
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -120,6 +124,7 @@ int main(int argc, char *argv[])
     sret = ssg_init();
     DIE_IF(sret != SSG_SUCCESS, "ssg_init");
 
+    /* load group info from file */
     num_addrs = SSG_ALL_MEMBERS;
     load_time = my_wtime();
     sret = ssg_group_id_load(gid_file, &num_addrs, &g_id);
@@ -127,48 +132,64 @@ int main(int argc, char *argv[])
     DIE_IF(sret != SSG_SUCCESS, "ssg_group_id_load");
     DIE_IF(num_addrs < 1, "ssg_group_id_load");
 
-    observe_time = my_wtime();
-    /* start observging the SSG server group */
-    sret = ssg_group_observe(mid, g_id);
-    observe_time = my_wtime() - observe_time;
+    /* assert some things about loaded group */
+    sret = ssg_get_group_size(g_id, &group_size);
+    DIE_IF(sret != SSG_SUCCESS, "ssg_get_group_size");
+    sret = ssg_get_group_member_id_from_rank(g_id, 0, &member_id);
+    DIE_IF(sret != SSG_SUCCESS, "ssg_get_group_member_id_from_rank");
+    sret = ssg_get_group_member_rank(g_id, member_id, &member_rank);
+        DIE_IF(sret != SSG_SUCCESS, "ssg_get_group_member_rank");
+    DIE_IF(member_rank != 0, "ssg_get_group_member_rank");
+    /* get_group_member_addr() will fail since we do not have a margo
+     * instance associated with the group, which happens later as
+     * part of group_refresh()
+     */
+    sret = ssg_get_group_member_addr(g_id, member_id, &member_addr);
+    DIE_IF(sret != SSG_ERR_MID_NOT_FOUND, "ssg_get_group_member_addr");
+    DIE_IF(member_addr != HG_ADDR_NULL, "ssg_get_group_member_addr");
 
-    DIE_IF(sret != SSG_SUCCESS, "ssg_group_observe");
+    refresh_time = my_wtime();
+    /* refresh the SSG server group view */
+    sret = ssg_group_refresh(mid, g_id);
+    refresh_time = my_wtime() - refresh_time;
+    DIE_IF(sret != SSG_SUCCESS, "ssg_group_refresh");
 
     /* With a large number of clients, having everyone dump their group state
-     * gets unwieldy. TODO: rank is only set in the MPI case. how do we limit
-     * output in the PMIx case?. */
+     * gets unwieldy. */
     if (rank == 0) ssg_group_dump(g_id);
 
     /* clean up */
-    ssg_group_unobserve(g_id);
+    ssg_group_destroy(g_id);
     ssg_finalize();
     margo_finalize(mid);
 
 #ifdef SSG_HAVE_MPI
+#if 0
     MPI_Reduce(&load_time, &max_load, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     MPI_Reduce(&load_time, &min_load, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
     MPI_Reduce(&load_time, &sum_load, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
 
-    MPI_Reduce(&observe_time, &max_observe, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&observe_time, &min_observe, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&observe_time, &sum_observe, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&refresh_time, &max_refresh, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&refresh_time, &min_refresh, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&refresh_time, &sum_refresh, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
 
     /* histogram of results */
-    double *all_observes;
-    all_observes=malloc(nprocs*sizeof(*all_observes));
-    MPI_Gather(&observe_time, 1, MPI_DOUBLE,
-            all_observes, 1, MPI_DOUBLE,
+    double *all_refreshes;
+    all_refreshes=malloc(nprocs*sizeof(*all_refreshes));
+    MPI_Gather(&refresh_time, 1, MPI_DOUBLE,
+            all_refreshes, 1, MPI_DOUBLE,
             0, MPI_COMM_WORLD);
 
    if (rank == 0) {
 
-        dump_histogram(all_observes, nprocs);
-        for (int i=0; i< nprocs; i++) printf("%f ", all_observes[i]);
+        dump_histogram(all_refreshes, nprocs);
+        for (int i=0; i< nprocs; i++) printf("%f ", all_refreshes[i]);
         printf("\n");
 
         printf(" %d : load average (min max): %f ( %f %f )\n", nprocs, sum_load/nprocs, min_load, max_load);
-        printf(" %d : observe average (min max): %f ( %f %f )\n", nprocs, sum_observe/nprocs, min_observe, max_observe);
+        printf(" %d : refresh average (min max): %f ( %f %f )\n", nprocs, sum_refresh/nprocs, min_refresh, max_refresh);
     }
+#endif
 
     MPI_Finalize();
 #endif

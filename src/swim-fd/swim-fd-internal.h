@@ -21,10 +21,10 @@ extern "C" {
 /* SWIM protocol parameter defaults */
 #define SWIM_DEF_PROTOCOL_PERIOD_LEN    2000.0  /* milliseconds */
 #define SWIM_DEF_SUSPECT_TIMEOUT        5       /* protocol period lengths */
-#define SWIM_DEF_SUBGROUP_SIZE          2
+#define SWIM_DEF_SUBGROUP_SIZE          0 // XXX
 #define SWIM_MAX_SUBGROUP_SIZE          5
 #define SWIM_MAX_PIGGYBACK_ENTRIES      8
-#define SWIM_MAX_PIGGYBACK_TX_COUNT     50
+#define SWIM_MAX_PIGGYBACK_TX_COUNT     3
 
 typedef struct swim_ping_target_list
 {
@@ -48,7 +48,6 @@ struct swim_context
     int prot_susp_timeout;
     int prot_subgroup_sz;
     /* SWIM protocol internal state */
-    ssg_group_id_t g_id;
     swim_member_inc_nr_t self_inc_nr;
     ssg_member_id_t dping_target_id;
     hg_addr_t dping_target_addr;
@@ -66,8 +65,6 @@ struct swim_context
     /* lists of SWIM and SSG membership updates to gossip */
     void *swim_update_list;
     void *ssg_update_list;
-    /* argobots pool for launching SWIM threads */
-    ABT_pool swim_pool;
     /* swim protocol ULT handle */
     ABT_thread prot_thread;
     /* swim protocol lock */
@@ -82,15 +79,15 @@ void swim_iping_req_send_ult(
 
 /* SWIM update function prototypes */
 void swim_retrieve_member_updates(
-    ssg_group_t * group,
+    ssg_group_descriptor_t * gd,
     swim_member_update_t * updates,
     hg_size_t *update_count);
 void swim_retrieve_ssg_member_updates(
-    ssg_group_t * group,
+    ssg_group_descriptor_t * gd,
     ssg_member_update_t * updates,
     hg_size_t *update_count);
 void swim_apply_member_updates(
-    ssg_group_t * group,
+    ssg_group_descriptor_t * gd,
     swim_member_update_t * updates,
     hg_size_t update_count);
 

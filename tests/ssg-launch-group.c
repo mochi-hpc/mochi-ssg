@@ -161,9 +161,11 @@ int main(int argc, char *argv[])
     struct group_launch_opts opts;
     margo_instance_id mid = MARGO_INSTANCE_NULL;
     ssg_group_id_t g_id = SSG_GROUP_ID_INVALID;
-    ssg_member_id_t my_id;
-    ssg_group_config_t g_conf = SSG_GROUP_CONFIG_INITIALIZER;
+    ssg_member_id_t my_id, member_id;
     int group_size;
+    int my_rank, my_rank2;
+    hg_addr_t member_addr;
+    ssg_group_config_t g_conf = SSG_GROUP_CONFIG_INITIALIZER;
     int ret;
 
     /* set any default options (that may be overwritten by cmd args) */
@@ -228,11 +230,22 @@ int main(int argc, char *argv[])
     if (opts.shutdown_time > 0)
         margo_thread_sleep(mid, opts.shutdown_time * 1000.0);
 
-    /* get my group id and the size of the group */
+    /* assert some things about the group */
     ret = ssg_get_self_id(mid, &my_id);
-    DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_self_id");
+    DIE_IF(ret != SSG_SUCCESS, "ssg_get_self_id");
     ret = ssg_get_group_size(g_id, &group_size);
     DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_size");
+    ret = ssg_get_group_self_rank(g_id, &my_rank);
+    DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_self_rank");
+    ret = ssg_get_group_member_id_from_rank(g_id, my_rank, &member_id);
+    DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_member_id_from_rank");
+    DIE_IF(member_id != my_id, "ssg_get_group_member_id_from_rank");
+    ret = ssg_get_group_member_rank(g_id, member_id, &my_rank2);
+    DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_member_rank");
+    DIE_IF(my_rank != my_rank2, "ssg_get_group_member_rank");
+    ret = ssg_get_group_member_addr(g_id, member_id, &member_addr);
+    DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_member_addr");
+    DIE_IF(member_addr == HG_ADDR_NULL, "ssg_get_group_member_addr");
 
     /* print group at each member */
     ssg_group_dump(g_id);

@@ -31,11 +31,11 @@
 
 struct group_join_leave_opts
 {
+    char *addr_str;
+    char *gid_file;
     int join_time;
     int leave_time;
     int shutdown_time;
-    char *addr_str;
-    char *gid_file;
 };
 
 static void usage()
@@ -121,6 +121,10 @@ int main(int argc, char *argv[])
     margo_instance_id mid = MARGO_INSTANCE_NULL;
     ssg_group_id_t g_id = SSG_GROUP_ID_INVALID;
     int num_addrs;
+    ssg_group_id_t member_id;
+    int member_rank;
+    int group_size;
+    hg_addr_t member_addr = HG_ADDR_NULL;
     int sret;
 
     /* set any default options (that may be overwritten by cmd args) */
@@ -144,11 +148,27 @@ int main(int argc, char *argv[])
     sret = ssg_init();
     DIE_IF(sret != SSG_SUCCESS, "ssg_init");
 
-    /* load GID from file */
+    /* load group info from file */
     num_addrs = SSG_ALL_MEMBERS;
     sret = ssg_group_id_load(opts.gid_file, &num_addrs, &g_id);
     DIE_IF(sret != SSG_SUCCESS, "ssg_group_id_load");
     DIE_IF(num_addrs < 1, "ssg_group_id_load");
+
+    /* assert some things about loaded group */
+    sret = ssg_get_group_size(g_id, &group_size);
+    DIE_IF(sret != SSG_SUCCESS, "ssg_get_group_size");
+    sret = ssg_get_group_member_id_from_rank(g_id, 0, &member_id);
+    DIE_IF(sret != SSG_SUCCESS, "ssg_get_group_member_id_from_rank");
+    sret = ssg_get_group_member_rank(g_id, member_id, &member_rank);
+    DIE_IF(sret != SSG_SUCCESS, "ssg_get_group_member_rank");
+    DIE_IF(member_rank != 0, "ssg_get_group_member_rank");
+    /* get_group_member_addr() will fail since we do not have a margo
+     * instance associated with the group, which happens later as
+     * part of group_refresh()
+     */
+    sret = ssg_get_group_member_addr(g_id, member_id, &member_addr);
+    DIE_IF(sret != SSG_ERR_MID_NOT_FOUND, "ssg_get_group_member_addr");
+    DIE_IF(member_addr != HG_ADDR_NULL, "ssg_get_group_member_addr");
 
     /* sleep until time to join */
     if (opts.join_time > 0)
@@ -176,9 +196,9 @@ int main(int argc, char *argv[])
         margo_thread_sleep(mid, (opts.shutdown_time - opts.join_time) * 1000.0);
 
         ssg_group_dump(g_id);
-        ssg_group_destroy(g_id);
     }
 
+    ssg_group_destroy(g_id);
     ssg_finalize();
     margo_finalize(mid);
 
