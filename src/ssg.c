@@ -2485,6 +2485,7 @@ static int ssg_group_leave_internal(
 {
     ssg_group_descriptor_t *gd;
     ssg_group_view_t *new_view;
+    int self_rank;
 
     new_view = malloc(sizeof(*new_view));
     if (!new_view)
@@ -2501,7 +2502,6 @@ static int ssg_group_leave_internal(
     SSG_GROUP_REF_INCR(gd);
     SSG_GROUP_RELEASE(gd);
 
-    SSG_DEBUG(gd->mid_state, "PRE-SWIM\n");
     /* XXX we can't just rely on ssg_group_destroy_internal, because that
      * function doesn't use locking and expects the group to no longer be
      * visible. we need to explicitly shutdown SWIM with locks released
@@ -2512,9 +2512,12 @@ static int ssg_group_leave_internal(
         swim_finalize(gd->group);
         gd->group->swim_ctx = NULL;
     }
-    SSG_DEBUG(gd->mid_state, "POST-SWIM\n");
 
     ABT_rwlock_wrlock(gd->lock);
+    ssg_get_group_member_rank_internal(gd->view, gd->mid_state->self_id,
+        &self_rank);
+    utarray_erase(gd->view->rank_array, (unsigned int)self_rank, 1);
+    gd->view->size--;
     /* preserve group view, then destroy group */
     gd->view = new_view;
     memcpy(gd->view, &gd->group->view, sizeof(*gd->view));
@@ -3263,46 +3266,57 @@ int ssg_apply_member_updates(
             return SSG_ERR_INVALID_ARG;
         }
 
-#if 0
         /* invoke user callbacks to apply the SSG update */
         execute_all_membership_update_cb(
-            g,
+            gd->group,
             update_member_id,
-            update_type);
-#endif
+            update_type,
+            &gd->lock);
 
-    #if 0
         /* check if self died, in which case the group should be destroyed locally */
         if (self_died)
         {
-            ssg_group_descriptor_t *g_desc, *g_desc_tmp;
+            /* XXX refactor this code path -- nearly same as ssg_group_leave_internal */
+            ssg_group_view_t *new_view;
+            int self_rank;
 
-            /* XXX we need to find the corresponding group descriptor and
-             * remove it. there isn't a convenient way to map a group pointer
-             * to a descriptor so we just iterate the descriptor table until
-             * we find one that matches our group pointer...
+            new_view = malloc(sizeof(*new_view));
+            if (!new_view)
+                return SSG_ERR_ALLOCATION;
+
+            /* XXX we can't just rely on ssg_group_destroy_internal, because that
+             * function doesn't use locking and expects the group to no longer be
+             * visible. we need to explicitly shutdown SWIM with locks released
+             * before finalizing destruction of the group with locks held.
              */
-            ABT_rwlock_wrlock(ssg_rt->lock);
-            HASH_ITER(hh, ssg_rt->g_desc_table, g_desc, g_desc_tmp)
+            if (gd->group->swim_ctx)
             {
-                if (g_desc->g_data.g == g)
-                {
-                    HASH_DEL(ssg_rt->g_desc_table, g_desc);
-                    /* XXX in the case we are notified we have died, we know
-                     * that the caller of this function has a held */
-                    SSG_GROUP_REF_DECR(g_desc->g_data.g);
-                    ABT_rwlock_unlock(ssg_rt->lock);
-                    ssg_group_destroy_internal(g);
-                    break;
-                }
+                swim_finalize(gd->group);
+                gd->group->swim_ctx = NULL;
             }
-            ABT_rwlock_unlock(ssg_rt->lock);
 
-            return; /* no need to keep processing updates, group is destroyed */
-            /* XXX i think we need to schedule a thread to remove the group, waiting on callers of this function to clean up */
-            assert(0);
+            ABT_rwlock_wrlock(gd->lock);
+            ssg_get_group_member_rank_internal(gd->view, gd->mid_state->self_id,
+                &self_rank);
+            utarray_erase(gd->view->rank_array, (unsigned int)self_rank, 1);
+            gd->view->size--;
+            /* preserve group view, then destroy group */
+            gd->view = new_view;
+            memcpy(gd->view, &gd->group->view, sizeof(*gd->view));
+            /* prevent important view data from being destroyed */
+            gd->group->view.member_map = NULL;
+            gd->group->view.rank_array = NULL;
+            ssg_group_destroy_internal(gd->group, gd->mid_state);
+            gd->group = NULL;
+            gd->is_member = 0;
+            ABT_rwlock_unlock(gd->lock);
+
+            SSG_DEBUG(gd->mid_state, "self evicted from group %s (g_id=%lu, size=%d)\n",
+                gd->name, gd->g_id, gd->view->size);
+
+            /* no need to process further updates, just return an error */
+            return SSG_ERR_SELF_FAILED;
         }
-    #endif
     }
 
     return SSG_SUCCESS;

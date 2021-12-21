@@ -85,6 +85,7 @@ typedef void (*ssg_membership_update_cb)(
     X(SSG_ERR_GROUP_NOT_FOUND,      "Group not found") \
     X(SSG_ERR_MEMBER_NOT_FOUND,     "Member not found") \
     X(SSG_ERR_SELF_NOT_FOUND,       "Self not found") \
+    X(SSG_ERR_SELF_FAILED,          "Self failed") \
     X(SSG_ERR_MID_NOT_FOUND,        "Margo instance not found") \
     X(SSG_ERR_GROUP_EXISTS,         "Group exists") \
     X(SSG_ERR_FILE_IO,              "File I/O") \

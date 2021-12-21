@@ -223,30 +223,29 @@ inline static void free_all_membership_update_cb(
     }
 }
 
-#if 0
 inline static void execute_all_membership_update_cb(
         ssg_group_state_t* group,
         ssg_member_id_t member_id,
-        ssg_member_update_type_t update_type)
+        ssg_member_update_type_t update_type,
+        ABT_rwlock *lock)
 {
     ssg_update_cb* list;
 
-    ABT_rwlock_rdlock(group->lock);
+    ABT_rwlock_rdlock(*lock);
     list = group->update_cb_list;
     while(list) {
        if(list->update_cb) {
-            ABT_rwlock_unlock(group->lock);
+            ABT_rwlock_unlock(*lock);
             (list->update_cb)(
                 list->update_cb_dat,
                 member_id,
                 update_type);
-            ABT_rwlock_rdlock(group->lock);
+            ABT_rwlock_rdlock(*lock);
        }
        list = list->next;
     }
-    ABT_rwlock_unlock(group->lock);
+    ABT_rwlock_unlock(*lock);
 }
-#endif
 
 typedef struct ssg_member_update
 {
