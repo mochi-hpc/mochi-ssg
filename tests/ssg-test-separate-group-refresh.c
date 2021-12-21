@@ -19,9 +19,9 @@ int main(int argc, char **argv)
     ret = ssg_group_id_load(argv[2], &count, &gid);
     assert (ret == SSG_SUCCESS);
 
-    fprintf(stderr, "        observing...\n");
-    ret = ssg_group_observe(mid, gid);
-    fprintf(stderr, "        observed...\n");
+    fprintf(stderr, "        refreshing...\n");
+    ret = ssg_group_refresh(mid, gid);
+    fprintf(stderr, "        refreshed...\n");
 
     fprintf(stderr, "        dumping...\n");
     ssg_group_dump(gid);
@@ -35,7 +35,7 @@ int main(int argc, char **argv)
     ret = margo_shutdown_remote_instance(mid, remote_addr);
     assert (ret == HG_SUCCESS);
 
-    ssg_group_unobserve(gid);
+    ssg_group_destroy(gid);
     ssg_finalize();
 
     margo_finalize(mid);

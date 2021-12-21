@@ -164,7 +164,6 @@ int main(int argc, char *argv[])
     margo_finalize(mid);
 
 #ifdef SSG_HAVE_MPI
-#if 0
     MPI_Reduce(&load_time, &max_load, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     MPI_Reduce(&load_time, &min_load, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
     MPI_Reduce(&load_time, &sum_load, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
@@ -189,7 +188,6 @@ int main(int argc, char *argv[])
         printf(" %d : load average (min max): %f ( %f %f )\n", nprocs, sum_load/nprocs, min_load, max_load);
         printf(" %d : refresh average (min max): %f ( %f %f )\n", nprocs, sum_refresh/nprocs, min_refresh, max_refresh);
     }
-#endif
 
     MPI_Finalize();
 #endif
