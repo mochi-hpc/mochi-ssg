@@ -522,6 +522,14 @@ int ssg_group_id_load(
 int ssg_group_dump(
     ssg_group_id_t group_id);
 
+/** Returns a string describing an SSG error code.
+ *
+ * @param[in]   code    SSG error code
+ * @returns error string on success, NULL on invalid error code
+ */
+const char *ssg_strerror(
+    int code);
+
 #ifdef __cplusplus
 }
 #endif

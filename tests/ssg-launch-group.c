@@ -232,24 +232,24 @@ int main(int argc, char *argv[])
 
     /* assert some things about the group */
     ret = ssg_get_self_id(mid, &my_id);
-    DIE_IF(ret != SSG_SUCCESS, "ssg_get_self_id");
-    ret = ssg_get_group_size(g_id, &group_size);
-    DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_size");
-    ret = ssg_get_group_self_rank(g_id, &my_rank);
-    DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_self_rank");
-    ret = ssg_get_group_member_id_from_rank(g_id, my_rank, &member_id);
-    DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_member_id_from_rank");
-    DIE_IF(member_id != my_id, "ssg_get_group_member_id_from_rank");
-    ret = ssg_get_group_member_rank(g_id, member_id, &my_rank2);
-    DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_member_rank");
-    DIE_IF(my_rank != my_rank2, "ssg_get_group_member_rank");
-    ret = ssg_get_group_member_addr(g_id, member_id, &member_addr);
-    DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_member_addr");
-    DIE_IF(member_addr == HG_ADDR_NULL, "ssg_get_group_member_addr");
+    DIE_IF(ret != SSG_SUCCESS, "ssg_get_self_id (%s)", ssg_strerror(ret));
+    ret = ssg_get_group_size(cb_dat.gid, &group_size);
+    DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_size (%s)", ssg_strerror(ret));
+    ret = ssg_get_group_self_rank(cb_dat.gid, &my_rank);
+    DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_self_rank (%s)", ssg_strerror(ret));
+    ret = ssg_get_group_member_id_from_rank(cb_dat.gid, my_rank, &member_id);
+    DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_member_id_from_rank (%s)", ssg_strerror(ret));
+    DIE_IF(member_id != my_id, "ssg_get_group_member_id_from_rank (%s)", ssg_strerror(ret));
+    ret = ssg_get_group_member_rank(cb_dat.gid, member_id, &my_rank2);
+    DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_member_rank (%s)", ssg_strerror(ret));
+    DIE_IF(my_rank != my_rank2, "ssg_get_group_member_rank (%s)", ssg_strerror(ret));
+    ret = ssg_get_group_member_addr(cb_dat.gid, member_id, &member_addr);
+    DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_member_addr (%s)", ssg_strerror(ret));
+    DIE_IF(member_addr == HG_ADDR_NULL, "ssg_get_group_member_addr (%s)", ssg_strerror(ret));
 
     /* print group at each member */
-    ssg_group_dump(g_id);
-    ssg_group_destroy(g_id);
+    ssg_group_dump(cb_dat.gid);
+    ssg_group_destroy(cb_dat.gid);
 
     /** cleanup **/
     ssg_finalize();

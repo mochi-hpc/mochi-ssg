@@ -122,37 +122,37 @@ int main(int argc, char *argv[])
 
     /* initialize SSG */
     sret = ssg_init();
-    DIE_IF(sret != SSG_SUCCESS, "ssg_init");
+    DIE_IF(sret != SSG_SUCCESS, "ssg_init (%s)", ssg_strerror(sret));
 
     /* load group info from file */
     num_addrs = SSG_ALL_MEMBERS;
     load_time = my_wtime();
     sret = ssg_group_id_load(gid_file, &num_addrs, &g_id);
     load_time = my_wtime() - load_time;
-    DIE_IF(sret != SSG_SUCCESS, "ssg_group_id_load");
-    DIE_IF(num_addrs < 1, "ssg_group_id_load");
+    DIE_IF(sret != SSG_SUCCESS, "ssg_group_id_load (%s)", ssg_strerror(sret));
+    DIE_IF(num_addrs < 1, "ssg_group_id_load (%s)", ssg_strerror(sret));
 
     /* assert some things about loaded group */
     sret = ssg_get_group_size(g_id, &group_size);
-    DIE_IF(sret != SSG_SUCCESS, "ssg_get_group_size");
+    DIE_IF(sret != SSG_SUCCESS, "ssg_get_group_size (%s)", ssg_strerror(sret));
     sret = ssg_get_group_member_id_from_rank(g_id, 0, &member_id);
-    DIE_IF(sret != SSG_SUCCESS, "ssg_get_group_member_id_from_rank");
+    DIE_IF(sret != SSG_SUCCESS, "ssg_get_group_member_id_from_rank (%s)", ssg_strerror(sret));
     sret = ssg_get_group_member_rank(g_id, member_id, &member_rank);
-        DIE_IF(sret != SSG_SUCCESS, "ssg_get_group_member_rank");
-    DIE_IF(member_rank != 0, "ssg_get_group_member_rank");
+    DIE_IF(sret != SSG_SUCCESS, "ssg_get_group_member_rank (%s)", ssg_strerror(sret));
+    DIE_IF(member_rank != 0, "ssg_get_group_member_rank (%s)", ssg_strerror(sret));
     /* get_group_member_addr() will fail since we do not have a margo
      * instance associated with the group, which happens later as
      * part of group_refresh()
      */
     sret = ssg_get_group_member_addr(g_id, member_id, &member_addr);
-    DIE_IF(sret != SSG_ERR_MID_NOT_FOUND, "ssg_get_group_member_addr");
-    DIE_IF(member_addr != HG_ADDR_NULL, "ssg_get_group_member_addr");
+    DIE_IF(sret != SSG_ERR_MID_NOT_FOUND, "ssg_get_group_member_addr (%s)", ssg_strerror(sret));
+    DIE_IF(member_addr != HG_ADDR_NULL, "ssg_get_group_member_addr (%s)", ssg_strerror(sret));
 
     refresh_time = my_wtime();
     /* refresh the SSG server group view */
     sret = ssg_group_refresh(mid, g_id);
     refresh_time = my_wtime() - refresh_time;
-    DIE_IF(sret != SSG_SUCCESS, "ssg_group_refresh");
+    DIE_IF(sret != SSG_SUCCESS, "ssg_group_refresh (%s)", ssg_strerror(sret));
 
     /* With a large number of clients, having everyone dump their group state
      * gets unwieldy. */

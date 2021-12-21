@@ -914,8 +914,8 @@ int ssg_group_join(
             break;
         }
 
-        fprintf(stderr, "Error: SSG unable to send group join request to target"
-                        "[ret=%d]\n", ret);
+        fprintf(stderr, "Error: SSG unable to send group join request to target "
+                        "[%s]\n", ssg_strerror(ret));
         margo_addr_free(mid_state->mid, target_addr);
 
 retry:
@@ -1012,7 +1012,7 @@ int ssg_group_join_target(
     {
         ssg_release_mid_state(mid_state);
         fprintf(stderr, "Error: SSG unable to send join request to target "
-            "[ret=%d]\n", ret);
+            "[%s]\n", ssg_strerror(ret));
         return ret;
     }
 
@@ -1111,8 +1111,8 @@ int ssg_group_leave(
             break;
         }
 
-        fprintf(stderr, "Error: SSG unable to send group leave request to target"
-                        "[ret=%d]\n", ret);
+        fprintf(stderr, "Error: SSG unable to send group leave request to target "
+                        "[%s]\n", ssg_strerror(ret));
         margo_addr_free(gd->mid_state->mid, target_addr);
 
         if(!--retries)
@@ -1191,7 +1191,8 @@ int ssg_group_leave_target(
     ret = ssg_group_leave_send(group_id, target_addr, gd->mid_state);
     if (ret != SSG_SUCCESS)
     {
-        fprintf(stderr, "Error: SSG unable to send group leave request[ret=%d]\n", ret);
+        fprintf(stderr, "Error: SSG unable to send group leave request "
+            "[%s]\n", ssg_strerror(ret));
         return ret;
     }
 
@@ -1316,8 +1317,8 @@ int ssg_group_refresh(
             break;
         }
 
-        fprintf(stderr, "Error: SSG unable to send group refresh request to target"
-                        "[ret=%d]\n", ret);
+        fprintf(stderr, "Error: SSG unable to send group refresh request to target "
+                        "[%s]\n", ssg_strerror(ret));
         margo_addr_free(mid_state->mid, target_addr);
 
 retry:
@@ -1409,7 +1410,7 @@ int ssg_group_refresh_target(
     {
         ssg_release_mid_state(mid_state);
         fprintf(stderr, "Error: SSG unable to send group refresh request to target "
-                        "[ret=%d]\n", ret);
+                        "[%s]\n", ssg_strerror(ret));
         return ret;
     }
 
@@ -2153,6 +2154,27 @@ int ssg_group_dump(
     fflush(stdout);
 
     return SSG_SUCCESS;
+}
+
+const char *ssg_strerror(int code)
+{
+    if (code < 0)
+        return NULL;
+
+    if (SSG_ERROR_IS_HG(code))
+    {
+        return HG_Error_to_string(SSG_GET_HG_ERROR(code));
+    }
+    else if (SSG_ERROR_IS_ABT(code))
+    {
+        return "Argobots failure";
+    }
+    else
+    {
+        if (code >= SSG_ERR_MAX)
+            return NULL;
+        return ssg_error_messages[code];
+    }
 }
 
 /************************************
