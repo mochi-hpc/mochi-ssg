@@ -211,29 +211,37 @@ static void swim_prot_ult(
         gd->g_id, swim_ctx->prot_period_len,
         swim_ctx->prot_susp_timeout, swim_ctx->prot_subgroup_sz);
 
-    ABT_rwlock_rdlock(swim_ctx->swim_lock);
-    while(!(swim_ctx->shutdown_flag))
+    while(1)
     {
-        ABT_rwlock_unlock(swim_ctx->swim_lock);
-
         /* sleep for a protocol period length */
         margo_thread_sleep(gd->mid_state->mid, swim_ctx->prot_period_len);
-
-        /* spawn a ULT to run next tick */
-        ret = ABT_thread_create(gd->mid_state->pool, swim_tick_ult, gd,
-            ABT_THREAD_ATTR_NULL, &tick_thread);
-        if(ret != ABT_SUCCESS)
-        {
-            fprintf(stderr, "Error: unable to create ULT for SWIM protocol tick\n");
-        }
-
-        /* wait for tick ULT to terminate */
-        ABT_thread_join(tick_thread);
-        ABT_thread_free(&tick_thread);
-
+        
         ABT_rwlock_rdlock(swim_ctx->swim_lock);
+        if(!swim_ctx->shutdown_flag)
+        {
+            ABT_rwlock_unlock(swim_ctx->swim_lock);
+            /* spawn a ULT to run next tick */
+            ret = ABT_thread_create(gd->mid_state->pool, swim_tick_ult, gd,
+                ABT_THREAD_ATTR_NULL, &tick_thread);
+            if(ret != ABT_SUCCESS)
+            {
+                fprintf(stderr, "Error: unable to create ULT for SWIM protocol tick\n");
+            }
+
+            /* wait for tick ULT to terminate */
+            ABT_thread_join(tick_thread);
+            ABT_thread_free(&tick_thread);
+
+            ABT_rwlock_wrlock(swim_ctx->swim_lock);
+            swim_ctx->seq_nr++;
+            ABT_rwlock_unlock(swim_ctx->swim_lock);
+        }
+        else
+        {
+            ABT_rwlock_unlock(swim_ctx->swim_lock);
+            break;
+        }
     }
-    ABT_rwlock_unlock(swim_ctx->swim_lock);
 
     SSG_DEBUG(gd->mid_state, "shutdown SWIM protocol (g_id=%lu)\n", gd->g_id);
 
@@ -847,9 +855,14 @@ void swim_retrieve_member_updates(
             break;
 
         memcpy(&updates[i], &iter->update, sizeof(iter->update));
+        iter->tx_count++;
+
+        SSG_DEBUG(gd->mid_state, "packed member %lu update: status=%s, inc_nr=%u "
+            "[tx_nr=%d]\n", updates[i].id,
+            swim_member_statuses[updates[i].state.status],
+            updates[i].state.inc_nr, iter->tx_count);
 
         /* remove this update if it has been piggybacked enough */
-        iter->tx_count++;
         if(iter->tx_count == SWIM_MAX_PIGGYBACK_TX_COUNT)
         {
             LL_DELETE(*swim_update_list_p, iter);
@@ -911,6 +924,9 @@ void swim_apply_member_updates(
 
     for(i = 0; i < update_count; i++)
     {
+        SSG_DEBUG(gd->mid_state, "unpacked member %lu update: status=%s, inc_nr=%u\n",
+            updates[i].id, swim_member_statuses[updates[i].state.status],
+            updates[i].state.inc_nr);
         switch(updates[i].state.status)
         {
             case SWIM_MEMBER_ALIVE:

@@ -34,6 +34,7 @@ typedef struct swim_message_s
     ssg_group_id_t source_g_id;
     ssg_member_id_t source_id;
     swim_member_inc_nr_t source_inc_nr;
+    swim_member_state_t target_state;
     hg_size_t swim_pb_buf_count;
     hg_size_t ssg_pb_buf_count;
     swim_member_update_t swim_pb_buf[SWIM_MAX_PIGGYBACK_ENTRIES]; //TODO: dynamic array?
@@ -46,20 +47,25 @@ static hg_return_t hg_proc_swim_message_t(
 
 MERCURY_GEN_PROC(swim_dping_req_t, \
     ((ssg_member_id_t) (iping_ack_forward_id)) \
+    ((uint32_t) (seq_nr)) \
     ((swim_message_t) (msg)));
 MERCURY_GEN_PROC(swim_dping_ack_t, \
     ((ssg_member_id_t) (iping_ack_forward_id)) \
+    ((uint32_t) (seq_nr)) \
     ((swim_message_t) (msg)));
 MERCURY_GEN_PROC(swim_iping_req_t, \
     ((ssg_member_id_t) (target_id)) \
+    ((uint32_t) (seq_nr)) \
     ((swim_message_t) (msg)));
 MERCURY_GEN_PROC(swim_iping_ack_t, \
     ((ssg_member_id_t) (target_id)) \
+    ((uint32_t) (seq_nr)) \
     ((swim_message_t) (msg)));
 
 /* SWIM message pack/unpack prototypes */
 static void swim_pack_message(
-    ssg_group_descriptor_t *gd, swim_message_t *msg);
+    ssg_group_descriptor_t *gd, swim_message_t *msg,
+    ssg_member_id_t target_member);
 static void swim_unpack_message(
     ssg_group_descriptor_t *gd, swim_message_t *msg);
 static void swim_free_packed_message(
@@ -129,12 +135,13 @@ void swim_dping_req_send_ult(
     if(hret != HG_SUCCESS)
         return;
 
-    SSG_DEBUG(gd->mid_state, "SWIM: send dping req to %lu\n",
-        swim_ctx->dping_target_id);
+    SSG_DEBUG(gd->mid_state, "SWIM: send dping req to %lu (seq_nr=%u)\n",
+        swim_ctx->dping_target_id, swim_ctx->seq_nr);
 
     /* fill the direct ping request with current membership state */
     dping_req.iping_ack_forward_id = SSG_MEMBER_ID_INVALID; /* no iping forward */
-    swim_pack_message(gd, &(dping_req.msg));
+    dping_req.seq_nr = swim_ctx->seq_nr;
+    swim_pack_message(gd, &(dping_req.msg), swim_ctx->dping_target_id);
 
     /* send the dping req */
     hret = margo_forward(handle, &dping_req);
@@ -163,10 +170,15 @@ static void swim_dping_req_recv_ult(
     hgi = margo_get_info(handle);
     assert(hgi);
     mid = margo_hg_info_get_instance(hgi);
-    assert(mid != MARGO_INSTANCE_NULL);
+    if (mid == MARGO_INSTANCE_NULL)
+    {
+        fprintf(stderr, "SWIM dping req recv error -- invalid Margo state\n");
+        margo_destroy(handle);
+        return;
+    }
 
     hret = margo_get_input(handle, &dping_req);
-    if(hret != HG_SUCCESS)
+    if (hret != HG_SUCCESS)
     {
         margo_destroy(handle);
         return;
@@ -198,15 +210,16 @@ static void swim_dping_req_recv_ult(
     SSG_GROUP_REF_INCR(gd);
     SSG_GROUP_RELEASE(gd);
 
-    SSG_DEBUG(gd->mid_state, "SWIM: recv dping req from %lu\n",
-        dping_req.msg.source_id);
+    SSG_DEBUG(gd->mid_state, "SWIM: recv dping req from %lu (seq_nr=%u)\n",
+        dping_req.msg.source_id, dping_req.seq_nr);
 
     /* extract sender's membership state from dping req */
     swim_unpack_message(gd, &(dping_req.msg));
 
     /* fill the dping ack with current membership state */
     dping_ack.iping_ack_forward_id = dping_req.iping_ack_forward_id;
-    swim_pack_message(gd, &(dping_ack.msg));
+    dping_ack.seq_nr = dping_req.seq_nr;
+    swim_pack_message(gd, &(dping_ack.msg), dping_req.msg.source_id);
 
     hret = margo_create(gd->mid_state->mid, hgi->addr,
         gd->mid_state->swim_dping_ack_rpc_id, &ack_handle);
@@ -219,8 +232,8 @@ static void swim_dping_req_recv_ult(
         return;
     }
 
-    SSG_DEBUG(gd->mid_state, "SWIM: send dping ack to %lu\n",
-        dping_req.msg.source_id);
+    SSG_DEBUG(gd->mid_state, "SWIM: send dping ack to %lu (seq_nr=%u)\n",
+        dping_req.msg.source_id, dping_ack.seq_nr);
 
     SSG_GROUP_REF_DECR(gd);
 
@@ -254,7 +267,12 @@ static void swim_dping_ack_recv_ult(
     hgi = margo_get_info(handle);
     assert(hgi);
     mid = margo_hg_info_get_instance(hgi);
-    assert(mid != MARGO_INSTANCE_NULL);
+    if (mid == MARGO_INSTANCE_NULL)
+    {
+        fprintf(stderr, "SWIM dping ack recv error -- invalid Margo state\n");
+        margo_destroy(handle);
+        return;
+    }
 
     hret = margo_get_input(handle, &dping_ack);
     if(hret != HG_SUCCESS)
@@ -290,8 +308,8 @@ static void swim_dping_ack_recv_ult(
     SSG_GROUP_REF_INCR(gd);
     SSG_GROUP_RELEASE(gd);
 
-    SSG_DEBUG(gd->mid_state, "SWIM: recv dping ack from %lu\n",
-        dping_ack.msg.source_id);
+    SSG_DEBUG(gd->mid_state, "SWIM: recv dping ack from %lu (seq_nr=%u)\n",
+        dping_ack.msg.source_id, dping_ack.seq_nr);
 
     /* extract sender's membership state from dping ack */
     swim_unpack_message(gd, &(dping_ack.msg));
@@ -300,9 +318,10 @@ static void swim_dping_ack_recv_ult(
     {
         /* this is a normal dping ack, just mark the target as acked */
         ABT_rwlock_wrlock(swim_ctx->swim_lock);
-        if(dping_ack.msg.source_id == swim_ctx->dping_target_id)
+        if((dping_ack.msg.source_id == swim_ctx->dping_target_id) &&
+            (dping_ack.seq_nr == swim_ctx->seq_nr))
         {
-            /* XXX: maybe use a sequence number? this isn't technically right */
+            /* make sure we are acking the right member/sequence number */
             swim_ctx->ping_target_acked = 1;
         }
         ABT_rwlock_unlock(swim_ctx->swim_lock);
@@ -343,12 +362,13 @@ static void swim_dping_ack_recv_ult(
         }
         ABT_rwlock_unlock(gd->lock);
 
-        SSG_DEBUG(gd->mid_state, "SWIM: send iping ack to %lu (target=%lu)\n",
-            dping_ack.iping_ack_forward_id, dping_ack.msg.source_id);
+        SSG_DEBUG(gd->mid_state, "SWIM: send iping ack to %lu (target=%lu, seq_nr=%u)\n",
+            dping_ack.iping_ack_forward_id, dping_ack.msg.source_id, dping_ack.seq_nr);
 
         /* fill the iping ack with current membership state */
         iping_ack.target_id = dping_ack.msg.source_id;
-        swim_pack_message(gd, &(iping_ack.msg));
+        iping_ack.seq_nr = dping_ack.seq_nr;
+        swim_pack_message(gd, &(iping_ack.msg), dping_ack.iping_ack_forward_id);
 
         SSG_GROUP_REF_DECR(gd);
 
@@ -401,12 +421,13 @@ void swim_iping_req_send_ult(
     if(hret != HG_SUCCESS)
         return;
 
-    SSG_DEBUG(gd->mid_state, "SWIM: send iping req to %lu (target=%lu)\n",
-        iping_target_id, swim_ctx->dping_target_id);
+    SSG_DEBUG(gd->mid_state, "SWIM: send iping req to %lu (target=%lu, seq_nr=%u)\n",
+        iping_target_id, swim_ctx->dping_target_id, swim_ctx->seq_nr);
 
     /* fill the iping req with target member and current membership state */
     iping_req.target_id = swim_ctx->dping_target_id;
-    swim_pack_message(gd, &(iping_req.msg));
+    iping_req.seq_nr = swim_ctx->seq_nr;
+    swim_pack_message(gd, &(iping_req.msg), iping_target_id);
 
     /* send this iping req */
     hret = margo_forward(handle, &iping_req);
@@ -435,7 +456,12 @@ static void swim_iping_req_recv_ult(hg_handle_t handle)
     hgi = margo_get_info(handle);
     assert(hgi);
     mid = margo_hg_info_get_instance(hgi);
-    assert(mid != MARGO_INSTANCE_NULL);
+    if (mid == MARGO_INSTANCE_NULL)
+    {
+        fprintf(stderr, "SWIM iping req recv error -- invalid Margo state\n");
+        margo_destroy(handle);
+        return;
+    }
 
     hret = margo_get_input(handle, &iping_req);
     if(hret != HG_SUCCESS)
@@ -470,8 +496,8 @@ static void swim_iping_req_recv_ult(hg_handle_t handle)
     SSG_GROUP_REF_INCR(gd);
     SSG_GROUP_RELEASE(gd);
 
-    SSG_DEBUG(gd->mid_state, "SWIM: recv iping req from %lu (target=%lu)\n",
-        iping_req.msg.source_id, iping_req.target_id);
+    SSG_DEBUG(gd->mid_state, "SWIM: recv iping req from %lu (target=%lu, seq_nr=%u)\n",
+        iping_req.msg.source_id, iping_req.target_id, iping_req.seq_nr);
 
     /* extract sender's membership state from request */
     swim_unpack_message(gd, &(iping_req.msg));
@@ -503,11 +529,13 @@ static void swim_iping_req_recv_ult(hg_handle_t handle)
     }
     ABT_rwlock_unlock(gd->lock);
 
-    SSG_DEBUG(gd->mid_state, "SWIM: send dping req to %lu\n", iping_req.target_id);
+    SSG_DEBUG(gd->mid_state, "SWIM: send dping req to %lu (seq_nr=%u)\n",
+        iping_req.target_id, iping_req.seq_nr);
     
     /* fill the direct ping request with current membership state */
     dping_req.iping_ack_forward_id = iping_req.msg.source_id;
-    swim_pack_message(gd, &(dping_req.msg));
+    dping_req.seq_nr = iping_req.seq_nr;
+    swim_pack_message(gd, &(dping_req.msg), iping_req.target_id);
 
     SSG_GROUP_REF_DECR(gd);
 
@@ -538,7 +566,12 @@ static void swim_iping_ack_recv_ult(hg_handle_t handle)
     hgi = margo_get_info(handle);
     assert(hgi);
     mid = margo_hg_info_get_instance(hgi);
-    assert(mid != MARGO_INSTANCE_NULL);
+    if (mid == MARGO_INSTANCE_NULL)
+    {
+        fprintf(stderr, "SWIM iping ack recv error -- invalid Margo state\n");
+        margo_destroy(handle);
+        return;
+    }
 
     hret = margo_get_input(handle, &iping_ack);
     if(hret != HG_SUCCESS)
@@ -573,19 +606,17 @@ static void swim_iping_ack_recv_ult(hg_handle_t handle)
     SSG_GROUP_REF_INCR(gd);
     SSG_GROUP_RELEASE(gd);
 
-    SSG_DEBUG(gd->mid_state, "SWIM: recv iping ack from %lu (target=%lu)\n",
-        iping_ack.msg.source_id, iping_ack.target_id);
+    SSG_DEBUG(gd->mid_state, "SWIM: recv iping ack from %lu (target=%lu, seq_nr=%u)\n",
+        iping_ack.msg.source_id, iping_ack.target_id, iping_ack.seq_nr);
 
     /* extract target's membership state from response */
     swim_unpack_message(gd, &(iping_ack.msg));
 
     ABT_rwlock_wrlock(gd->group->swim_ctx->swim_lock);
-    if(iping_ack.target_id == gd->group->swim_ctx->dping_target_id)
+    if((iping_ack.target_id == gd->group->swim_ctx->dping_target_id) &&
+        (iping_ack.seq_nr == gd->group->swim_ctx->seq_nr))
     {
-        /* mark the current SWIM ping target as ACKed if it matches the
-         * original target from this iping req
-         */
-        /* XXX: maybe use a sequence number? this isn't technically right */
+        /* make sure we are acking the right member/sequence number */
         gd->group->swim_ctx->ping_target_acked = 1;
     }
     ABT_rwlock_unlock(gd->group->swim_ctx->swim_lock);
@@ -601,9 +632,11 @@ DEFINE_MARGO_RPC_HANDLER(swim_iping_ack_recv_ult)
  *      SWIM ping helpers       *
  ********************************/
 
-static void swim_pack_message(ssg_group_descriptor_t *gd, swim_message_t *msg)
+static void swim_pack_message(ssg_group_descriptor_t *gd, swim_message_t *msg,
+    ssg_member_id_t target_member)
 {
     swim_context_t *swim_ctx = gd->group->swim_ctx;
+    ssg_member_state_t *target_ms;
 
     memset(msg, 0, sizeof(*msg));
 
@@ -614,11 +647,32 @@ static void swim_pack_message(ssg_group_descriptor_t *gd, swim_message_t *msg)
     msg->source_inc_nr = swim_ctx->self_inc_nr;
     ABT_rwlock_unlock(swim_ctx->swim_lock);
 
+    ABT_rwlock_rdlock(gd->lock);
+    HASH_FIND(hh, gd->view->member_map, &target_member,
+        sizeof(target_member), target_ms);
+    if(!target_ms)
+    {
+        /* check dead list if target member not in view */
+        HASH_FIND(hh, gd->group->dead_members, &target_member,
+            sizeof(target_member), target_ms);
+    }
+    if(target_ms)
+    {
+        msg->target_state.inc_nr = target_ms->swim_state.inc_nr;
+        msg->target_state.status = target_ms->swim_state.status;
+    }
+    else
+    {
+        /* dummy state that target will just ignore */
+        msg->target_state.inc_nr = 0;
+        msg->target_state.status = SWIM_MEMBER_ALIVE;
+    }
+    ABT_rwlock_unlock(gd->lock);
+
     /* piggyback SWIM & SSG updates on the message */
     msg->swim_pb_buf_count = SWIM_MAX_PIGGYBACK_ENTRIES;
     msg->ssg_pb_buf_count = SWIM_MAX_PIGGYBACK_ENTRIES;
     swim_retrieve_member_updates(gd, msg->swim_pb_buf, &msg->swim_pb_buf_count);
-    //SSG_DEBUG(gd->mid_state, "PACKED %d messages\n", msg->swim_pb_buf_count);
     swim_retrieve_ssg_member_updates(gd, msg->ssg_pb_buf, &msg->ssg_pb_buf_count);
 
     return;
@@ -626,19 +680,24 @@ static void swim_pack_message(ssg_group_descriptor_t *gd, swim_message_t *msg)
 
 static void swim_unpack_message(ssg_group_descriptor_t *gd, swim_message_t *msg)
 {
-    swim_member_update_t sender_update;
+    swim_member_update_t tmp_update;
 
     /* XXX is there a way to prevent packing of this data in response? */
     /* apply (implicit) sender update */
-    sender_update.id = msg->source_id;
-    sender_update.state.status = SWIM_MEMBER_ALIVE;
-    sender_update.state.inc_nr = msg->source_inc_nr;
-    swim_apply_member_updates(gd, &sender_update, 1);
+    tmp_update.id = msg->source_id;
+    tmp_update.state.status = SWIM_MEMBER_ALIVE;
+    tmp_update.state.inc_nr = msg->source_inc_nr;
+    swim_apply_member_updates(gd, &tmp_update, 1);
+
+    /* apply message source's view of our membership state */
+    tmp_update.id = gd->mid_state->self_id;
+    tmp_update.state.status = msg->target_state.status;
+    tmp_update.state.inc_nr = msg->target_state.inc_nr;
+    swim_apply_member_updates(gd, &tmp_update, 1);
 
     /* apply SWIM updates */
     if(msg->swim_pb_buf_count > 0)
         swim_apply_member_updates(gd, msg->swim_pb_buf, msg->swim_pb_buf_count);
-    //SSG_DEBUG(gd->mid_state, "UNPACKED %d messages\n", msg->swim_pb_buf_count);
 
     /* apply SSG updates */
     if(msg->ssg_pb_buf_count > 0)
@@ -683,6 +742,12 @@ static hg_return_t hg_proc_swim_message_t(hg_proc_t proc, void *data)
                 return hret;
             }
             hret = hg_proc_swim_member_inc_nr_t(proc, &(msg->source_inc_nr));
+            if(hret != HG_SUCCESS)
+            {
+                hret = HG_PROTOCOL_ERROR;
+                return hret;
+            }
+            hret = hg_proc_swim_member_state_t(proc, &(msg->target_state));
             if(hret != HG_SUCCESS)
             {
                 hret = HG_PROTOCOL_ERROR;
@@ -733,6 +798,12 @@ static hg_return_t hg_proc_swim_message_t(hg_proc_t proc, void *data)
                 return hret;
             }
             hret = hg_proc_swim_member_inc_nr_t(proc, &(msg->source_inc_nr));
+            if(hret != HG_SUCCESS)
+            {
+                hret = HG_PROTOCOL_ERROR;
+                return hret;
+            }
+            hret = hg_proc_swim_member_state_t(proc, &(msg->target_state));
             if(hret != HG_SUCCESS)
             {
                 hret = HG_PROTOCOL_ERROR;

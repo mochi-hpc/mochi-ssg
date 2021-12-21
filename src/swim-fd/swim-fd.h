@@ -19,14 +19,23 @@ extern "C" {
 /* opaque swim context type */
 typedef struct swim_context swim_context_t;
 
-/* swim member specific types */
 typedef uint32_t swim_member_inc_nr_t;
-typedef enum swim_member_status
-{
-    SWIM_MEMBER_ALIVE = 0,
-    SWIM_MEMBER_SUSPECT,
-    SWIM_MEMBER_DEAD
-} swim_member_status_t;
+typedef uint8_t swim_member_status_t;
+
+#define SWIM_MEMBER_STATUS_VALUES \
+    X(SWIM_MEMBER_ALIVE) \
+    X(SWIM_MEMBER_SUSPECT) \
+    X(SWIM_MEMBER_DEAD)
+
+#define X(__status__) __status__,
+enum { SWIM_MEMBER_STATUS_VALUES };
+#undef X
+
+static const char* const swim_member_statuses[] = {
+#define X(__status__) #__status__,
+    SWIM_MEMBER_STATUS_VALUES
+#undef X
+};
 
 /* SWIM state associated with each group member */
 typedef struct swim_member_state
