@@ -2195,7 +2195,7 @@ const char *ssg_strerror(int code)
 
     if (SSG_ERROR_IS_HG(code))
     {
-        return HG_Error_to_string(SSG_GET_HG_ERROR(code));
+        return HG_Error_to_string((hg_return_t)SSG_GET_HG_ERROR(code));
     }
     else if (SSG_ERROR_IS_ABT(code))
     {

@@ -8,6 +8,7 @@
 
 #include <unistd.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 #ifdef SSG_HAVE_MPI
@@ -77,7 +78,14 @@ int main(int argc, char *argv[])
     drc_info_handle_t drc_credential_info;
     uint32_t drc_cookie;
     char drc_key_str[256] = {0};
+    char config[1024];
+    struct margo_init_info args = {0};
     int ret;
+
+    /* set margo config json string */
+    snprintf(config, 1024,
+             "{ \"use_progress_thread\" : %s, \"rpc_thread_count\" : %d }",
+             "false", -1);
 
     parse_args(argc, argv, &addr_str, &gid_file);
 
@@ -117,18 +125,20 @@ int main(int argc, char *argv[])
 
     /* init margo */
     /* use the main xstream to drive progress & run handlers */
-    mid = margo_init_opt(addr_str, MARGO_CLIENT_MODE, &hii, 0, -1);
+    args.json_config = config;
+    args.hg_init_info = &hii;
+    mid = margo_init_ext(addr_str, MARGO_CLIENT_MODE, &args);
     DIE_IF(mid == MARGO_INSTANCE_NULL, "margo_init");
 
-    /* start observging the SSG server group */
-    ret = ssg_group_observe(mid, g_id);
-    DIE_IF(ret != SSG_SUCCESS, "ssg_group_observe");
+    /* refresh the SSG server group view */
+    ret = ssg_group_refresh(mid, g_id);
+    DIE_IF(ret != SSG_SUCCESS, "ssg_group_refresh");
 
     /* have everyone dump their group state */
     ssg_group_dump(g_id);
 
     /* clean up */
-    ssg_group_unobserve(g_id);
+    ssg_group_destroy(g_id);
     margo_finalize(mid);
     ssg_finalize(); /* NOTE: moved after margo_finalize */
 

@@ -9,6 +9,7 @@
 #define _GNU_SOURCE
 #include <unistd.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #ifdef SSG_HAVE_MPI
 #include <mpi.h>
@@ -144,9 +145,15 @@ int main(int argc, char *argv[])
     drc_info_handle_t drc_credential_info;
     uint32_t drc_cookie;
     char drc_key_str[256] = {0};
+    int rank;
+    char config[1024];
+    struct margo_init_info args = {0};
     int ret;
 
-    int rank;
+    /* set margo config json string */
+    snprintf(config, 1024,
+             "{ \"use_progress_thread\" : %s, \"rpc_thread_count\" : %d }",
+             "false", -1);
 
     /* set any default options (that may be overwritten by cmd args) */
     opts.shutdown_time = 10; /* default to running group for 10 seconds */
@@ -243,7 +250,9 @@ int main(int argc, char *argv[])
 
     /* init margo */
     /* use the main xstream to drive progress & run handlers */
-    mid = margo_init_opt(opts.addr_str, MARGO_SERVER_MODE, &hii, 0, -1);
+    args.json_config = config;
+    args.hg_init_info = &hii;
+    mid = margo_init_ext(opts.addr_str, MARGO_SERVER_MODE, &args);
     DIE_IF(mid == MARGO_INSTANCE_NULL, "margo_init");
 
     /* initialize SSG */
