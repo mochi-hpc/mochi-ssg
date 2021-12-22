@@ -87,7 +87,6 @@ typedef struct ssg_runtime_state
 #ifdef SSG_HAVE_PMIX
     size_t pmix_failure_evhdlr_ref;
 #endif
-    int abt_init_flag;
     ABT_rwlock lock;
 } ssg_runtime_state_t;
 

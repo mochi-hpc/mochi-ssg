@@ -100,21 +100,8 @@ int main(int argc, char *argv[])
 #endif
 
     ret = ssg_get_group_cred_from_file(gid_file, &ssg_cred);
-    DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_cred_from_file");
+    DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_cred_from_file (%s)", ssg_strerror(ret));
     drc_credential_id = (uint32_t)ssg_cred;
-
-    /* initialize SSG */
-    /* NOTE: we move SSG initialization ahead of margo_init here -- margo needs
-     * to be configured to use the DRC credential to allow cross-job communication,
-     * but we can't get the credential witout initializing SSG and loading the group
-     */
-    ret = ssg_init();
-    DIE_IF(ret != SSG_SUCCESS, "ssg_init");
-
-    num_addrs = 1;
-    ret = ssg_group_id_load(gid_file, &num_addrs, &g_id);
-    DIE_IF(ret != SSG_SUCCESS, "ssg_group_id_load");
-    DIE_IF(num_addrs != 1, "ssg_group_id_load");
 
     /* access credential and covert to string for use by mercury */
     ret = drc_access(drc_credential_id, 0, &drc_credential_info);
@@ -130,9 +117,18 @@ int main(int argc, char *argv[])
     mid = margo_init_ext(addr_str, MARGO_CLIENT_MODE, &args);
     DIE_IF(mid == MARGO_INSTANCE_NULL, "margo_init");
 
+    /* initialize SSG */
+    ret = ssg_init();
+    DIE_IF(ret != SSG_SUCCESS, "ssg_init (%s)", strerror(ret));
+
+    num_addrs = 1;
+    ret = ssg_group_id_load(gid_file, &num_addrs, &g_id);
+    DIE_IF(ret != SSG_SUCCESS, "ssg_group_id_load (%s)", ssg_strerror(ret));
+    DIE_IF(num_addrs != 1, "ssg_group_id_load (%s)", ssg_strerror(ret));
+
     /* refresh the SSG server group view */
     ret = ssg_group_refresh(mid, g_id);
-    DIE_IF(ret != SSG_SUCCESS, "ssg_group_refresh");
+    DIE_IF(ret != SSG_SUCCESS, "ssg_group_refresh (%s)", ssg_strerror(ret));
 
     /* have everyone dump their group state */
     ssg_group_dump(g_id);

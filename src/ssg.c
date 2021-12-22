@@ -125,19 +125,11 @@ int ssg_init()
         return SSG_ERR_ALLOCATION;
     memset(ssg_rt, 0, sizeof(*ssg_rt));
 
-    if (ABT_initialized() == ABT_ERR_UNINITIALIZED)
+    ret = ABT_initialized();
+    if (ret == ABT_ERR_UNINITIALIZED)
     {
-        /* SSG is taking responsibility for initializing Argobots */
-#ifdef HAVE_MARGO_SET_ENVIRONMENT
-        /* call Margo routine to configure Argobots appropriately */
-        ret = margo_set_environment(NULL);
-        if (ret != 0)
-            return SSG_MAKE_HG_ERROR(ret);
-#endif
-        ret = ABT_init(0, NULL);
-        if (ret != 0)
-            return SSG_MAKE_ABT_ERROR(ret);
-        ssg_rt->abt_init_flag = 1;
+        free(ssg_rt);
+        return SSG_MAKE_ABT_ERROR(ret);
     }
     ABT_rwlock_create(&ssg_rt->lock);
 
@@ -202,8 +194,6 @@ int ssg_finalize()
     }
 
     ABT_rwlock_free(&ssg_rt->lock);
-    if (ssg_rt->abt_init_flag)
-        ABT_finalize(); /* finalize ABT if SSG initialized it */
     free(ssg_rt);
     ssg_rt = NULL;
 
@@ -2079,7 +2069,7 @@ int ssg_get_group_cred_from_file(
     fd = open(file_name, O_RDONLY);
     if (fd < 0)
     {
-        fprintf(stderr, "Error: Unable to open file %s for readding SSG group credential\n",
+        fprintf(stderr, "Error: Unable to open file %s for reading SSG group credential\n",
             file_name);
         return SSG_ERR_FILE_IO;
     }
