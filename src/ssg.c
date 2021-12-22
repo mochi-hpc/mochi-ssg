@@ -1751,39 +1751,6 @@ int ssg_get_group_member_ids_from_range(
     return SSG_SUCCESS;
 }
 
-#if 0
-int ssg_group_id_get_cred(
-    ssg_group_id_t group_id,
-    int64_t *cred)
-{
-    ssg_group_descriptor_t *g_desc;
-
-    *cred = -1;
-
-    if (!ssg_rt) return SSG_ERR_NOT_INITIALIZED;
-
-    if (group_id == SSG_GROUP_ID_INVALID)
-        return SSG_ERR_INVALID_ARG;
-
-    ABT_rwlock_rdlock(ssg_rt->lock);
-
-    /* find the group descriptor */
-    HASH_FIND(hh, ssg_rt->g_desc_table, &group_id, sizeof(ssg_group_id_t), g_desc);
-    if (!g_desc)
-    {
-        ABT_rwlock_unlock(ssg_rt->lock);
-        fprintf(stderr, "Error: SSG unable to find  group ID\n");
-        return SSG_ERR_GROUP_NOT_FOUND;
-    }
-
-    *cred = g_desc->cred;
-
-    ABT_rwlock_unlock(ssg_rt->lock);
-
-    return SSG_SUCCESS;
-}
-#endif
-
 int ssg_group_id_serialize(
     ssg_group_id_t group_id,
     int num_addrs,
@@ -1816,7 +1783,7 @@ int ssg_group_id_serialize(
 
     /* determine needed buffer size */
     gid_size = sizeof(magic_nr) + sizeof(gd->g_id) +
-        (strlen(gd->name) + 1) + sizeof(num_addrs_buf);
+        (strlen(gd->name) + 1) + sizeof(num_addrs_buf) + sizeof(gd->cred);
     if(gd->is_member)
     {
         i = 1;
@@ -1835,9 +1802,6 @@ int ssg_group_id_serialize(
         addr_str_size += strlen(state->addr_str) + 1;
         i++;
     }
-
-    if (gd->cred >= 0)
-        gid_size += sizeof(gd->cred);
 
     gid_buf = malloc((size_t)(gid_size + addr_str_size));
     if (!gid_buf)
@@ -1870,8 +1834,7 @@ int ssg_group_id_serialize(
         p += strlen(state->addr_str) + 1;
         i++;
     }
-    if (gd->cred >= 0)
-        *(int64_t *)p = gd->cred;
+    *(int64_t *)p = gd->cred;
     /* the rest of the descriptor is stateful and not appropriate for serializing... */
 
     SSG_GROUP_RELEASE(gd);
@@ -1937,11 +1900,8 @@ int ssg_group_id_deserialize(
         return SSG_ERR_ALLOCATION;
     tmp_buf = addr_strs[num_addrs_buf - 1] + strlen(addr_strs[num_addrs_buf - 1]) + 1;
 
-    /* finally check to see if there's a credential left at the end */
-    if ((buf_size - (tmp_buf - buf)) == sizeof(int64_t))
-        cred = *(int64_t *)tmp_buf;
-    else
-        cred = -1;
+    /* credential is at very end */
+    cred = *(int64_t *)tmp_buf;
 
     if ((tmp_num_addrs == SSG_ALL_MEMBERS) ||
             (num_addrs_buf < (unsigned int)tmp_num_addrs))
@@ -2082,6 +2042,78 @@ int ssg_group_id_load(
     ret = ssg_group_id_deserialize(buf, (size_t)total, num_addrs, group_id);
     if (ret != SSG_SUCCESS)
         fprintf(stderr, "Error: Unable to deserialize SSG group ID\n");
+
+    close(fd);
+    free(buf);
+    return ret;
+}
+
+int ssg_get_group_cred_from_buf(
+    const char * buf,
+    size_t buf_size,
+    int64_t *cred)
+{
+    *cred = -1;
+
+    if (!buf | buf_size < 8)
+        return SSG_ERR_INVALID_ARG;
+
+    *cred = *(int64_t *)(buf + buf_size - 8);
+
+    return SSG_SUCCESS;
+}
+
+int ssg_get_group_cred_from_file(
+    const char * file_name,
+    int64_t *cred)
+{
+    int fd;
+    char *buf;
+    ssize_t bufsize=1024;
+    ssize_t total=0, bytes_read;
+    int eof = 0;
+    int ret;
+
+    *cred = -1;
+
+    fd = open(file_name, O_RDONLY);
+    if (fd < 0)
+    {
+        fprintf(stderr, "Error: Unable to open file %s for readding SSG group credential\n",
+            file_name);
+        return SSG_ERR_FILE_IO;
+    }
+
+    /* we used to stat the file to see how big it is.  stat is expensive, so let's skip that */
+    buf = malloc(bufsize);
+    if (buf == NULL)
+    {
+        close(fd);
+        return SSG_ERR_ALLOCATION;
+    }
+
+    do {
+        bytes_read = read(fd, buf+total, bufsize-total);
+        if (bytes_read == -1 || bytes_read == 0)
+        {
+            fprintf(stderr, "Error: Unable to read SSG group credential from file %s: %ld (%s)\n",
+                    file_name, bytes_read, strerror(errno));
+            close(fd);
+            free(buf);
+            return SSG_ERR_FILE_IO;
+        }
+        if (bytes_read == bufsize - total) {
+            bufsize *= 2;
+            buf = realloc(buf, bufsize);
+        } else {
+            eof = 1;
+        }
+        total += bytes_read;
+    } while (!eof);
+
+    ret = ssg_get_group_cred_from_buf(buf, (size_t)total, cred);
+    if (ret != SSG_SUCCESS)
+        fprintf(stderr, "Error: Unable to get SSG group credential from buffer\n");
 
     close(fd);
     free(buf);

@@ -449,17 +449,6 @@ int ssg_get_group_member_ids_from_range(
     ssg_member_id_t *range_ids);
 
 /**
- * Retrieves the credential associated with an SSG group identifier.
- *
- * @param[in]  group_id SSG group ID
- * @param[out] cred     Returned credential (-1 on failure or missing credential)
- * @returns SSG_SUCCESS on success, SSG error code otherwise
- */
-int ssg_group_id_get_cred(
-    ssg_group_id_t group_id,
-    int64_t *cred);
-
-/**
  * Serializes an SSG group identifier into a buffer.
  *
  * @param[in]   group_id    SSG group ID
@@ -514,6 +503,30 @@ int ssg_group_id_load(
     const char * file_name,
     int * num_addrs,
     ssg_group_id_t * group_id_p);
+
+/**
+ * Retrieves the credential associated with an SSG group buffer.
+ *
+ * @param[in]  buf              Buffer containing the SSG group identifier
+ * @param[in]  buf_size         Size of given buffer
+ * @param[out] cred             Returned credential (-1 on failure or missing credential)
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
+ */
+int ssg_get_group_cred_from_buf(
+    const char * buf,
+    size_t buf_size,
+    int64_t *cred);
+
+/**
+ * Retrieves the credential associated with an SSG group file.
+ *
+ * @param[in]  file_name        File to load the group credential from
+ * @param[out] cred             Returned credential (-1 on failure or missing credential)
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
+ */
+int ssg_get_group_cred_from_file(
+    const char * file_name,
+    int64_t *cred);
 
 /** Dumps details of caller's membership in a given group to stdout.
  *

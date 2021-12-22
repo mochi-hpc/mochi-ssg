@@ -91,6 +91,10 @@ int main(int argc, char *argv[])
     PMIx_Init(&proc, NULL, 0);
 #endif
 
+    ret = ssg_get_group_cred_from_file(gid_file, &ssg_cred);
+    DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_cred_from_file");
+    drc_credential_id = (uint32_t)ssg_cred;
+
     /* initialize SSG */
     /* NOTE: we move SSG initialization ahead of margo_init here -- margo needs
      * to be configured to use the DRC credential to allow cross-job communication,
@@ -103,10 +107,6 @@ int main(int argc, char *argv[])
     ret = ssg_group_id_load(gid_file, &num_addrs, &g_id);
     DIE_IF(ret != SSG_SUCCESS, "ssg_group_id_load");
     DIE_IF(num_addrs != 1, "ssg_group_id_load");
-
-    ret = ssg_group_id_get_cred(g_id, &ssg_cred);
-    DIE_IF(ret != SSG_SUCCESS, "ssg_group_id_get_cred");
-    drc_credential_id = (uint32_t)ssg_cred;
 
     /* access credential and covert to string for use by mercury */
     ret = drc_access(drc_credential_id, 0, &drc_credential_info);
