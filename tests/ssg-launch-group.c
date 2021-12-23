@@ -8,6 +8,7 @@
 
 #include <unistd.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 #ifdef SSG_HAVE_MPI
@@ -130,12 +131,18 @@ static void parse_args(int argc, char *argv[], struct group_launch_opts *opts)
     return;
 }
 
+struct ssg_cb_dat
+{
+    ssg_group_id_t gid;
+    margo_instance_id mid;
+};
+
 void ssg_member_update(
     void * group_data,
     ssg_member_id_t member_id,
     ssg_member_update_type_t update_type)
 {
-    ssg_group_id_t *g_id_p = (ssg_group_id_t *)group_data;
+    struct ssg_cb_dat *cb_dat_p = (struct ssg_cb_dat *)group_data;
     int ret, gsize;
     char *str;
 
@@ -148,7 +155,7 @@ void ssg_member_update(
     else
         assert(0);
 
-    ret = ssg_get_group_size(*g_id_p, &gsize);
+    ret = ssg_get_group_size(cb_dat_p->gid, &gsize);
     assert(ret == SSG_SUCCESS);
 
     fprintf(stderr, "*** member %lu %s, new group size = %d\n", member_id, str, gsize);
@@ -156,14 +163,17 @@ void ssg_member_update(
     return;
 }
 
+
 int main(int argc, char *argv[])
 {
     struct group_launch_opts opts;
     margo_instance_id mid = MARGO_INSTANCE_NULL;
-    ssg_group_id_t g_id = SSG_GROUP_ID_INVALID;
-    ssg_member_id_t my_id;
-    ssg_group_config_t g_conf = SSG_GROUP_CONFIG_INITIALIZER;
+    ssg_member_id_t my_id, member_id;
     int group_size;
+    int my_rank, my_rank2;
+    hg_addr_t member_addr;
+    ssg_group_config_t g_conf = SSG_GROUP_CONFIG_INITIALIZER;
+    struct ssg_cb_dat cb_dat;
     int ret;
 
     /* set any default options (that may be overwritten by cmd args) */
@@ -200,43 +210,54 @@ int main(int argc, char *argv[])
 
     /* initialize SSG */
     ret = ssg_init();
-    DIE_IF(ret != SSG_SUCCESS, "ssg_init");
+    DIE_IF(ret != SSG_SUCCESS, "ssg_init (%s)", ssg_strerror(ret));
 
     /* set non-default group config parameters */
     g_conf.swim_period_length_ms = 1000; /* 1-second period length */
     g_conf.swim_suspect_timeout_periods = 4; /* 4-period suspicion length */
     g_conf.swim_subgroup_member_count = 3; /* 3-member subgroups for SWIM */
 
-    /* XXX do we want to use callback for testing anything about group??? */
+    cb_dat.mid = mid;
 #ifdef SSG_HAVE_MPI
     if(strcmp(opts.group_mode, "mpi") == 0)
         ret = ssg_group_create_mpi(mid, opts.group_name, MPI_COMM_WORLD, &g_conf,
-            ssg_member_update, &g_id, &g_id);
+            ssg_member_update, &cb_dat, &cb_dat.gid);
 #endif
 #ifdef SSG_HAVE_PMIX
     if(strcmp(opts.group_mode, "pmix") == 0)
         ret = ssg_group_create_pmix(mid, opts.group_name, proc, &g_conf,
-            ssg_member_update, &g_id, &g_id);
+            ssg_member_update, &cb_dat, &cb_dat.gid);
 #endif
-    DIE_IF(g_id == SSG_GROUP_ID_INVALID, "ssg_group_create");
+    DIE_IF(cb_dat.gid == SSG_GROUP_ID_INVALID, "ssg_group_create (%s)", ssg_strerror(ret));
 
     /* store the gid if requested */
     if (opts.gid_file)
-        ssg_group_id_store(opts.gid_file, g_id, SSG_ALL_MEMBERS);
+        ssg_group_id_store(opts.gid_file, cb_dat.gid, SSG_ALL_MEMBERS);
 
     /* sleep for given duration to allow group time to run */
     if (opts.shutdown_time > 0)
         margo_thread_sleep(mid, opts.shutdown_time * 1000.0);
 
-    /* get my group id and the size of the group */
+    /* assert some things about the group */
     ret = ssg_get_self_id(mid, &my_id);
-    DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_self_id");
-    ret = ssg_get_group_size(g_id, &group_size);
-    DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_size");
+    DIE_IF(ret != SSG_SUCCESS, "ssg_get_self_id (%s)", ssg_strerror(ret));
+    ret = ssg_get_group_size(cb_dat.gid, &group_size);
+    DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_size (%s)", ssg_strerror(ret));
+    ret = ssg_get_group_self_rank(cb_dat.gid, &my_rank);
+    DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_self_rank (%s)", ssg_strerror(ret));
+    ret = ssg_get_group_member_id_from_rank(cb_dat.gid, my_rank, &member_id);
+    DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_member_id_from_rank (%s)", ssg_strerror(ret));
+    DIE_IF(member_id != my_id, "ssg_get_group_member_id_from_rank (%s)", ssg_strerror(ret));
+    ret = ssg_get_group_member_rank(cb_dat.gid, member_id, &my_rank2);
+    DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_member_rank (%s)", ssg_strerror(ret));
+    DIE_IF(my_rank != my_rank2, "ssg_get_group_member_rank (%s)", ssg_strerror(ret));
+    ret = ssg_get_group_member_addr(cb_dat.gid, member_id, &member_addr);
+    DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_member_addr (%s)", ssg_strerror(ret));
+    DIE_IF(member_addr == HG_ADDR_NULL, "ssg_get_group_member_addr (%s)", ssg_strerror(ret));
 
     /* print group at each member */
-    ssg_group_dump(g_id);
-    ssg_group_destroy(g_id);
+    ssg_group_dump(cb_dat.gid);
+    ssg_group_destroy(cb_dat.gid);
 
     /** cleanup **/
     ssg_finalize();

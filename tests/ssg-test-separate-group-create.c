@@ -1,3 +1,5 @@
+#include <stdlib.h>
+
 #include <ssg.h>
 #include <ssg-mpi.h>
 

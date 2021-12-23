@@ -6,11 +6,11 @@ check_PROGRAMS += \
  tests/ssg-launch-double-group \
  tests/ssg-launch-double-mid-group \
  tests/ssg-launch-group-finalize-cb \
- tests/ssg-observe-group \
+ tests/ssg-refresh-group \
  tests/ssg-join-leave-group \
  tests/ssg-test-fail \
  tests/ssg-test-separate-group-create \
- tests/ssg-test-separate-group-observe
+ tests/ssg-test-separate-group-refresh
 
 EXTRA_DIST += \
  tests/test-util.sh
@@ -44,6 +44,6 @@ if SSG_HAVE_DRC
 
 check_PROGRAMS += \
  tests/ssg-launch-group-drc \
- tests/ssg-observe-group-drc
+ tests/ssg-refresh-group-drc
 
 endif

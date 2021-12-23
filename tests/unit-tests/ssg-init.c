@@ -31,11 +31,14 @@ static MunitResult init(const MunitParameter params[], void* data)
     (void)data;
     int sret;
 
+    sret = ABT_init(0, NULL);
+    munit_assert_int(sret, ==, ABT_SUCCESS);
+
     sret = ssg_init();
-    munit_assert_int(sret, ==, 0);
+    munit_assert_int(sret, ==, SSG_SUCCESS);
 
     sret = ssg_finalize();
-    munit_assert_int(sret, ==, 0);
+    munit_assert_int(sret, ==, SSG_SUCCESS);
 
     return MUNIT_OK;
 }

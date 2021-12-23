@@ -8,6 +8,7 @@
 
 #include <unistd.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 #ifdef SSG_HAVE_MPI
@@ -31,11 +32,11 @@
 
 struct group_join_leave_opts
 {
+    char *addr_str;
+    char *gid_file;
     int join_time;
     int leave_time;
     int shutdown_time;
-    char *addr_str;
-    char *gid_file;
 };
 
 static void usage()
@@ -121,6 +122,10 @@ int main(int argc, char *argv[])
     margo_instance_id mid = MARGO_INSTANCE_NULL;
     ssg_group_id_t g_id = SSG_GROUP_ID_INVALID;
     int num_addrs;
+    ssg_group_id_t member_id;
+    int member_rank;
+    int group_size;
+    hg_addr_t member_addr = HG_ADDR_NULL;
     int sret;
 
     /* set any default options (that may be overwritten by cmd args) */
@@ -142,21 +147,36 @@ int main(int argc, char *argv[])
 
     /* initialize SSG */
     sret = ssg_init();
-    DIE_IF(sret != SSG_SUCCESS, "ssg_init");
+    DIE_IF(sret != SSG_SUCCESS, "ssg_init (%s)", ssg_strerror(sret));
 
-    /* load GID from file */
+    /* load group info from file */
     num_addrs = SSG_ALL_MEMBERS;
     sret = ssg_group_id_load(opts.gid_file, &num_addrs, &g_id);
-    DIE_IF(sret != SSG_SUCCESS, "ssg_group_id_load");
-    DIE_IF(num_addrs < 1, "ssg_group_id_load");
+    DIE_IF(sret != SSG_SUCCESS, "ssg_group_id_load (%s)", ssg_strerror(sret));
+    DIE_IF(num_addrs < 1, "ssg_group_id_load (%s)", ssg_strerror(sret));
+
+    /* assert some things about loaded group */
+    sret = ssg_get_group_size(g_id, &group_size);
+    DIE_IF(sret != SSG_SUCCESS, "ssg_get_group_size (%s)", ssg_strerror(sret));
+    sret = ssg_get_group_member_id_from_rank(g_id, 0, &member_id);
+    DIE_IF(sret != SSG_SUCCESS, "ssg_get_group_member_id_from_rank (%s)", ssg_strerror(sret));
+    sret = ssg_get_group_member_rank(g_id, member_id, &member_rank);
+    DIE_IF(sret != SSG_SUCCESS, "ssg_get_group_member_rank (%s)", ssg_strerror(sret));
+    DIE_IF(member_rank != 0, "ssg_get_group_member_rank (%s)", ssg_strerror(sret));
+    /* get_group_member_addr() will fail since we do not have a margo
+     * instance associated with the group, which happens later as
+     * part of group_refresh()
+     */
+    sret = ssg_get_group_member_addr(g_id, member_id, &member_addr);
+    DIE_IF(sret != SSG_ERR_MID_NOT_FOUND, "ssg_get_group_member_addr (%s)", ssg_strerror(sret));
+    DIE_IF(member_addr != HG_ADDR_NULL, "ssg_get_group_member_addr (%s)", ssg_strerror(sret));
 
     /* sleep until time to join */
     if (opts.join_time > 0)
         margo_thread_sleep(mid, opts.join_time * 1000.0);
 
-    /* XXX do we want to use callback for testing anything about group??? */
     sret = ssg_group_join(mid, g_id, NULL, NULL);
-    DIE_IF(sret != SSG_SUCCESS, "ssg_group_join");
+    DIE_IF(sret != SSG_SUCCESS, "ssg_group_join (%s)", ssg_strerror(sret));
 
     /* sleep for given duration to allow group time to run */
     if (opts.leave_time >= 0)
@@ -167,18 +187,20 @@ int main(int argc, char *argv[])
         ssg_group_dump(g_id);
 
         sret = ssg_group_leave(g_id);
-        DIE_IF(sret != SSG_SUCCESS, "ssg_group_leave");
+        DIE_IF(sret != SSG_SUCCESS, "ssg_group_leave (%s)", ssg_strerror(sret));
 
         margo_thread_sleep(mid, (opts.shutdown_time - opts.leave_time) * 1000.0);
+
+        ssg_group_dump(g_id);
     }
     else
     {
         margo_thread_sleep(mid, (opts.shutdown_time - opts.join_time) * 1000.0);
 
         ssg_group_dump(g_id);
-        ssg_group_destroy(g_id);
     }
 
+    ssg_group_destroy(g_id);
     ssg_finalize();
     margo_finalize(mid);
 
