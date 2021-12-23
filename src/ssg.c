@@ -2125,7 +2125,6 @@ int ssg_get_group_transport_from_buf(
     const char *addr_str;
     const char *transport_end;
     size_t transport_len;
-    int ret;
 
     if (!buf || !tbuf)
         return SSG_ERR_INVALID_ARG;
