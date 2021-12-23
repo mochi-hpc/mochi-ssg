@@ -17,7 +17,7 @@
 #include "ssg-internal.h"
 
 #define SSG_VIEW_BUF_DEF_SIZE (128 * 1024)
-#define SSG_DEF_RPC_TIMEOUT (2 * 1000.0)
+#define SSG_DEF_RPC_TIMEOUT (5 * 1000.0)
 
 /* SSG RPC types and (de)serialization routines */
 
