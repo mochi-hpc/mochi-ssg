@@ -44,21 +44,20 @@ static void usage()
 {
     fprintf(stderr,
         "Usage: "
-        "ssg-observe-group-drc [-s <time>] <addr> <GID>\n"
-        "Observe group given by GID using Mercury address ADDR.\n");
+        "ssg-refresh-group-drc <GID>\n"
+        "Obtain group view given by GID.\n");
 }
 
-static void parse_args(int argc, char *argv[], const char **addr_str, const char **gid_file)
+static void parse_args(int argc, char *argv[], const char **gid_file)
 {
     int ndx = 1;
 
-    if (argc < 2)
+    if (argc != 2)
     {
         usage();
         exit(1);
     }
 
-    *addr_str = argv[ndx++];
     *gid_file = argv[ndx++];
 
     return;   
@@ -68,8 +67,6 @@ int main(int argc, char *argv[])
 {
     margo_instance_id mid = MARGO_INSTANCE_NULL;
     struct hg_init_info hii;
-    int sleep_time = 0;
-    const char *addr_str;
     const char *gid_file;
     ssg_group_id_t g_id;
     int num_addrs;
@@ -87,7 +84,7 @@ int main(int argc, char *argv[])
              "{ \"use_progress_thread\" : %s, \"rpc_thread_count\" : %d }",
              "false", -1);
 
-    parse_args(argc, argv, &addr_str, &gid_file);
+    parse_args(argc, argv, &gid_file);
 
     memset(&hii, 0, sizeof(hii));
 
@@ -98,6 +95,10 @@ int main(int argc, char *argv[])
     pmix_proc_t proc;
     PMIx_Init(&proc, NULL, 0);
 #endif
+
+    char transport[256];
+    ret = ssg_get_group_transport_from_file(gid_file, transport, 256);
+    DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_transport_from_file (%s)", ssg_strerror(ret));
 
     ret = ssg_get_group_cred_from_file(gid_file, &ssg_cred);
     DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_cred_from_file (%s)", ssg_strerror(ret));
@@ -114,7 +115,7 @@ int main(int argc, char *argv[])
     /* use the main xstream to drive progress & run handlers */
     args.json_config = config;
     args.hg_init_info = &hii;
-    mid = margo_init_ext(addr_str, MARGO_CLIENT_MODE, &args);
+    mid = margo_init_ext(transport, MARGO_CLIENT_MODE, &args);
     DIE_IF(mid == MARGO_INSTANCE_NULL, "margo_init");
 
     /* initialize SSG */

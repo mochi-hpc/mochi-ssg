@@ -528,6 +528,34 @@ int ssg_get_group_cred_from_file(
     const char * file_name,
     int64_t *cred);
 
+/**
+ * Retrieves the transport associated with an SSG group buffer.
+ *
+ * @param[in]           buf             Buffer containing the SSG group identifier
+ * @param[in]           buf_size        Size of given buffer
+ * @param[in/out]       tbuf            Transport name buffer
+ * @param[in]           tbuf_size       Size of transport name buffer
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
+ */
+int ssg_get_group_transport_from_buf(
+    const char * buf,
+    size_t buf_size,
+    char * tbuf,
+    size_t tbuf_size);
+
+/**
+ * Retrieves the transport associated with an SSG group file.
+ *
+ * @param[in]           file_name       File to load the group transport from
+ * @param[in/out]       tbuf            Transport name buffer
+ * @param[in]           tbuf_size       Size of transport name buffer
+ * @returns SSG_SUCCESS on success, SSG error code otherwise
+ */
+int ssg_get_group_transport_from_file(
+    const char * file_name,
+    char * tbuf,
+    size_t tbuf_size);
+
 /** Dumps details of caller's membership in a given group to stdout.
  *
  * @param[in] group_id SSG group ID

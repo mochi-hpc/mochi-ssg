@@ -2045,7 +2045,7 @@ int ssg_get_group_cred_from_buf(
 {
     *cred = -1;
 
-    if (!buf | buf_size < 8)
+    if (!buf || buf_size < 8)
         return SSG_ERR_INVALID_ARG;
 
     *cred = *(int64_t *)(buf + buf_size - 8);
@@ -2104,6 +2104,121 @@ int ssg_get_group_cred_from_file(
     ret = ssg_get_group_cred_from_buf(buf, (size_t)total, cred);
     if (ret != SSG_SUCCESS)
         fprintf(stderr, "Error: Unable to get SSG group credential from buffer\n");
+
+    close(fd);
+    free(buf);
+    return ret;
+}
+
+int ssg_get_group_transport_from_buf(
+    const char * buf,
+    size_t buf_size,
+    char * tbuf,
+    size_t tbuf_size)
+{
+    const char *tmp_buf = buf;
+    size_t min_buf_size;
+    uint64_t magic_nr;
+    ssg_group_id_t g_id;
+    const char *g_name;
+    uint32_t num_addrs_buf;
+    const char *addr_str;
+    const char *transport_end;
+    size_t transport_len;
+    int ret;
+
+    if (!buf || !tbuf)
+        return SSG_ERR_INVALID_ARG;
+
+    tbuf[0] = '\0';
+
+    /* check to ensure the buffer contains enough data to make a group ID */
+    min_buf_size = (sizeof(magic_nr) + sizeof(g_id) + sizeof(num_addrs_buf) + 2);
+    if (buf_size < min_buf_size)
+    {
+        fprintf(stderr, "Error: Serialized buffer does not contain a valid SSG group\n");
+        return SSG_ERR_INVALID_ARG;
+    }
+
+    /* deserialize */
+    magic_nr = *(uint64_t *)tmp_buf;
+    if (magic_nr != SSG_MAGIC_NR)
+    {
+        fprintf(stderr, "Error: Magic number mismatch when deserializing SSG group ID\n");
+        return SSG_ERR_INVALID_ARG;
+    }
+    tmp_buf += sizeof(uint64_t);
+    g_id = *(ssg_group_id_t *)tmp_buf;
+    tmp_buf += sizeof(ssg_group_id_t);
+    g_name = tmp_buf;
+    tmp_buf += strlen(g_name) + 1;
+    num_addrs_buf = *(uint32_t *)tmp_buf;
+    tmp_buf += sizeof(uint32_t);
+
+    addr_str = tmp_buf;
+    transport_end = strstr(addr_str, ":");
+    transport_len = transport_end - addr_str;
+    if ((transport_len + 1) > tbuf_size)
+        return SSG_ERR_NOBUFS;
+
+    memcpy(tbuf, addr_str, transport_len);
+    tbuf[transport_len] = '\0';
+
+    return SSG_SUCCESS;
+}
+
+int ssg_get_group_transport_from_file(
+    const char * file_name,
+    char * tbuf,
+    size_t tbuf_size)
+{
+    int fd;
+    char *buf;
+    ssize_t bufsize=1024;
+    ssize_t total=0, bytes_read;
+    int eof = 0;
+    int ret;
+
+    tbuf[0] = '\0';
+
+    fd = open(file_name, O_RDONLY);
+    if (fd < 0)
+    {
+        fprintf(stderr, "Error: Unable to open file %s for reading SSG group transport\n",
+            file_name);
+        return SSG_ERR_FILE_IO;
+    }
+
+    /* we used to stat the file to see how big it is.  stat is expensive, so let's skip that */
+    buf = malloc(bufsize);
+    if (buf == NULL)
+    {
+        close(fd);
+        return SSG_ERR_ALLOCATION;
+    }
+
+    do {
+        bytes_read = read(fd, buf+total, bufsize-total);
+        if (bytes_read == -1 || bytes_read == 0)
+        {
+            fprintf(stderr, "Error: Unable to read SSG group transport from file %s: %ld (%s)\n",
+                    file_name, bytes_read, strerror(errno));
+            close(fd);
+            free(buf);
+            return SSG_ERR_FILE_IO;
+        }
+        if (bytes_read == bufsize - total) {
+            bufsize *= 2;
+            buf = realloc(buf, bufsize);
+        } else {
+            eof = 1;
+        }
+        total += bytes_read;
+    } while (!eof);
+
+    ret = ssg_get_group_transport_from_buf(buf, (size_t)total, tbuf, tbuf_size);
+    if (ret != SSG_SUCCESS)
+        fprintf(stderr, "Error: Unable to get SSG group transport from buffer\n");
 
     close(fd);
     free(buf);
