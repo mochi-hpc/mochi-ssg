@@ -129,6 +129,7 @@ int ssg_init()
     if (ret == ABT_ERR_UNINITIALIZED)
     {
         free(ssg_rt);
+        ssg_rt = NULL;
         return SSG_MAKE_ABT_ERROR(ret);
     }
     ABT_rwlock_create(&ssg_rt->lock);
