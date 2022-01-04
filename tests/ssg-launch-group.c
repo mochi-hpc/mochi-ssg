@@ -255,6 +255,9 @@ int main(int argc, char *argv[])
     DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_member_addr (%s)", ssg_strerror(ret));
     DIE_IF(member_addr == HG_ADDR_NULL, "ssg_get_group_member_addr (%s)", ssg_strerror(ret));
 
+    /* release address retrieved from ssg */
+    margo_addr_free(mid, member_addr);
+
     /* print group at each member */
     ssg_group_dump(cb_dat.gid);
     ssg_group_destroy(cb_dat.gid);

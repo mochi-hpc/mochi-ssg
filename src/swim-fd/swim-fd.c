@@ -477,7 +477,7 @@ static void swim_shuffle_ping_target_list(
         if (list->targets[i]->swim_state.status == SWIM_MEMBER_DEAD)
         {
             list->len--;
-            memcpy(&list->targets[i], &list->targets[i+1],
+            memmove(&list->targets[i], &list->targets[i+1],
                 (list->len-i)*sizeof(*list->targets));
         }
     }

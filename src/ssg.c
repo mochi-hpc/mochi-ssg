@@ -1919,6 +1919,8 @@ int ssg_group_id_deserialize(
         return ret;
     }
 
+    free(addr_strs);
+
     /* add this group descriptor to our global table, first making sure not re-create */
     ABT_rwlock_wrlock(ssg_rt->lock);
     HASH_FIND(hh, ssg_rt->gd_table, &g_id, sizeof(ssg_group_id_t), gd_check);
@@ -1927,7 +1929,6 @@ int ssg_group_id_deserialize(
         ABT_rwlock_unlock(ssg_rt->lock);
         ssg_group_view_destroy(gd->view, NULL);
         ssg_group_descriptor_free(gd);
-        free(addr_strs);
         return SSG_ERR_GROUP_EXISTS;
     }
     HASH_ADD(hh, ssg_rt->gd_table, g_id, sizeof(ssg_group_id_t), gd);
