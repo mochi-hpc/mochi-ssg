@@ -195,6 +195,29 @@ static MunitResult init_load(const MunitParameter params[], void* data)
     return MUNIT_OK;
 }
 
+/* attempt to load an id without initializing ssg first */
+static MunitResult load_no_init(const MunitParameter params[], void* data)
+{
+    (void)params;
+    struct test_context *ctx = (struct test_context*)data;
+    int sret;
+    char gid_file[256] = {0};
+    int nservers = 1;
+    ssg_group_id_t gid;
+
+    snprintf(gid_file, 256, "/tmp/ssg.%d", ctx->remote_pid);
+
+    sret = ABT_init(0, NULL);
+    munit_assert_int(sret, ==, ABT_SUCCESS);
+
+    sret = ssg_group_id_load(gid_file, &nservers, &gid);
+    munit_assert_int(sret, !=, SSG_SUCCESS);
+
+    ABT_finalize();
+
+    return MUNIT_OK;
+}
+
 /* init/finalize cycle with id load */
 static MunitResult init_load_no_margo(const MunitParameter params[], void* data)
 {
@@ -229,6 +252,7 @@ static MunitTest tests[] = {
     { "/init_no_abt", init_no_abt, test_context_setup, test_context_tear_down, MUNIT_TEST_OPTION_NONE, NULL},
     { "/init_load", init_load, test_context_setup, test_context_tear_down, MUNIT_TEST_OPTION_NONE, NULL},
     { "/init_load_no_margo", init_load_no_margo, test_context_setup, test_context_tear_down, MUNIT_TEST_OPTION_NONE, NULL},
+    { "/load_no_init", load_no_init, test_context_setup, test_context_tear_down, MUNIT_TEST_OPTION_NONE, NULL},
     { NULL, NULL, NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL }
 };
 
