@@ -180,11 +180,21 @@ int ssg_finalize()
             /* non-members don't have internal group structure, but must destroy view */
             ssg_group_view_destroy(gd->view, gd->mid_state);
         }
+        /* NOTE: we intentionally break the linkage between the group
+         * descriptor and the mid_state here (if present).  The mid_states
+         * will all be forcibly destroyed later on in this function anyway,
+         * and we don't want ssg_release_mid_state() to attempt to acquire
+         * the ssg_rt->lock() that is already held in this code path.
+         */
+        gd->mid_state = NULL;
         ssg_group_descriptor_free(gd);
     }
 
     /* free any mid state */
-    /* XXX should this be part of group destroy? */
+    /* XXX should this be part of group destroy?
+     * NOTE: if this loop were to be moved, then we have to revisit the
+     * gd->mid_state = NULL statement above. See previous NOTE comment.
+     */
     LL_FOREACH_SAFE(ssg_rt->mid_list, mid_state, mid_state_tmp)
     {
         LL_DELETE(ssg_rt->mid_list, mid_state);
@@ -2725,6 +2735,11 @@ static int ssg_group_refresh_internal(
     ssg_group_view_destroy(gd->view, gd->mid_state);
     if (gd->mid_state)
         ssg_release_mid_state(gd->mid_state);
+    /* NOTE: the ssg_group_view_destroy() function does not actually free
+     * the view structure itself; we need to do that explicitly before
+     * assigning new one in this case on a refresh.
+     */
+    free(gd->view);
     gd->view = new_view;
     gd->mid_state = mid_state;
 
@@ -2960,7 +2975,8 @@ static ssg_group_descriptor_t * ssg_group_descriptor_create(
     memset(descriptor, 0, sizeof(*descriptor));
 
     descriptor->g_id = g_id;
-    descriptor->name = strdup(name);
+    if(name)
+        descriptor->name = strdup(name);
     descriptor->mid_state = mid_state;
     descriptor->group = group;
     if (group)
@@ -3042,7 +3058,8 @@ static void ssg_group_descriptor_free(
     {
         if (descriptor->mid_state)
             ssg_release_mid_state(descriptor->mid_state);
-        free(descriptor->name);
+        if(descriptor->name)
+            free(descriptor->name);
         if (!descriptor->is_member)
             free(descriptor->view);
         ABT_cond_free(&descriptor->ref_cond);
