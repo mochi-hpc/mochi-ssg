@@ -588,7 +588,7 @@ int ssg_group_refresh_send(
     /* send refresh request to the target group member address */
     refresh_req.g_id = g_id;
     refresh_req.bulk_handle = bulk_handle;
-    ret = margo_forward_timed(handle, &refresh_req, SSG_DEF_RPC_TIMEOUT);
+    hret = margo_forward_timed(handle, &refresh_req, SSG_DEF_RPC_TIMEOUT);
     if (hret != HG_SUCCESS)
     {
         fprintf(stderr, "Error: SSG unable to forward group refresh RPC\n");
