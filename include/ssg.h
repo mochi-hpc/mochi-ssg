@@ -369,6 +369,7 @@ int ssg_get_group_size(
 
 /**
  * Obtains the HG address of a member in a given SSG group.
+ * The resulting address must be freed by the called using margo_addr_free.
  *
  * @param[in]  group_id     SSG group ID
  * @param[in]  member_id    SSG group member ID
