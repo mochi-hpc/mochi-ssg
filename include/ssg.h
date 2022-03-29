@@ -382,6 +382,7 @@ int ssg_get_group_member_addr(
 
 /**
  * Obtains the HG address string of a member in a given SSG group.
+ * The user is responsible for freeing the returned string.
  *
  * @param[in]  group_id         SSG group ID
  * @param[in]  member_id        SSG group member ID
