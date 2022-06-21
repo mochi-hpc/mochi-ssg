@@ -180,7 +180,7 @@ int ssg_group_join_send(
     }
 
     /* if our initial buffer is too small, reallocate to the exact size & rejoin */
-    while (join_resp.view_buf_size > tmp_view_buf_size)
+    while (join_resp.ret == SSG_ERR_NOBUFS)
     {
         b = realloc(tmp_view_buf, join_resp.view_buf_size);
         if(!b)
@@ -221,7 +221,8 @@ int ssg_group_join_send(
     }
 
     /* readjust view buf size if initial guess was too large */
-    if (join_resp.view_buf_size < tmp_view_buf_size)
+    if ((join_resp.view_buf_size < tmp_view_buf_size) &&
+        (join_resp.ret == SSG_SUCCESS))
     {
         b = realloc(tmp_view_buf, join_resp.view_buf_size);
         if(!b)
@@ -604,7 +605,7 @@ int ssg_group_refresh_send(
     }
 
     /* if our initial buffer is too small, reallocate to the exact size & resend */
-    while (refresh_resp.view_buf_size > tmp_view_buf_size)
+    while (refresh_resp.ret == SSG_ERR_NOBUFS)
     {
         b = realloc(tmp_view_buf, refresh_resp.view_buf_size);
         if(!b)
@@ -645,7 +646,8 @@ int ssg_group_refresh_send(
     }
 
     /* readjust view buf size if initial guess was too large */
-    if (refresh_resp.view_buf_size < tmp_view_buf_size)
+    if ((refresh_resp.view_buf_size < tmp_view_buf_size) &&
+        ((refresh_resp.ret == SSG_SUCCESS)))
     {
         b = realloc(tmp_view_buf, refresh_resp.view_buf_size);
         if(!b)

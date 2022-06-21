@@ -27,13 +27,6 @@
         } \
     } while(0)
 
-#include <time.h>
-double my_wtime() {
-    struct timeval time;
-    gettimeofday(&time, NULL);
-    return time.tv_sec + time.tv_usec/1000000.0;
-}
-
 DECLARE_MARGO_RPC_HANDLER(group_id_forward_recv_ult)
 
 static void usage()
@@ -127,9 +120,9 @@ int main(int argc, char *argv[])
 
     /* load group info from file */
     num_addrs = SSG_ALL_MEMBERS;
-    load_time = my_wtime();
+    load_time = ABT_get_wtime();
     sret = ssg_group_id_load(gid_file, &num_addrs, &g_id);
-    load_time = my_wtime() - load_time;
+    load_time = ABT_get_wtime() - load_time;
     DIE_IF(sret != SSG_SUCCESS, "ssg_group_id_load (%s)", ssg_strerror(sret));
     DIE_IF(num_addrs < 1, "ssg_group_id_load (%s)", ssg_strerror(sret));
 
@@ -149,10 +142,10 @@ int main(int argc, char *argv[])
     DIE_IF(sret != SSG_ERR_MID_NOT_FOUND, "ssg_get_group_member_addr (%s)", ssg_strerror(sret));
     DIE_IF(member_addr != HG_ADDR_NULL, "ssg_get_group_member_addr (%s)", ssg_strerror(sret));
 
-    refresh_time = my_wtime();
+    refresh_time = ABT_get_wtime();
     /* refresh the SSG server group view */
     sret = ssg_group_refresh(mid, g_id);
-    refresh_time = my_wtime() - refresh_time;
+    refresh_time = ABT_get_wtime() - refresh_time;
     DIE_IF(sret != SSG_SUCCESS, "ssg_group_refresh (%s)", ssg_strerror(sret));
 
     /* With a large number of clients, having everyone dump their group state
