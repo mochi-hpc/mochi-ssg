@@ -25,6 +25,7 @@
 #include <mercury.h>
 #include <abt.h>
 #include <margo.h>
+#include <margo-logging.h>
 
 #include "ssg.h"
 #ifdef SSG_HAVE_MPI
@@ -234,7 +235,7 @@ int ssg_group_create(
     ret = ssg_acquire_mid_state(mid, &mid_state);
     if (ret != SSG_SUCCESS)
     {
-        fprintf(stderr, "Error: SSG unable to acquire Margo instance information\n");
+        margo_error(mid, "[ssg] unable to acquire Margo instance information");
         return ret;
     }
 
@@ -272,7 +273,7 @@ int ssg_group_create_config(
     ret = ssg_acquire_mid_state(mid, &mid_state);
     if (ret != SSG_SUCCESS)
     {
-        fprintf(stderr, "Error: SSG unable to acquire Margo instance information\n");
+        margo_error(mid, "[ssg] unable to acquire Margo instance information");
         return ret;
     }
 
@@ -280,7 +281,7 @@ int ssg_group_create_config(
     fd = open(file_name, O_RDONLY);
     if (fd == -1)
     {
-        fprintf(stderr, "Error: SSG unable to open config file %s for group %s\n",
+        margo_error(mid, "[ssg] unable to open config file %s for group %s",
             file_name, group_name);
         ret = SSG_ERR_FILE_IO;
         goto fini;
@@ -290,7 +291,7 @@ int ssg_group_create_config(
     ret = fstat(fd, &st);
     if (ret == -1)
     {
-        fprintf(stderr, "Error: SSG unable to stat config file %s for group %s\n",
+        margo_error(mid, "[ssg] unable to stat config file %s for group %s",
             file_name, group_name);
         ret = SSG_ERR_FILE_IO;
         goto fini;
@@ -306,7 +307,7 @@ int ssg_group_create_config(
     rd_buf_size = read(fd, rd_buf, st.st_size);
     if (rd_buf_size != st.st_size)
     {
-        fprintf(stderr, "Error: SSG unable to read config file %s for group %s\n",
+        margo_error(mid, "[ssg] unable to read config file %s for group %s",
             file_name, group_name);
         ret = SSG_ERR_FILE_IO;
         goto fini;
@@ -319,7 +320,7 @@ int ssg_group_create_config(
     tok = strtok(rd_buf, "\r\n\t ");
     if (tok == NULL)
     {
-        fprintf(stderr, "Error: SSG unable to read addresses from config file %s for group %s\n",
+        margo_error(mid, "[ssg] unable to read addresses from config file %s for group %s",
             file_name, group_name);
         ret = SSG_ERR_FILE_FORMAT;
         goto fini;
@@ -402,7 +403,7 @@ int ssg_group_create_mpi(
     ret = ssg_acquire_mid_state(mid, &mid_state);
     if (ret != SSG_SUCCESS)
     {
-        fprintf(stderr, "Error: SSG unable to acquire Margo instance information\n");
+        margo_error(mid, "[ssg] unable to acquire Margo instance information");
         return ret;
     }
 
@@ -499,14 +500,14 @@ int ssg_group_create_pmix(
 
     if (!PMIx_Initialized())
     {
-        fprintf(stderr, "Error: SSG unable to use PMIx (uninitialized)\n");
+        margo_error(mid, "[ssg] unable to use PMIx (uninitialized)");
         return SSG_ERR_PMIX_FAILURE;
     }
 
     ret = ssg_acquire_mid_state(mid, &mid_state);
     if (ret != SSG_SUCCESS)
     {
-        fprintf(stderr, "Error: SSG unable to acquire Margo instance information\n");
+        margo_error(mid, "[ssg] unable to acquire Margo instance information");
         return ret;
     }
 
@@ -529,8 +530,8 @@ int ssg_group_create_pmix(
         PMIX_VALUE_LOAD(&value, &my_ids_array, PMIX_DATA_ARRAY);
         ret = PMIx_Put(PMIX_GLOBAL, key, &value);
         if (ret != PMIX_SUCCESS)
-            fprintf(stderr, "Warning: unable to store PMIx rank->ID mapping for"\
-                "SSG member %lu\n", mid_state->self_id);
+            margo_warning(mid, "Unable to store PMIx rank->ID mapping for "
+                "SSG member %lu", mid_state->self_id);
     }
     else
     {
@@ -568,13 +569,13 @@ int ssg_group_create_pmix(
                 ret = PMIx_Put(PMIX_GLOBAL, key, &value);
                 free(ids);
                 if (ret != PMIX_SUCCESS)
-                    fprintf(stderr, "Warning: unable to store PMIx rank->ID mapping for"\
-                        "SSG member %lu\n", mid_state->self_id);
+                    margo_warning(mid, "Unable to store PMIx rank->ID mapping for "
+                        "SSG member %lu", mid_state->self_id);
             }
         }
         else
         {
-            fprintf(stderr, "Warning: unexpected format for PMIx rank->ID mapping\n");
+            margo_warning(mid, "Unexpected format for PMIx rank->ID mapping");
         }
         PMIX_VALUE_RELEASE(val_p);
     }
@@ -585,7 +586,7 @@ int ssg_group_create_pmix(
     ret = PMIx_Get(&tmp_proc, PMIX_JOB_SIZE, NULL, 0, &val_p);
     if (ret != PMIX_SUCCESS)
     {
-        fprintf(stderr, "Error: SSG unable to determine PMIx job size\n");
+        margo_error(mid, "[ssg] unable to determine PMIx job size");
         ret = SSG_ERR_PMIX_FAILURE;
         goto fini;
     }
@@ -598,7 +599,7 @@ int ssg_group_create_pmix(
     ret = PMIx_Put(PMIX_GLOBAL, key, &value);
     if (ret != PMIX_SUCCESS)
     {
-        fprintf(stderr, "Error: SSG unable to put address string in PMIx kv\n");
+        margo_error(mid, "[ssg] unable to put address string in PMIx kv");
         ret = SSG_ERR_PMIX_FAILURE;
         goto fini;
     }
@@ -607,7 +608,7 @@ int ssg_group_create_pmix(
     ret = PMIx_Commit();
     if (ret != PMIX_SUCCESS)
     {
-        fprintf(stderr, "Error: SSG unable to commit address string to PMIx kv\n");
+        margo_error(mid, "[ssg] unable to commit address string to PMIx kv");
         ret = SSG_ERR_PMIX_FAILURE;
         goto fini;
     }
@@ -620,7 +621,7 @@ int ssg_group_create_pmix(
     PMIX_INFO_FREE(info, 1);
     if (ret != PMIX_SUCCESS)
     {
-        fprintf(stderr, "Error: SSG unable to collect PMIx kv data\n");
+        margo_error(mid, "[ssg] unable to collect PMIx kv data");
         ret = SSG_ERR_PMIX_FAILURE;
         goto fini;
     }
@@ -649,7 +650,7 @@ int ssg_group_create_pmix(
         ret = PMIx_Get(&tmp_proc, key, NULL, 0, &val_p);
         if (ret != PMIX_SUCCESS)
         {
-            fprintf(stderr, "Error: SSG unable to get PMIx rank %d address\n", n);
+            margo_error(mid, "[ssg] unable to get PMIx rank %d address", n);
             ret = SSG_ERR_PMIX_FAILURE;
             goto fini;
         }
@@ -689,7 +690,7 @@ int ssg_group_destroy(
     if (!gd)
     {
         ABT_rwlock_unlock(ssg_rt->lock);
-        fprintf(stderr, "Error: SSG unable to find group ID\n");
+        margo_error(MARGO_INSTANCE_NULL, "[ssg] unable to find group ID");
         return SSG_ERR_GROUP_NOT_FOUND;
     }
     HASH_DEL(ssg_rt->gd_table, gd);
@@ -827,7 +828,7 @@ int ssg_group_join(
     ret = ssg_acquire_mid_state(mid, &mid_state);
     if (ret != SSG_SUCCESS)
     {
-        fprintf(stderr, "Error: SSG unable to acquire Margo instance information\n");
+        margo_error(mid, "[ssg] unable to acquire Margo instance information");
         return ret;
     }
 
@@ -838,14 +839,14 @@ int ssg_group_join(
     if (!gd)
     {
         ssg_release_mid_state(mid_state);
-        fprintf(stderr, "Error: SSG unable to find group ID to join\n");
+        margo_error(mid, "[ssg] unable to find group ID to join");
         return SSG_ERR_GROUP_NOT_FOUND;
     }
     else if (gd->is_member)
     {
         SSG_GROUP_RELEASE(gd);
         ssg_release_mid_state(mid_state);
-        fprintf(stderr, "Error: SSG unable to join a group it is already a member of\n");
+        margo_error(mid, "[ssg] unable to join a group it is already a member of");
         return SSG_ERR_INVALID_OPERATION;
     }
 
@@ -894,7 +895,7 @@ int ssg_group_join(
             hret = margo_addr_lookup(mid_state->mid, target_addr_str, &target_addr);
             if (hret != HG_SUCCESS)
             {
-                fprintf(stderr, "Error: SSG unable to lookup group member %s address\n",
+                margo_error(mid, "[ssg] unable to lookup group member %s address",
                     target_addr_str);
                 free(target_addr_str);
                 ret = SSG_MAKE_HG_ERROR(hret);
@@ -915,15 +916,15 @@ int ssg_group_join(
             break;
         }
 
-        fprintf(stderr, "Error: SSG unable to send group join request to target "
-                        "[%s]\n", ssg_strerror(ret));
+        margo_error(mid, "[sgg] unable to send group join request to target "
+            "[%s]\n", ssg_strerror(ret));
         margo_addr_free(mid_state->mid, target_addr);
 
 retry:
         if(!--retries)
         {
             ssg_release_mid_state(mid_state);
-            fprintf(stderr, "Error: SSG exceeded max retries for joining group\n");
+            margo_error(mid, "[ssg] exceeded max retries for joining group");
             return SSG_ERR_MAX_RETRIES;
         }
         /* we have to re-check the group descriptor here */
@@ -931,14 +932,14 @@ retry:
         if (!gd)
         {
             ssg_release_mid_state(mid_state);
-            fprintf(stderr, "Error: SSG unable to find group ID to join\n");
+            margo_error(mid, "[ssg] unable to find group ID to join");
             return SSG_ERR_GROUP_NOT_FOUND;
         }
         else if (gd->is_member)
         {
             SSG_GROUP_RELEASE(gd);
             ssg_release_mid_state(mid_state);
-            fprintf(stderr, "Error: SSG unable to join a group it is already a member of\n");
+            margo_error(mid, "[ssg] unable to join a group it is already a member of");
             return SSG_ERR_INVALID_OPERATION;
         }
         rank = (rank + 1) % gd->view->size;
@@ -979,7 +980,7 @@ int ssg_group_join_target(
     ret = ssg_acquire_mid_state(mid, &mid_state);
     if (ret != SSG_SUCCESS)
     {
-        fprintf(stderr, "Error: SSG unable to acquire Margo instance information\n");
+        margo_error(mid, "[ssg] unable to acquire Margo instance information");
         return ret;
     }
 
@@ -988,14 +989,14 @@ int ssg_group_join_target(
     if (!gd)
     {
         ssg_release_mid_state(mid_state);
-        fprintf(stderr, "Error: SSG unable to find group ID to join\n");
+        margo_error(mid, "[ssg] unable to find group ID to join");
         return SSG_ERR_GROUP_NOT_FOUND;
     }
     else if (gd->is_member)
     {
         SSG_GROUP_RELEASE(gd);
         ssg_release_mid_state(mid_state);
-        fprintf(stderr, "Error: SSG unable to join a group it is already a member of\n");
+        margo_error(mid, "[ssg] unable to join a group it is already a member of");
         return SSG_ERR_INVALID_OPERATION;
     }
 
@@ -1012,7 +1013,7 @@ int ssg_group_join_target(
     if (ret != SSG_SUCCESS)
     {
         ssg_release_mid_state(mid_state);
-        fprintf(stderr, "Error: SSG unable to send join request to target "
+        margo_error(mid, "[ssg] unable to send join request to target "
             "[%s]\n", ssg_strerror(ret));
         return ret;
     }
@@ -1053,20 +1054,20 @@ int ssg_group_leave(
     SSG_GROUP_READ(group_id, gd);
     if (!gd)
     {
-        fprintf(stderr, "Error: SSG unable to find group ID to leave\n");
+        margo_error(MARGO_INSTANCE_NULL, "[ssg] unable to find group ID to leave");
         return SSG_ERR_GROUP_NOT_FOUND;
     }
     else if(!gd->is_member)
     {
         SSG_GROUP_RELEASE(gd);
-        fprintf(stderr, "Error: SSG unable to leave group it is not a member of\n");
+        margo_error(gd->mid_state->mid, "[ssg] unable to leave group it is not a member of");
         return SSG_ERR_INVALID_OPERATION;
     }
     else if(gd->group->config.swim_disabled)
     {
         /* dynamic groups can't be supported if SWIM is disabled */
         SSG_GROUP_RELEASE(gd);
-        fprintf(stderr, "Error: SSG unable to leave group if SWIM is disabled\n");
+        margo_error(gd->mid_state->mid, "[ssg] unable to leave group if SWIM is disabled");
         return SSG_ERR_NOT_SUPPORTED;
     }
 
@@ -1112,33 +1113,34 @@ int ssg_group_leave(
             break;
         }
 
-        fprintf(stderr, "Error: SSG unable to send group leave request to target "
-                        "[%s]\n", ssg_strerror(ret));
+        margo_error(gd->mid_state->mid, "[ssg] unable to send group leave request to target "
+            "[%s]", ssg_strerror(ret));
         margo_addr_free(gd->mid_state->mid, target_addr);
 
         if(!--retries)
         {
-            fprintf(stderr, "Error: SSG exceeded max retries for leaving group\n");
+            margo_error(gd->mid_state->mid, "[ssg] exceeded max retries for leaving group");
             return SSG_ERR_MAX_RETRIES;
         }
         /* we have to re-check the group descriptor here */
         SSG_GROUP_READ(group_id, gd);
         if (!gd)
         {
-            fprintf(stderr, "Error: SSG unable to find group ID to join\n");
+            margo_error(MARGO_INSTANCE_NULL, "[ssg] unable to find group ID to join");
             return SSG_ERR_GROUP_NOT_FOUND;
         }
         else if(!gd->is_member)
         {
             SSG_GROUP_RELEASE(gd);
-            fprintf(stderr, "Error: SSG unable to leave group it is not a member of\n");
+            margo_error(gd->mid_state->mid,
+                "[ssg] unable to leave group this process is not a member of");
             return SSG_ERR_INVALID_OPERATION;
         }
         else if(gd->group->config.swim_disabled)
         {
             /* dynamic groups can't be supported if SWIM is disabled */
             SSG_GROUP_RELEASE(gd);
-            fprintf(stderr, "Error: SSG unable to leave group if SWIM is disabled\n");
+            margo_error(gd->mid_state->mid, "[ssg] unable to leave group if SWIM is disabled");
             return SSG_ERR_NOT_SUPPORTED;
         }
         rank = (rank + 1) % gd->view->size;
@@ -1166,20 +1168,22 @@ int ssg_group_leave_target(
     SSG_GROUP_WRITE(group_id, gd);
     if (!gd)
     {
-        fprintf(stderr, "Error: SSG unable to find group ID to leave\n");
+        margo_error(MARGO_INSTANCE_NULL, "[ssg] unable to find group ID to leave");
         return SSG_ERR_GROUP_NOT_FOUND;
     }
     else if(!gd->is_member)
     {
         SSG_GROUP_RELEASE(gd);
-        fprintf(stderr, "Error: SSG unable to leave group it is not a member of\n");
+        margo_error(gd->mid_state->mid,
+            "[ssg] unable to leave group this process is not a member of");
         return SSG_ERR_INVALID_OPERATION;
     }
     else if(gd->group->config.swim_disabled)
     {
         /* dynamic groups can't be supported if SWIM is disabled */
         SSG_GROUP_RELEASE(gd);
-        fprintf(stderr, "Error: SSG unable to leave group if SWIM is disabled\n");
+        margo_error(gd->mid_state->mid,
+            "[ssg] unable to leave group if SWIM is disabled");
         return SSG_ERR_NOT_SUPPORTED;
     }
 
@@ -1192,8 +1196,8 @@ int ssg_group_leave_target(
     ret = ssg_group_leave_send(group_id, target_addr, gd->mid_state);
     if (ret != SSG_SUCCESS)
     {
-        fprintf(stderr, "Error: SSG unable to send group leave request "
-            "[%s]\n", ssg_strerror(ret));
+        margo_error(gd->mid_state->mid,
+            "[ssg] unable to send group leave request [%s]", ssg_strerror(ret));
         return ret;
     }
 
@@ -1229,7 +1233,7 @@ int ssg_group_refresh(
     ret = ssg_acquire_mid_state(mid, &mid_state);
     if (ret != SSG_SUCCESS)
     {
-        fprintf(stderr, "Error: SSG unable to acquire Margo instance information\n");
+        margo_error(mid, "[ssg] unable to acquire Margo instance information");
         return ret;
     }
 
@@ -1240,7 +1244,7 @@ int ssg_group_refresh(
     if (!gd)
     {
         ssg_release_mid_state(mid_state);
-        fprintf(stderr, "Error: SSG unable to find group ID to refresh\n");
+        margo_error(mid, "[ssg] unable to find group ID to refresh");
         return SSG_ERR_GROUP_NOT_FOUND;
     }
     else if (gd->is_member)
@@ -1297,7 +1301,7 @@ int ssg_group_refresh(
             hret = margo_addr_lookup(mid_state->mid, target_addr_str, &target_addr);
             if (hret != HG_SUCCESS)
             {
-                fprintf(stderr, "Error: SSG unable to lookup group member %s address\n",
+                margo_error(mid, "[ssg] unable to lookup group member %s address",
                     target_addr_str);
                 free(target_addr_str);
                 ret = SSG_MAKE_HG_ERROR(hret);
@@ -1318,15 +1322,15 @@ int ssg_group_refresh(
             break;
         }
 
-        fprintf(stderr, "Error: SSG unable to send group refresh request to target "
-                        "[%s]\n", ssg_strerror(ret));
+        margo_error(mid, "[ssg] unable to send group refresh request to target [%s]",
+            ssg_strerror(ret));
         margo_addr_free(mid_state->mid, target_addr);
 
 retry:
         if(!--retries)
         {
             ssg_release_mid_state(mid_state);
-            fprintf(stderr, "Error: SSG exceeded max retries for refreshing group\n");
+            margo_error(mid, "[ssg] exceeded max retries for refreshing group");
             return SSG_ERR_MAX_RETRIES;
         }
         /* we have to re-check the group descriptor here */
@@ -1334,7 +1338,7 @@ retry:
         if (!gd)
         {
             ssg_release_mid_state(mid_state);
-            fprintf(stderr, "Error: SSG unable to find group ID to refresh\n");
+            margo_error(mid, "[ssg] unable to find group ID to refresh");
             return SSG_ERR_GROUP_NOT_FOUND;
         }
         else if (gd->is_member)
@@ -1377,7 +1381,7 @@ int ssg_group_refresh_target(
     ret = ssg_acquire_mid_state(mid, &mid_state);
     if (ret != SSG_SUCCESS)
     {
-        fprintf(stderr, "Error: SSG unable to acquire Margo instance information\n");
+        margo_error(mid, "[ssg] unable to acquire Margo instance information");
         return ret;
     }
 
@@ -1386,7 +1390,7 @@ int ssg_group_refresh_target(
     if (!gd)
     {
         ssg_release_mid_state(mid_state);
-        fprintf(stderr, "Error: SSG unable to find group ID to refresh\n");
+        margo_error(mid, "[ssg] unable to find group ID to refresh");
         return SSG_ERR_GROUP_NOT_FOUND;
     }
     else if (gd->is_member)
@@ -1410,8 +1414,8 @@ int ssg_group_refresh_target(
     if (ret != SSG_SUCCESS)
     {
         ssg_release_mid_state(mid_state);
-        fprintf(stderr, "Error: SSG unable to send group refresh request to target "
-                        "[%s]\n", ssg_strerror(ret));
+        margo_error(mid, "[ssg] unable to send group refresh request to target [%s]",
+            ssg_strerror(ret));
         return ret;
     }
 
@@ -1472,7 +1476,7 @@ int ssg_get_group_size(
     SSG_GROUP_READ(group_id, gd);
     if (!gd)
     {
-        fprintf(stderr, "Error: SSG unable to find group ID\n");
+        margo_error(MARGO_INSTANCE_NULL, "[ssg] unable to find group ID");
         return SSG_ERR_GROUP_NOT_FOUND;
     }
 
@@ -1505,7 +1509,7 @@ int ssg_get_group_member_addr(
     SSG_GROUP_READ(group_id, gd);
     if (!gd)
     {
-        fprintf(stderr, "Error: SSG unable to find group ID\n");
+        margo_error(MARGO_INSTANCE_NULL, "[ssg] unable to find group ID");
         return SSG_ERR_GROUP_NOT_FOUND;
     }
 
@@ -1575,7 +1579,7 @@ int ssg_get_group_member_addr_str(
     SSG_GROUP_READ(group_id, gd);
     if (!gd)
     {
-        fprintf(stderr, "Error: SSG unable to find group ID\n");
+        margo_error(MARGO_INSTANCE_NULL, "[ssg] unable to find group ID");
         return SSG_ERR_GROUP_NOT_FOUND;
     }
 
@@ -1628,13 +1632,14 @@ int ssg_get_group_self_rank(
     SSG_GROUP_READ(group_id, gd);
     if (!gd)
     {
-        fprintf(stderr, "Error: SSG unable to find group ID\n");
+        margo_error(MARGO_INSTANCE_NULL, "[ssg] unable to find group ID");
         return SSG_ERR_GROUP_NOT_FOUND;
     }
     if (!gd->is_member)
     {
         SSG_GROUP_RELEASE(gd);
-        fprintf(stderr, "Error: SSG unable to obtain self rank for non-group members\n");
+        margo_error(gd->mid_state->mid,
+            "[ssg] unable to obtain self rank for non-group members");
         return SSG_ERR_INVALID_OPERATION;
     }
 
@@ -1666,7 +1671,7 @@ int ssg_get_group_member_rank(
     SSG_GROUP_READ(group_id, gd);
     if (!gd)
     {
-        fprintf(stderr, "Error: SSG unable to find group ID\n");
+        margo_error(MARGO_INSTANCE_NULL, "[ssg] unable to find group ID");
         return SSG_ERR_GROUP_NOT_FOUND;
     }
 
@@ -1696,7 +1701,7 @@ int ssg_get_group_member_id_from_rank(
     SSG_GROUP_READ(group_id, gd);
     if (!gd)
     {
-        fprintf(stderr, "Error: SSG unable to find group ID\n");
+        margo_error(MARGO_INSTANCE_NULL, "[ssg] unable to find group ID");
         return SSG_ERR_GROUP_NOT_FOUND;
     }
 
@@ -1733,7 +1738,7 @@ int ssg_get_group_member_ids_from_range(
     SSG_GROUP_READ(group_id, gd);
     if (!gd)
     {
-        fprintf(stderr, "Error: SSG unable to find group ID\n");
+        margo_error(MARGO_INSTANCE_NULL, "[ssg] unable to find group ID");
         return SSG_ERR_GROUP_NOT_FOUND;
     }
 
@@ -1778,7 +1783,7 @@ int ssg_group_id_serialize(
     SSG_GROUP_READ(group_id, gd);
     if (!gd)
     {
-        fprintf(stderr, "Error: SSG unable to find group ID\n");
+        margo_error(MARGO_INSTANCE_NULL, "[ssg] unable to find group ID");
         return SSG_ERR_GROUP_NOT_FOUND;
     }
 
@@ -1876,7 +1881,8 @@ int ssg_group_id_deserialize(
     min_buf_size = (sizeof(magic_nr) + sizeof(g_id) + sizeof(num_addrs_buf) + 2);
     if (buf_size < min_buf_size)
     {
-        fprintf(stderr, "Error: Serialized buffer does not contain a valid SSG group ID\n");
+        margo_error(MARGO_INSTANCE_NULL,
+            "[ssg] serialized buffer does not contain a valid SSG group ID");
         return SSG_ERR_INVALID_ARG;
     }
 
@@ -1884,7 +1890,8 @@ int ssg_group_id_deserialize(
     magic_nr = *(uint64_t *)tmp_buf;
     if (magic_nr != SSG_MAGIC_NR)
     {
-        fprintf(stderr, "Error: Magic number mismatch when deserializing SSG group ID\n");
+        margo_error(MARGO_INSTANCE_NULL,
+            "[ssg] magic number mismatch when deserializing SSG group ID");
         return SSG_ERR_INVALID_ARG;
     }
     tmp_buf += sizeof(uint64_t);
@@ -1965,14 +1972,15 @@ int ssg_group_id_store(
     ret = ssg_group_id_serialize(group_id, num_addrs, &buf, &buf_size);
     if (ret != SSG_SUCCESS)
     {
-        fprintf(stderr, "Error: Unable to serialize SSG group ID.\n");
+        margo_error(MARGO_INSTANCE_NULL, "[ssg] unable to serialize SSG group ID");
         return ret;
     }
 
     fd = open(file_name, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd < 0)
     {
-        fprintf(stderr, "Error: Unable to open file %s for storing SSG group ID: %s\n",
+        margo_error(MARGO_INSTANCE_NULL,
+            "[ssg] unable to open file %s for storing SSG group ID: %s",
             file_name, strerror(errno));
         free(buf);
         return SSG_ERR_FILE_IO;
@@ -1981,7 +1989,8 @@ int ssg_group_id_store(
     bytes_written = write(fd, buf, buf_size);
     if (bytes_written != (ssize_t)buf_size)
     {
-        fprintf(stderr, "Error: Unable to write SSG group ID to file %s\n", file_name);
+        margo_error(MARGO_INSTANCE_NULL,
+            "[ssg] unable to write SSG group ID to file %s", file_name);
         free(buf);
         close(fd);
         return SSG_ERR_FILE_IO;
@@ -2009,7 +2018,8 @@ int ssg_group_id_load(
     fd = open(file_name, O_RDONLY);
     if (fd < 0)
     {
-        fprintf(stderr, "Error: Unable to open file %s for loading SSG group ID\n",
+        margo_error(MARGO_INSTANCE_NULL,
+            "[ssg] unable to open file %s for loading SSG group ID",
             file_name);
         return SSG_ERR_FILE_IO;
     }
@@ -2026,8 +2036,9 @@ int ssg_group_id_load(
         bytes_read = read(fd, buf+total, bufsize-total);
         if (bytes_read == -1 || bytes_read == 0)
         {
-            fprintf(stderr, "Error: Unable to read SSG group ID from file %s: %ld (%s)\n",
-                    file_name, bytes_read, strerror(errno));
+            margo_error(MARGO_INSTANCE_NULL,
+                "[ssg] unable to read SSG group ID from file %s: %ld (%s)",
+                file_name, bytes_read, strerror(errno));
             close(fd);
             free(buf);
             return SSG_ERR_FILE_IO;
@@ -2043,7 +2054,7 @@ int ssg_group_id_load(
 
     ret = ssg_group_id_deserialize(buf, (size_t)total, num_addrs, group_id);
     if (ret != SSG_SUCCESS)
-        fprintf(stderr, "Error: Unable to deserialize SSG group ID\n");
+        margo_error(MARGO_INSTANCE_NULL, "[ssg] unable to deserialize SSG group ID");
 
     close(fd);
     free(buf);
@@ -2081,7 +2092,8 @@ int ssg_get_group_cred_from_file(
     fd = open(file_name, O_RDONLY);
     if (fd < 0)
     {
-        fprintf(stderr, "Error: Unable to open file %s for reading SSG group credential\n",
+        margo_error(MARGO_INSTANCE_NULL,
+            "[ssg] unable to open file %s for reading SSG group credential",
             file_name);
         return SSG_ERR_FILE_IO;
     }
@@ -2098,8 +2110,9 @@ int ssg_get_group_cred_from_file(
         bytes_read = read(fd, buf+total, bufsize-total);
         if (bytes_read == -1 || bytes_read == 0)
         {
-            fprintf(stderr, "Error: Unable to read SSG group credential from file %s: %ld (%s)\n",
-                    file_name, bytes_read, strerror(errno));
+            margo_error(MARGO_INSTANCE_NULL,
+                "[ssg] unable to read SSG group credential from file %s: %ld (%s)",
+                file_name, bytes_read, strerror(errno));
             close(fd);
             free(buf);
             return SSG_ERR_FILE_IO;
@@ -2115,7 +2128,8 @@ int ssg_get_group_cred_from_file(
 
     ret = ssg_get_group_cred_from_buf(buf, (size_t)total, cred);
     if (ret != SSG_SUCCESS)
-        fprintf(stderr, "Error: Unable to get SSG group credential from buffer\n");
+        margo_error(MARGO_INSTANCE_NULL,
+            "[ssg] unable to get SSG group credential from buffer");
 
     close(fd);
     free(buf);
@@ -2147,7 +2161,8 @@ int ssg_get_group_transport_from_buf(
     min_buf_size = (sizeof(magic_nr) + sizeof(g_id) + sizeof(num_addrs_buf) + 2);
     if (buf_size < min_buf_size)
     {
-        fprintf(stderr, "Error: Serialized buffer does not contain a valid SSG group\n");
+        margo_error(MARGO_INSTANCE_NULL,
+            "[ssg] serialized buffer does not contain a valid SSG group");
         return SSG_ERR_INVALID_ARG;
     }
 
@@ -2155,7 +2170,8 @@ int ssg_get_group_transport_from_buf(
     magic_nr = *(uint64_t *)tmp_buf;
     if (magic_nr != SSG_MAGIC_NR)
     {
-        fprintf(stderr, "Error: Magic number mismatch when deserializing SSG group ID\n");
+        margo_error(MARGO_INSTANCE_NULL,
+            "[ssg] magic number mismatch when deserializing SSG group ID");
         return SSG_ERR_INVALID_ARG;
     }
     tmp_buf += sizeof(uint64_t);
@@ -2195,7 +2211,8 @@ int ssg_get_group_transport_from_file(
     fd = open(file_name, O_RDONLY);
     if (fd < 0)
     {
-        fprintf(stderr, "Error: Unable to open file %s for reading SSG group transport\n",
+        margo_error(MARGO_INSTANCE_NULL,
+            "[ssg] unable to open file %s for reading SSG group transport",
             file_name);
         return SSG_ERR_FILE_IO;
     }
@@ -2212,8 +2229,9 @@ int ssg_get_group_transport_from_file(
         bytes_read = read(fd, buf+total, bufsize-total);
         if (bytes_read == -1 || bytes_read == 0)
         {
-            fprintf(stderr, "Error: Unable to read SSG group transport from file %s: %ld (%s)\n",
-                    file_name, bytes_read, strerror(errno));
+            margo_error(MARGO_INSTANCE_NULL,
+                "[ssg] unable to read SSG group transport from file %s: %ld (%s)",
+                file_name, bytes_read, strerror(errno));
             close(fd);
             free(buf);
             return SSG_ERR_FILE_IO;
@@ -2229,7 +2247,8 @@ int ssg_get_group_transport_from_file(
 
     ret = ssg_get_group_transport_from_buf(buf, (size_t)total, tbuf, tbuf_size);
     if (ret != SSG_SUCCESS)
-        fprintf(stderr, "Error: Unable to get SSG group transport from buffer\n");
+        margo_error(MARGO_INSTANCE_NULL,
+            "[ssg] unable to get SSG group transport from buffer");
 
     close(fd);
     free(buf);
@@ -2259,7 +2278,8 @@ int ssg_group_dump(
     SSG_GROUP_READ(group_id, gd);
     if (!gd)
     {
-        fprintf(stderr, "Error: SSG unable to find group ID\n");
+        margo_error(MARGO_INSTANCE_NULL,
+            "[ssg] unable to find group ID");
         return SSG_ERR_GROUP_NOT_FOUND;
     }
 
@@ -2358,8 +2378,7 @@ static int ssg_acquire_mid_state(
         {
             ABT_rwlock_unlock(ssg_rt->lock);
             free(mid_state);
-            fprintf(stderr, "Error: SSG unable to obtain self address"
-                " [HG rc=%d]\n", hret);
+            margo_error(mid, "[ssg] unable to obtain self address [HG rc=%d]", hret);
             return SSG_MAKE_HG_ERROR(hret);
         }
 
@@ -2369,8 +2388,7 @@ static int ssg_acquire_mid_state(
             ABT_rwlock_unlock(ssg_rt->lock);
             margo_addr_free(mid, mid_state->self_addr);
             free(mid_state);
-            fprintf(stderr, "Error: SSG unable to convert self address to string"
-                " [HG rc=%d]\n", hret);
+            margo_error(mid, "[ssg] unable to convert self address to string [HG rc=%d]", hret);
             return SSG_MAKE_HG_ERROR(hret);
         }
 
@@ -2391,8 +2409,7 @@ static int ssg_acquire_mid_state(
             free(mid_state->self_addr_str);
             margo_addr_free(mid, mid_state->self_addr);
             free(mid_state);
-            fprintf(stderr, "Error: SSG unable to convert self address to string"
-                " [HG rc=%d]\n", hret);
+            margo_error(mid, "[ssg] unable to convert self address to string [HG rc=%d]", hret);
             return SSG_MAKE_HG_ERROR(hret);
         }
 
@@ -2592,14 +2609,15 @@ static int ssg_group_join_internal(
     {
         ABT_rwlock_unlock(ssg_rt->lock);
         free(addr_strs);
-        fprintf(stderr, "Error: SSG unable to find group ID to join\n");
+        margo_error(mid_state->mid, "[ssg] unable to find group ID to join");
         return SSG_ERR_GROUP_NOT_FOUND;
     }
     else if (gd->is_member)
     {
         ABT_rwlock_unlock(ssg_rt->lock);
         free(addr_strs);
-        fprintf(stderr, "Error: SSG unable to join a group it is already a member of\n");
+        margo_error(mid_state->mid,
+            "[ssg] unable to join a group this process is already a member of");
         return SSG_ERR_INVALID_OPERATION;
     }
     HASH_DEL(ssg_rt->gd_table, gd);
@@ -2643,7 +2661,7 @@ static int ssg_group_leave_internal(
     if (!gd)
     {
         free(new_view);
-        fprintf(stderr, "Error: SSG unable to find group ID to leave\n");
+        margo_error(MARGO_INSTANCE_NULL, "[ssg] unable to find group ID to leave");
         return SSG_ERR_GROUP_NOT_FOUND;
     }
 
@@ -2714,14 +2732,14 @@ static int ssg_group_refresh_internal(
     {
         free(new_view);
         free(addr_strs);
-        fprintf(stderr, "Error: SSG unable to refresh view for group\n");
+        margo_error(MARGO_INSTANCE_NULL, "[ssg] unable to refresh view for group");
         return ret;
     }
 
     SSG_GROUP_WRITE(group_id, gd);
     if (!gd)
     {
-        fprintf(stderr, "Error: SSG unable to find group ID to finalize refresh\n");
+        margo_error(MARGO_INSTANCE_NULL, "[ssg] unable to find group ID to finalize refresh");
         ssg_group_view_destroy(new_view, mid_state);
         free(new_view);
         free(addr_strs);
@@ -2877,8 +2895,8 @@ static int ssg_group_view_create(
             }
             else if (lookup_ult_args[i].out != SSG_SUCCESS)
             {
-                fprintf(stderr, "%d Error: SSG unable to lookup HG address %s\n",
-                    getpid(), lookup_ult_args[i].ms->addr_str);
+                margo_error(mid_state->mid, "[ssg] unable to lookup HG address %s",
+                    lookup_ult_args[i].ms->addr_str);
                 ret = lookup_ult_args[i].out;
                 goto fini;
             }
@@ -2890,7 +2908,7 @@ static int ssg_group_view_create(
      */
     if (self_addr_str && !self_found)
     {
-        fprintf(stderr, "Error: SSG unable to resolve self ID in group\n");
+        margo_error(mid_state->mid, "[ssg] unable to resolve self ID in group");
         ret = SSG_ERR_SELF_NOT_FOUND;
         goto fini;
     }
@@ -3164,7 +3182,7 @@ void ssg_pmix_proc_failure_notify_fn(
     PMIX_INFO_FREE(get_info, 1);
     if (ret != PMIX_SUCCESS)
     {
-        fprintf(stderr, "Warning: unable to retrieve PMIx rank mapping for rank %d\n",
+        margo_warning(mid, "[ssg] unable to retrieve PMIx rank mapping for rank %d",
             source->rank);
     }
     else
@@ -3197,7 +3215,7 @@ void ssg_pmix_proc_failure_notify_fn(
         }
         else
         {
-            fprintf(stderr, "Warning: unexpected format for PMIx rank->ID mapping\n");
+            margo_warning(mid, "[ssg] unexpected format for PMIx rank->ID mapping");
         }
         PMIX_VALUE_RELEASE(val_p);
     }
@@ -3216,7 +3234,7 @@ void ssg_pmix_proc_failure_reg_cb(
 
     if (status != PMIX_SUCCESS)
     {
-        fprintf(stderr, "Error: PMIx event notification registration failed! [%d]\n", status);
+        margo_error(MARGO_INSTANCE_NULL, "[ssg] PMIx event notification registration failed! [%d]", status);
         return;
     }
 
