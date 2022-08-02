@@ -1,6 +1,6 @@
 /*
  * (C) 2016 The University of Chicago
- * 
+ *
  * See COPYRIGHT in top-level directory.
  */
 #include <stdio.h>
@@ -10,6 +10,7 @@
 
 #include <mercury.h>
 #include <margo.h>
+#include <margo-logging.h>
 
 #include "ssg.h"
 #include "ssg-internal.h"
@@ -125,7 +126,8 @@ void swim_dping_req_send_ult(
 
     if (!gd || !gd->group || !gd->group->swim_ctx)
     {
-        fprintf(stderr, "SWIM dping req send error -- invalid group state\n");
+        margo_error(MARGO_INSTANCE_NULL,
+            "[ssg] SWIM dping req send error: invalid group state");
         return;
     }
     swim_ctx = gd->group->swim_ctx;
@@ -172,7 +174,7 @@ static void swim_dping_req_recv_ult(
     mid = margo_hg_info_get_instance(hgi);
     if (mid == MARGO_INSTANCE_NULL)
     {
-        fprintf(stderr, "SWIM dping req recv error -- invalid Margo state\n");
+        margo_error(mid, "[ssg] SWIM dping req recv error: invalid Margo state");
         margo_destroy(handle);
         return;
     }
@@ -188,7 +190,7 @@ static void swim_dping_req_recv_ult(
     SSG_GROUP_READ(dping_req.msg.source_g_id, gd);
     if (!gd)
     {
-        fprintf(stderr, "SWIM dping req recv error -- group %lu not found\n",
+        margo_error(mid, "[ssg] SWIM dping req recv error: group %lu not found",
             dping_req.msg.source_g_id);
         margo_free_input(handle, &dping_req);
         margo_destroy(handle);
@@ -197,7 +199,7 @@ static void swim_dping_req_recv_ult(
 
     if (!gd->is_member)
     {
-        fprintf(stderr, "SWIM dping req recv error -- not a member\n");
+        margo_error(mid, "[ssg] SWIM dping req recv error: not a member");
         SSG_GROUP_RELEASE(gd);
         margo_free_input(handle, &dping_req);
         margo_destroy(handle);
@@ -240,7 +242,7 @@ static void swim_dping_req_recv_ult(
     hret = margo_forward(ack_handle, &dping_ack);
     if(hret != HG_SUCCESS)
     {
-        fprintf(stderr, "SWIM dping ack forward error (err=%d)\n", hret);
+        margo_error(mid, "[ssg] SWIM dping ack forward error (hret=%d)", hret);
     }
 
     swim_free_packed_message(&(dping_ack.msg));
@@ -269,7 +271,7 @@ static void swim_dping_ack_recv_ult(
     mid = margo_hg_info_get_instance(hgi);
     if (mid == MARGO_INSTANCE_NULL)
     {
-        fprintf(stderr, "SWIM dping ack recv error -- invalid Margo state\n");
+        margo_error(mid, "[ssg] SWIM dping ack recv error: invalid Margo state");
         margo_destroy(handle);
         return;
     }
@@ -285,7 +287,7 @@ static void swim_dping_ack_recv_ult(
     SSG_GROUP_READ(dping_ack.msg.source_g_id, gd);
     if (!gd)
     {
-        fprintf(stderr, "SWIM dping ack recv error -- group %lu not found\n",
+        margo_error(mid, "[ssg] SWIM dping ack recv error: group %lu not found",
             dping_ack.msg.source_g_id);
         margo_free_input(handle, &dping_ack);
         margo_destroy(handle);
@@ -294,7 +296,7 @@ static void swim_dping_ack_recv_ult(
 
     if (!gd->is_member)
     {
-        fprintf(stderr, "SWIM dping ack recv error -- not a member\n");
+        margo_error(mid, "[ssg] SWIM dping ack recv error: not a member");
         SSG_GROUP_RELEASE(gd);
         margo_free_input(handle, &dping_ack);
         margo_destroy(handle);
@@ -375,7 +377,7 @@ static void swim_dping_ack_recv_ult(
         hret = margo_forward(ack_handle, &iping_ack);
         if(hret != HG_SUCCESS)
         {
-            fprintf(stderr, "SWIM iping ack forward error (err=%d)\n", hret);
+            margo_error(mid, "[ssg] SWIM iping ack forward error (hret=%d)", hret);
         }
 
         swim_free_packed_message(&(iping_ack.msg));
@@ -405,7 +407,8 @@ void swim_iping_req_send_ult(
 
     if (!gd || !gd->group || !gd->group->swim_ctx)
     {
-        fprintf(stderr, "SWIM iping req send error -- invalid group state\n");
+        margo_error(MARGO_INSTANCE_NULL,
+            "[ssg] SWIM iping req send error: invalid group state");
         return;
     }
     swim_ctx = gd->group->swim_ctx;
@@ -458,7 +461,7 @@ static void swim_iping_req_recv_ult(hg_handle_t handle)
     mid = margo_hg_info_get_instance(hgi);
     if (mid == MARGO_INSTANCE_NULL)
     {
-        fprintf(stderr, "SWIM iping req recv error -- invalid Margo state\n");
+        margo_error(mid, "[ssg] SWIM iping req recv error: invalid Margo state");
         margo_destroy(handle);
         return;
     }
@@ -474,7 +477,7 @@ static void swim_iping_req_recv_ult(hg_handle_t handle)
     SSG_GROUP_READ(iping_req.msg.source_g_id, gd);
     if (!gd)
     {
-        fprintf(stderr, "SWIM iping req recv error -- group %lu not found\n",
+        margo_error(mid, "[ssg] SWIM iping req recv error: group %lu not found",
             iping_req.msg.source_g_id);
         margo_free_input(handle, &iping_req);
         margo_destroy(handle);
@@ -483,7 +486,7 @@ static void swim_iping_req_recv_ult(hg_handle_t handle)
 
     if (!gd->is_member)
     {
-        fprintf(stderr, "SWIM iping req recv error -- not a member\n");
+        margo_error(mid, "[ssg] SWIM iping req recv error: not a member");
         SSG_GROUP_RELEASE(gd);
         margo_free_input(handle, &iping_req);
         margo_destroy(handle);
@@ -568,7 +571,7 @@ static void swim_iping_ack_recv_ult(hg_handle_t handle)
     mid = margo_hg_info_get_instance(hgi);
     if (mid == MARGO_INSTANCE_NULL)
     {
-        fprintf(stderr, "SWIM iping ack recv error -- invalid Margo state\n");
+        margo_error(mid, "[ssg] SWIM iping ack recv error: invalid Margo state");
         margo_destroy(handle);
         return;
     }
@@ -584,7 +587,7 @@ static void swim_iping_ack_recv_ult(hg_handle_t handle)
     SSG_GROUP_READ(iping_ack.msg.source_g_id, gd);
     if (!gd)
     {
-        fprintf(stderr, "SWIM iping ack recv error -- group %lu not found\n",
+        margo_error(mid, "[ssg] SWIM iping ack recv error: group %lu not found",
             iping_ack.msg.source_g_id);
         margo_free_input(handle, &iping_ack);
         margo_destroy(handle);
@@ -593,7 +596,7 @@ static void swim_iping_ack_recv_ult(hg_handle_t handle)
 
     if (!gd->is_member)
     {
-        fprintf(stderr, "SWIM iping ack recv error -- not a member\n");
+        margo_error(mid, "[ssg] SWIM iping ack recv error: not a member");
         SSG_GROUP_RELEASE(gd);
         margo_free_input(handle, &iping_ack);
         margo_destroy(handle);

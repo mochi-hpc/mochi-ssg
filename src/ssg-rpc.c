@@ -12,6 +12,7 @@
 #include <mercury.h>
 #include <abt.h>
 #include <margo.h>
+#include <margo-logging.h>
 
 #include "ssg.h"
 #include "ssg-internal.h"
@@ -167,7 +168,7 @@ int ssg_group_join_send(
     hret = margo_forward_timed(handle, &join_req, SSG_DEF_RPC_TIMEOUT);
     if (hret != HG_SUCCESS)
     {
-        fprintf(stderr, "Error: SSG unable to forward group join RPC\n");
+        margo_error(mid_state->mid, "[ssg] unable to forward group join RPC");
         ret = SSG_MAKE_HG_ERROR(hret);
         goto fini;
     }
@@ -207,7 +208,7 @@ int ssg_group_join_send(
         hret = margo_forward_timed(handle, &join_req, SSG_DEF_RPC_TIMEOUT);
         if (hret != HG_SUCCESS)
         {
-            fprintf(stderr, "Error: SSG unable to forward group join RPC\n");
+            margo_error(mid_state->mid, "[ssg] unable to forward group join RPC");
             ret = SSG_MAKE_HG_ERROR(hret);
             goto fini;
         }
@@ -301,7 +302,7 @@ static void ssg_group_join_recv_ult(
     SSG_GROUP_READ(join_req.g_id, gd);
     if (!gd)
     {
-        fprintf(stderr, "Error: SSG unable to find group for join request\n");
+        margo_error(MARGO_INSTANCE_NULL, "[ssg] unable to find group for join request");
         margo_free_input(handle, &join_req);
         ret = SSG_ERR_GROUP_NOT_FOUND;
         goto fini;
@@ -313,7 +314,8 @@ static void ssg_group_join_recv_ult(
     /* can't accept join requests if we are not a member ourselves */
     if(!gd->is_member)
     {
-        fprintf(stderr, "Error: SSG unable to accept join request for group as non-member\n");
+        margo_error(gd->mid_state->mid,
+            "[ssg] unable to accept join request for group as non-member");
         SSG_GROUP_RELEASE(gd);
         margo_free_input(handle, &join_req);
         ret  = SSG_ERR_NOT_SUPPORTED;
@@ -323,7 +325,8 @@ static void ssg_group_join_recv_ult(
     /* dynamic groups can't be supported if SWIM is disabled */
     if (gd->group->config.swim_disabled)
     {
-        fprintf(stderr, "Error: SSG unable to join group if SWIM is disabled\n");
+        margo_error(gd->mid_state->mid,
+            "[ssg] unable to join group if SWIM is disabled");
         SSG_GROUP_RELEASE(gd);
         margo_free_input(handle, &join_req);
         ret  = SSG_ERR_NOT_SUPPORTED;
@@ -428,7 +431,7 @@ int ssg_group_leave_send(
     hret = margo_forward_timed(handle, &leave_req, SSG_DEF_RPC_TIMEOUT);
     if (hret != HG_SUCCESS)
     {
-        fprintf(stderr, "Error: SSG unable to forward group leave RPC\n");
+        margo_error(mid_state->mid, "[ssg] unable to forward group leave RPC");
         ret = SSG_MAKE_HG_ERROR(hret);
         goto fini;
     }
@@ -490,7 +493,8 @@ static void ssg_group_leave_recv_ult(
     SSG_GROUP_READ(leave_req.g_id, gd);
     if (!gd)
     {
-        fprintf(stderr, "Error: SSG unable to find group for leave request\n");
+        margo_error(MARGO_INSTANCE_NULL,
+            "[ssg] unable to find group for leave request");
         margo_free_input(handle, &leave_req);
         ret = SSG_ERR_GROUP_NOT_FOUND;
         goto fini;
@@ -502,7 +506,8 @@ static void ssg_group_leave_recv_ult(
     /* can't accept leave requests if we are not a member ourselves */
     if(!gd->is_member)
     {
-        fprintf(stderr, "Error: SSG unable to accept leave request for group as non-member\n");
+        margo_error(gd->mid_state->mid,
+            "[ssg] unable to accept leave request for group as non-member");
         SSG_GROUP_RELEASE(gd);
         margo_free_input(handle, &leave_req);
         ret  = SSG_ERR_NOT_SUPPORTED;
@@ -592,7 +597,7 @@ int ssg_group_refresh_send(
     hret = margo_forward_timed(handle, &refresh_req, SSG_DEF_RPC_TIMEOUT);
     if (hret != HG_SUCCESS)
     {
-        fprintf(stderr, "Error: SSG unable to forward group refresh RPC\n");
+        margo_error(mid_state->mid, "[ssg] unable to forward group refresh RPC");
         ret = SSG_MAKE_HG_ERROR(hret);
         goto fini;
     }
@@ -632,7 +637,7 @@ int ssg_group_refresh_send(
         hret = margo_forward_timed(handle, &refresh_req, SSG_DEF_RPC_TIMEOUT);
         if (hret != HG_SUCCESS)
         {
-            fprintf(stderr, "Error: SSG unable to forward group refresh RPC\n");
+            margo_error(mid_state->mid, "[ssg] unable to forward group refresh RPC");
             ret = SSG_MAKE_HG_ERROR(hret);
             goto fini;
         }
@@ -724,7 +729,7 @@ static void ssg_group_refresh_recv_ult(
     SSG_GROUP_READ(refresh_req.g_id, gd);
     if (!gd)
     {
-        fprintf(stderr, "Error: SSG unable to find group for refresh request\n");
+        margo_error(MARGO_INSTANCE_NULL, "[ssg] unable to find group for refresh request");
         margo_free_input(handle, &refresh_req);
         ret = SSG_ERR_GROUP_NOT_FOUND;
         goto fini;

@@ -10,6 +10,7 @@
 
 #include <abt.h>
 #include <margo.h>
+#include <margo-logging.h>
 
 #include "ssg.h"
 #include "ssg-internal.h"
@@ -131,7 +132,8 @@ int swim_init(
         ABT_THREAD_ATTR_NULL, &(swim_ctx->prot_thread));
     if(ret != ABT_SUCCESS)
     {
-        fprintf(stderr, "Error: unable to create SWIM protocol ULT.\n");
+        margo_error(MARGO_INSTANCE_NULL,
+            "[ssg] unable to create SWIM protocol ULT");
         free(swim_ctx->target_list.targets);
         free(swim_ctx);
         return SSG_MAKE_ABT_ERROR(ret);
@@ -215,7 +217,7 @@ static void swim_prot_ult(
     {
         /* sleep for a protocol period length */
         margo_thread_sleep(gd->mid_state->mid, swim_ctx->prot_period_len);
-        
+
         ABT_rwlock_rdlock(swim_ctx->swim_lock);
         if(!swim_ctx->shutdown_flag)
         {
@@ -225,7 +227,8 @@ static void swim_prot_ult(
                 ABT_THREAD_ATTR_NULL, &tick_thread);
             if(ret != ABT_SUCCESS)
             {
-                fprintf(stderr, "Error: unable to create ULT for SWIM protocol tick\n");
+                margo_error(gd->mid_state->mid,
+                    "[ssg] unable to create ULT for SWIM protocol tick");
             }
 
             /* wait for tick ULT to terminate */
@@ -298,7 +301,8 @@ static void swim_tick_ult(
         gd, ABT_THREAD_ATTR_NULL, &dping_thread);
     if(ret != ABT_SUCCESS)
     {
-        fprintf(stderr, "Error: unable to create ULT for SWIM dping send\n");
+        margo_error(gd->mid_state->mid,
+            "[ssg] unable to create ULT for SWIM dping send");
         goto cleanup;
     }
 
@@ -338,7 +342,8 @@ static void swim_tick_ult(
                 ret = ABT_thread_create(gd->mid_state->pool, swim_iping_req_send_ult,
                     gd, ABT_THREAD_ATTR_NULL, &iping_threads[i]);
                 if(ret != ABT_SUCCESS)
-                    fprintf(stderr, "Error: unable to create ULT for SWIM iping send\n");
+                    margo_error(gd->mid_state->mid,
+                    "[ssg] unable to create ULT for SWIM iping send");
             }
         }
     }
@@ -980,7 +985,8 @@ void swim_apply_member_updates(
                 }
                 break;
             default:
-                fprintf(stderr, "Error: invalid SWIM member update [%lu,%d]\n",
+                margo_error(gd->mid_state->mid,
+                    "[ssg] invalid SWIM member update [%lu,%d]",
                     gd->mid_state->self_id, updates[i].state.status);
                 break;
         }
