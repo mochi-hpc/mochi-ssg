@@ -110,8 +110,8 @@ fi
 
 check_pmix_status=fail
 AC_SUBST([PMIX_PKGCONFIG], [])
-AC_CHECK_LIB([pmix], [PMIx_Init])
 if test "x${check_pmix}" = xauto -o "x${check_pmix}" = xyes ; then
+    AC_CHECK_LIB([pmix], [PMIx_Init])
     AC_MSG_CHECKING([If PMIx programs can be compiled])
     AC_LINK_IFELSE(
         [AC_LANG_PROGRAM([[#include<pmix.h>]], [[PMIx_Init(NULL, NULL,0);]])],
