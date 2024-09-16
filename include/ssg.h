@@ -40,6 +40,8 @@ typedef struct ssg_group_config
     int32_t swim_subgroup_member_count;     /* iping subgroup count */
     uint8_t swim_disabled;                  /* boolean indicating whether to disable SWIM */
     int64_t ssg_credential;                 /* generic credential to be stored with group */
+    int64_t ssg_credential_size;
+    char    ssg_credential_str[1024];       /* scratch space if credential is a big string (?) */
 } ssg_group_config_t;
 
 /* initializer macro to ensure SSG ignores unset config params */
