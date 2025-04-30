@@ -26,7 +26,7 @@
 #ifdef SSG_HAVE_PMIX
 #include <ssg-pmix.h>
 #endif
-#include <rdmacred.h>
+#include <drc2.h>
 
 #define DIE_IF(cond_expr, err_fmt, ...) \
     do { \
@@ -141,14 +141,14 @@ int main(int argc, char *argv[])
     ssg_member_id_t my_id;
     ssg_group_config_t g_conf = SSG_GROUP_CONFIG_INITIALIZER;
     int group_size;
-    uint32_t drc_credential_id;
-    drc_info_handle_t drc_credential_info;
-    uint32_t drc_cookie;
-    char drc_key_str[256] = {0};
+    drc2_errcode_t drc_ret;
     int rank;
     char config[1024];
     struct margo_init_info args = {0};
     int ret;
+    size_t keylen;
+    drc2_set_t set;
+    char *token, *key;
 
     /* set margo config json string */
     snprintf(config, 1024,
@@ -174,12 +174,23 @@ int main(int argc, char *argv[])
         MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 
         /* acquire DRC cred on MPI rank 0 */
+        token = malloc(1024);
+        key   = malloc(1024);
         if (mpi_rank == 0)
         {
-            ret = drc_acquire(&drc_credential_id, DRC_FLAGS_FLEX_CREDENTIAL);
-            DIE_IF(ret != DRC_SUCCESS, "drc_acquire");
+            drc_ret = drc2_token_acquire("drc pool for ssg", DRC2_ALLOW_ANY_UID, 0,
+                    &token);
+
+            drc_ret = drc2_set_create("drc token for ssg", DRC2_ALLOW_ANY_UID,
+                    /* is there a max value here? */ 1024,  &set);
+
+            drc_ret = drc2_create_ofi_key(set,
+                    /* not fond of having to know which nic */ 0,
+                    (void **)&key, &keylen);
+            DIE_IF(drc_ret != DRC2_SUCCESS, "drc2_create_ofi_key");
         }
-        MPI_Bcast(&drc_credential_id, 1, MPI_UINT32_T, 0, MPI_COMM_WORLD);
+        MPI_Bcast(&keylen, 1, MPI_UINT32_T, 0, MPI_COMM_WORLD);
+        MPI_Bcast(&key, keylen, MPI_BYTE, 0, MPI_COMM_WORLD);
         rank = mpi_rank;
     }
 #endif
@@ -235,18 +246,11 @@ int main(int argc, char *argv[])
 #endif
 
     /* access credential on all ranks and convert to string for use by mercury */
-    ret = drc_access(drc_credential_id, 0, &drc_credential_info);
-    DIE_IF(ret != DRC_SUCCESS, "drc_access");
-    drc_cookie = drc_get_first_cookie(drc_credential_info);
-    sprintf(drc_key_str, "%u", drc_cookie);
-    hii.na_init_info.auth_key = drc_key_str;
+    /* drc2 does not have a "cookie factory" pattern.  Can ship around the JWT
+       directly I think */
+    hii.na_init_info.auth_key = key;
 
-    /* rank 0 grants access to the credential, allowing other jobs to use it */
-    if(rank == 0)
-    {
-        ret = drc_grant(drc_credential_id, drc_get_wlm_id(), DRC_FLAGS_TARGET_WLM);
-        DIE_IF(ret != DRC_SUCCESS, "drc_grant");
-    }
+    /* having the key *is* access: no need to grant permissions */
 
     /* init margo */
     /* use the main xstream to drive progress & run handlers */
@@ -263,7 +267,7 @@ int main(int argc, char *argv[])
     g_conf.swim_period_length_ms = 1000; /* 1-second period length */
     g_conf.swim_suspect_timeout_periods = 4; /* 4-period suspicion length */
     g_conf.swim_subgroup_member_count = 3; /* 3-member subgroups for SWIM */
-    g_conf.ssg_credential = (int64_t)drc_credential_id; /* DRC credential for group */
+    strncpy(g_conf.ssg_credential_str, key, 1024-1);
 
     /* XXX do we want to use callback for testing anything about group??? */
 #ifdef SSG_HAVE_MPI
@@ -297,6 +301,7 @@ int main(int argc, char *argv[])
     ssg_group_destroy(g_id);
 
     /** cleanup **/
+    drc2_set_destroy(set); /* everyone calls? just rank 0 ? */
     ssg_finalize();
     margo_finalize(mid);
 #ifdef SSG_HAVE_MPI

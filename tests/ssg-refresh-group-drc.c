@@ -26,7 +26,7 @@
 #ifdef SSG_HAVE_PMIX
 #include <ssg-pmix.h>
 #endif
-#include <rdmacred.h>
+#include <drc2.h>
 
 #define DIE_IF(cond_expr, err_fmt, ...) \
     do { \
@@ -71,10 +71,6 @@ int main(int argc, char *argv[])
     ssg_group_id_t g_id;
     int num_addrs;
     int64_t ssg_cred;
-    uint32_t drc_credential_id;
-    drc_info_handle_t drc_credential_info;
-    uint32_t drc_cookie;
-    char drc_key_str[256] = {0};
     char config[1024];
     struct margo_init_info args = {0};
     int ret;
@@ -100,16 +96,13 @@ int main(int argc, char *argv[])
     ret = ssg_get_group_transport_from_file(gid_file, transport, 256);
     DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_transport_from_file (%s)", ssg_strerror(ret));
 
+    /* we need to re-think what a "credential" is.  size + value? */
     ret = ssg_get_group_cred_from_file(gid_file, &ssg_cred);
     DIE_IF(ret != SSG_SUCCESS, "ssg_get_group_cred_from_file (%s)", ssg_strerror(ret));
-    drc_credential_id = (uint32_t)ssg_cred;
+    char * drc2_credential = ssg_cred;
 
     /* access credential and covert to string for use by mercury */
-    ret = drc_access(drc_credential_id, 0, &drc_credential_info);
-    DIE_IF(ret != DRC_SUCCESS, "drc_access %u %ld", drc_credential_id, ssg_cred);
-    drc_cookie = drc_get_first_cookie(drc_credential_info);
-    sprintf(drc_key_str, "%u", drc_cookie);
-    hii.na_init_info.auth_key = drc_key_str;
+    hii.na_init_info.auth_key = drc2_credential;
 
     /* init margo */
     /* use the main xstream to drive progress & run handlers */
