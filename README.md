@@ -21,7 +21,7 @@ the group (_attachment_ provides non-group members a way to access a
 group's view). 
 
 Optionally, SSG can be configured to use the [SWIM failure detection and
-group membership protocol](http://www.cs.cornell.edu/~asdas/research/dsn02-SWIM.pdf)
+group membership protocol](https://www.cs.cornell.edu/projects/Quicksilver/public_pdfs/SWIM.pdf)
 internally to detect and respond to group member failures. SWIM uses a
 randomized probing mechanism to detect faulty group members and uses an
 efficient gossip protocol to dissmeninate group membership changes to other
